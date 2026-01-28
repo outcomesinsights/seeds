@@ -620,5 +620,24 @@ def tree(ctx: Context, seed_id: str) -> None:
                 click.echo(f"  ↔ {related_id}: (not found)")
 
 
+# --- Sync and export commands ---
+
+
+@main.command()
+@click.option("--flush-only", is_flag=True, help="Only export to JSONL (no git ops)")
+@pass_context
+def sync(ctx: Context, flush_only: bool) -> None:
+    """Export seeds to JSONL for git-friendly storage."""
+    db = ctx.get_db()
+
+    from seeds.export import export_to_jsonl
+
+    output_path = export_to_jsonl(db)
+
+    # Count seeds
+    seeds = db.list_seeds(include_terminal=True)
+    click.echo(f"Exported {len(seeds)} seeds to {output_path}")
+
+
 if __name__ == "__main__":
     main()
