@@ -40,5 +40,8 @@ htmlcov/
 .beads/*.db
 .beads/export-state/
 
+# SEEDS (own database)
+.seeds/
+
 # Claude debug
 claude_stuff/
