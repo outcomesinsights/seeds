@@ -441,5 +441,87 @@ def update(
     click.echo(f"Updated {seed_id}")
 
 
+# --- Question commands ---
+
+
+@main.command()
+@click.argument("question_text")
+@click.option("--seed", "seed_id", required=True, help="Seed ID to attach question to")
+@pass_context
+def ask(ctx: Context, question_text: str, seed_id: str) -> None:
+    """Ask a question and attach it to a seed.
+
+    QUESTION_TEXT is the question to ask.
+    """
+    db = ctx.get_db()
+
+    # Verify seed exists
+    seed = db.get_seed(seed_id)
+    if seed is None:
+        click.echo(f"Error: Seed '{seed_id}' not found.", err=True)
+        sys.exit(1)
+
+    from seeds.models import Question
+
+    question_id = generate_id("q")
+    question = Question(id=question_id, seed_id=seed_id, text=question_text)
+
+    db.create_question(question)
+    click.echo(f"○ {question_id}: {question_text}")
+    click.echo(f"  Attached to: {seed_id}")
+
+
+@main.command()
+@click.argument("question_id")
+@click.argument("answer_text")
+@pass_context
+def answer(ctx: Context, question_id: str, answer_text: str) -> None:
+    """Answer a question.
+
+    QUESTION_ID is the ID of the question to answer.
+    ANSWER_TEXT is the answer.
+    """
+    db = ctx.get_db()
+
+    question = db.get_question(question_id)
+    if question is None:
+        click.echo(f"Error: Question '{question_id}' not found.", err=True)
+        sys.exit(1)
+
+    from seeds.models import now_utc
+
+    question.answer = answer_text
+    question.status = QuestionStatus.ANSWERED
+    question.answered_at = now_utc()
+
+    db.update_question(question)
+    click.echo(f"● {question_id}: {question.text}")
+    click.echo(f"  → {answer_text}")
+
+
+@main.command()
+@click.option("--seed", "seed_id", help="Filter by seed ID")
+@pass_context
+def questions(ctx: Context, seed_id: str | None) -> None:
+    """List open questions."""
+    db = ctx.get_db()
+
+    if seed_id:
+        qs = db.list_questions(seed_id=seed_id, status=QuestionStatus.OPEN)
+    else:
+        qs = db.get_open_questions()
+
+    if not qs:
+        click.echo("No open questions.")
+        return
+
+    click.echo("Open questions:")
+    for q in qs:
+        seed = db.get_seed(q.seed_id)
+        seed_title = seed.title if seed else "?"
+        click.echo(f"  ○ {q.id}: {q.text}")
+        click.echo(f"    └─ {q.seed_id}: {seed_title}")
+
+
 if __name__ == "__main__":
     main()
