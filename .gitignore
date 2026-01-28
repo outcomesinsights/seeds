@@ -38,6 +38,7 @@ htmlcov/
 
 # Beads
 .beads/*.db
+.beads/export-state/
 
 # Claude debug
 claude_stuff/
