@@ -639,5 +639,13 @@ def sync(ctx: Context, flush_only: bool) -> None:
     click.echo(f"Exported {len(seeds)} seeds to {output_path}")
 
 
+@main.command()
+def prime() -> None:
+    """Output AI-optimized workflow context for Claude Code hooks."""
+    from seeds.prime import get_prime_output
+
+    click.echo(get_prime_output())
+
+
 if __name__ == "__main__":
     main()

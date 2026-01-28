@@ -1,0 +1,61 @@
+"""SEEDS prime command output for AI context injection."""
+
+PRIME_OUTPUT = """# SEEDS Workflow Context
+
+> **Context Recovery**: Run `seeds prime` after compaction, clear, or new session
+
+# SESSION CLOSE PROTOCOL
+
+**CRITICAL**: Before saying "done" or "complete", you MUST run:
+
+```
+[ ] seeds sync --flush-only    (export seeds to JSONL)
+```
+
+## Core Rules
+- Use SEEDS to capture ideas, questions, and deliberation
+- `seeds jot "..."` for quick capture during mind-racing
+- Mark seeds as `deferred` when not ready to explore
+- Questions are first-class - use `seeds ask` to track them
+- A seed is "blocked" if it has unresolved children
+
+## Essential Commands
+
+### Quick Capture
+- `seeds jot "Quick thought"` - Minimal friction capture
+- `seeds ask "Question?" --seed=<id>` - Attach question to seed
+
+### Finding Work
+- `seeds ready` - Captured seeds ready to explore
+- `seeds questions` - Open questions needing answers
+- `seeds deferred` - Review backlog
+- `seeds blocked` - Seeds with unresolved children
+
+### Creating
+- `seeds create --title="..." --type=idea --tags=foo,bar` - Full creation
+- `seeds create --title="..." --parent=<id>` - Create child seed
+
+### Updating
+- `seeds explore <id>` - Start working on a seed
+- `seeds resolve <id>` - Mark as resolved
+- `seeds defer <id>` - Move to backlog
+- `seeds abandon <id> --reason="..."` - Abandon with reason
+- `seeds update <id> --append="..."` - Add to content
+- `seeds answer <q-id> "..."` - Answer a question
+
+### Viewing
+- `seeds list` - All non-terminal seeds
+- `seeds show <id>` - Detailed view
+- `seeds tree <id>` - Hierarchy and relationships
+
+### Relationships
+- `seeds link <id> --relates-to <other-id>` - Link seeds
+
+### Session End
+- `seeds sync --flush-only` - Export to JSONL
+"""
+
+
+def get_prime_output() -> str:
+    """Get the prime output for AI context injection."""
+    return PRIME_OUTPUT.strip()
