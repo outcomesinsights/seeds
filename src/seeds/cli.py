@@ -8,7 +8,7 @@ import click
 
 from seeds import __version__
 from seeds.db import Database, SEEDS_DIR
-from seeds.models import Seed, SeedStatus, SeedType, generate_id
+from seeds.models import Seed, SeedStatus, SeedType, QuestionStatus, generate_id
 
 
 class Context:
@@ -139,6 +139,183 @@ def jot(ctx: Context, thought: str) -> None:
 
     db.create_seed(seed)
     click.echo(f"{seed_id}: {thought}")
+
+
+# Valid statuses for CLI
+SEED_STATUSES = [s.value for s in SeedStatus]
+
+
+def format_seed_line(seed: Seed, db: Database) -> str:
+    """Format a seed for list output."""
+    status_icon = {
+        SeedStatus.CAPTURED: "○",
+        SeedStatus.EXPLORING: "◐",
+        SeedStatus.DEFERRED: "◌",
+        SeedStatus.RESOLVED: "●",
+        SeedStatus.ABANDONED: "✗",
+    }.get(seed.status, "?")
+
+    blocked = " [BLOCKED]" if db.is_blocked(seed.id) else ""
+    tags = f" [{', '.join(seed.tags)}]" if seed.tags else ""
+
+    return f"{status_icon} {seed.id}: {seed.title}{blocked}{tags}"
+
+
+@main.command("list")
+@click.option(
+    "--status",
+    type=click.Choice(SEED_STATUSES),
+    help="Filter by status",
+)
+@click.option(
+    "--type",
+    "seed_type",
+    type=click.Choice(SEED_TYPES),
+    help="Filter by type",
+)
+@click.option("--tag", help="Filter by tag")
+@click.option("--all", "include_all", is_flag=True, help="Include resolved/abandoned")
+@pass_context
+def list_seeds(
+    ctx: Context,
+    status: str | None,
+    seed_type: str | None,
+    tag: str | None,
+    include_all: bool,
+) -> None:
+    """List seeds with optional filters."""
+    db = ctx.get_db()
+
+    status_enum = SeedStatus(status) if status else None
+    type_enum = SeedType(seed_type) if seed_type else None
+
+    seeds = db.list_seeds(
+        status=status_enum,
+        seed_type=type_enum,
+        tag=tag,
+        include_terminal=include_all,
+    )
+
+    if not seeds:
+        click.echo("No seeds found.")
+        return
+
+    for seed in seeds:
+        click.echo(format_seed_line(seed, db))
+
+
+@main.command()
+@click.argument("seed_id")
+@click.option("--questions", "-q", is_flag=True, help="Include attached questions")
+@pass_context
+def show(ctx: Context, seed_id: str, questions: bool) -> None:
+    """Show detailed information about a seed."""
+    db = ctx.get_db()
+
+    seed = db.get_seed(seed_id)
+    if seed is None:
+        click.echo(f"Error: Seed '{seed_id}' not found.", err=True)
+        sys.exit(1)
+
+    # Header
+    click.echo(f"{seed.id}: {seed.title}")
+    click.echo(f"  Status: {seed.status.value}")
+    click.echo(f"  Type: {seed.seed_type.value}")
+
+    if seed.tags:
+        click.echo(f"  Tags: {', '.join(seed.tags)}")
+
+    if seed.parent_id:
+        click.echo(f"  Parent: {seed.parent_id}")
+
+    # Check if blocked
+    if db.is_blocked(seed.id):
+        click.echo("  [BLOCKED by unresolved children]")
+
+    # Show children
+    children = db.get_children(seed.id)
+    if children:
+        click.echo(f"  Children: {len(children)}")
+        for child in children:
+            status_mark = "●" if child.is_terminal() else "○"
+            click.echo(f"    {status_mark} {child.id}: {child.title}")
+
+    # Show related
+    if seed.related_to:
+        click.echo(f"  Related to: {', '.join(seed.related_to)}")
+
+    # Content
+    if seed.content:
+        click.echo()
+        click.echo("Content:")
+        click.echo(seed.content)
+
+    # Questions
+    if questions:
+        qs = db.list_questions(seed_id=seed.id)
+        if qs:
+            click.echo()
+            click.echo("Questions:")
+            for q in qs:
+                status_mark = "●" if q.status == QuestionStatus.ANSWERED else "○"
+                click.echo(f"  {status_mark} {q.id}: {q.text}")
+                if q.answer:
+                    click.echo(f"    → {q.answer}")
+
+
+@main.command()
+@pass_context
+def ready(ctx: Context) -> None:
+    """Show captured seeds ready to explore."""
+    db = ctx.get_db()
+
+    seeds = db.list_seeds(status=SeedStatus.CAPTURED)
+
+    if not seeds:
+        click.echo("No captured seeds ready to explore.")
+        return
+
+    click.echo("Ready to explore:")
+    for seed in seeds:
+        click.echo(format_seed_line(seed, db))
+
+
+@main.command()
+@pass_context
+def deferred(ctx: Context) -> None:
+    """Show deferred seeds (backlog)."""
+    db = ctx.get_db()
+
+    seeds = db.list_seeds(status=SeedStatus.DEFERRED)
+
+    if not seeds:
+        click.echo("No deferred seeds.")
+        return
+
+    click.echo("Deferred (backlog):")
+    for seed in seeds:
+        click.echo(format_seed_line(seed, db))
+
+
+@main.command()
+@pass_context
+def blocked(ctx: Context) -> None:
+    """Show seeds blocked by unresolved children."""
+    db = ctx.get_db()
+
+    seeds = db.get_blocked_seeds()
+
+    if not seeds:
+        click.echo("No blocked seeds.")
+        return
+
+    click.echo("Blocked by unresolved children:")
+    for seed in seeds:
+        children = db.get_children(seed.id)
+        unresolved = [c for c in children if not c.is_terminal()]
+        click.echo(f"  {seed.id}: {seed.title}")
+        for child in unresolved:
+            click.echo(f"    ○ {child.id}: {child.title}")
 
 
 if __name__ == "__main__":
