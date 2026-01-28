@@ -1,0 +1,495 @@
+"""Tests for SEEDS CLI commands."""
+
+import os
+import tempfile
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+
+from seeds.cli import main
+from seeds.db import Database, SEEDS_DIR
+from seeds.models import (
+    Question,
+    QuestionStatus,
+    Seed,
+    SeedStatus,
+    SeedType,
+)
+
+
+@pytest.fixture
+def cli_runner():
+    """Create a CLI runner for testing commands."""
+    return CliRunner()
+
+
+@pytest.fixture
+def initialized_env():
+    """Create a temp directory with initialized SEEDS."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        original_cwd = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            # Initialize SEEDS
+            db = Database()
+            db.init()
+            db.close()
+            yield Path(tmpdir)
+        finally:
+            os.chdir(original_cwd)
+
+
+@pytest.fixture
+def env_with_seeds(initialized_env):
+    """Create env with some test seeds."""
+    db = Database()
+
+    # Create some test seeds
+    seeds = [
+        Seed(id="seed-test1", title="Test Seed 1", status=SeedStatus.CAPTURED),
+        Seed(id="seed-test2", title="Test Seed 2", status=SeedStatus.EXPLORING),
+        Seed(id="seed-test3", title="Test Seed 3", status=SeedStatus.DEFERRED),
+        Seed(id="seed-test1.1", title="Child Seed", status=SeedStatus.CAPTURED),
+    ]
+    for seed in seeds:
+        db.create_seed(seed)
+
+    db.close()
+    yield initialized_env
+
+
+class TestInitCommand:
+    """Tests for 'seeds init' command."""
+
+    def test_init_creates_seeds_directory(self, cli_runner):
+        """Verify init creates .seeds directory."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                result = cli_runner.invoke(main, ["init"])
+                assert result.exit_code == 0
+                assert "Initialized SEEDS" in result.output
+                assert (Path(tmpdir) / SEEDS_DIR).exists()
+            finally:
+                os.chdir(original_cwd)
+
+    def test_init_already_initialized(self, cli_runner, initialized_env):
+        """Verify init handles already initialized directory."""
+        result = cli_runner.invoke(main, ["init"])
+        assert result.exit_code == 0
+        assert "already initialized" in result.output
+
+
+class TestJotCommand:
+    """Tests for 'seeds jot' command."""
+
+    def test_jot_creates_seed(self, cli_runner, initialized_env):
+        """Verify jot creates a captured seed."""
+        result = cli_runner.invoke(main, ["jot", "My quick thought"])
+        assert result.exit_code == 0
+        assert "seed-" in result.output
+        assert "My quick thought" in result.output
+
+        # Verify seed was created
+        db = Database()
+        seeds = db.list_seeds()
+        assert len(seeds) == 1
+        assert seeds[0].title == "My quick thought"
+        assert seeds[0].status == SeedStatus.CAPTURED
+        db.close()
+
+    def test_jot_requires_init(self, cli_runner):
+        """Verify jot fails if not initialized."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                result = cli_runner.invoke(main, ["jot", "Test"])
+                assert result.exit_code != 0
+                assert "not initialized" in result.output
+            finally:
+                os.chdir(original_cwd)
+
+
+class TestCreateCommand:
+    """Tests for 'seeds create' command."""
+
+    def test_create_with_title_only(self, cli_runner, initialized_env):
+        """Verify create with just title works."""
+        result = cli_runner.invoke(main, ["create", "--title", "New Idea"])
+        assert result.exit_code == 0
+        assert "Created seed" in result.output
+        assert "New Idea" in result.output
+
+    def test_create_with_type_and_tags(self, cli_runner, initialized_env):
+        """Verify create with type and tags works."""
+        result = cli_runner.invoke(
+            main,
+            ["create", "--title", "Decision", "--type", "decision", "--tags", "important,urgent"],
+        )
+        assert result.exit_code == 0
+
+        db = Database()
+        seeds = db.list_seeds()
+        assert len(seeds) == 1
+        assert seeds[0].seed_type == SeedType.DECISION
+        assert seeds[0].tags == ["important", "urgent"]
+        db.close()
+
+    def test_create_with_parent(self, cli_runner, env_with_seeds):
+        """Verify create with parent creates child seed."""
+        result = cli_runner.invoke(
+            main,
+            ["create", "--title", "New Child", "--parent", "seed-test1"],
+        )
+        assert result.exit_code == 0
+        assert "seed-test1." in result.output
+        assert "Parent: seed-test1" in result.output
+
+    def test_create_with_invalid_parent(self, cli_runner, initialized_env):
+        """Verify create with invalid parent fails."""
+        result = cli_runner.invoke(
+            main,
+            ["create", "--title", "Child", "--parent", "nonexistent"],
+        )
+        assert result.exit_code != 0
+        assert "not found" in result.output
+
+
+class TestListCommand:
+    """Tests for 'seeds list' command."""
+
+    def test_list_empty(self, cli_runner, initialized_env):
+        """Verify list shows no seeds message when empty."""
+        result = cli_runner.invoke(main, ["list"])
+        assert result.exit_code == 0
+        assert "No seeds found" in result.output
+
+    def test_list_shows_seeds(self, cli_runner, env_with_seeds):
+        """Verify list shows all non-terminal seeds."""
+        result = cli_runner.invoke(main, ["list"])
+        assert result.exit_code == 0
+        assert "seed-test1" in result.output
+        assert "seed-test2" in result.output
+        assert "seed-test3" in result.output
+
+    def test_list_filter_by_status(self, cli_runner, env_with_seeds):
+        """Verify list can filter by status."""
+        result = cli_runner.invoke(main, ["list", "--status", "captured"])
+        assert result.exit_code == 0
+        assert "seed-test1" in result.output
+        assert "seed-test2" not in result.output
+
+
+class TestShowCommand:
+    """Tests for 'seeds show' command."""
+
+    def test_show_displays_seed(self, cli_runner, env_with_seeds):
+        """Verify show displays seed details."""
+        result = cli_runner.invoke(main, ["show", "seed-test1"])
+        assert result.exit_code == 0
+        assert "seed-test1" in result.output
+        assert "Test Seed 1" in result.output
+        assert "Status: captured" in result.output
+
+    def test_show_not_found(self, cli_runner, initialized_env):
+        """Verify show handles nonexistent seed."""
+        result = cli_runner.invoke(main, ["show", "nonexistent"])
+        assert result.exit_code != 0
+        assert "not found" in result.output
+
+    def test_show_with_children(self, cli_runner, env_with_seeds):
+        """Verify show displays children."""
+        result = cli_runner.invoke(main, ["show", "seed-test1"])
+        assert result.exit_code == 0
+        assert "Children:" in result.output
+        assert "seed-test1.1" in result.output
+
+
+class TestStatusCommands:
+    """Tests for status change commands (explore, defer, resolve, abandon)."""
+
+    def test_explore_changes_status(self, cli_runner, env_with_seeds):
+        """Verify explore changes status to exploring."""
+        result = cli_runner.invoke(main, ["explore", "seed-test1"])
+        assert result.exit_code == 0
+        assert "Now exploring" in result.output
+
+        db = Database()
+        seed = db.get_seed("seed-test1")
+        assert seed.status == SeedStatus.EXPLORING
+        db.close()
+
+    def test_defer_changes_status(self, cli_runner, env_with_seeds):
+        """Verify defer changes status to deferred."""
+        result = cli_runner.invoke(main, ["defer", "seed-test1"])
+        assert result.exit_code == 0
+        assert "Deferred" in result.output
+
+        db = Database()
+        seed = db.get_seed("seed-test1")
+        assert seed.status == SeedStatus.DEFERRED
+        db.close()
+
+    def test_resolve_changes_status(self, cli_runner, env_with_seeds):
+        """Verify resolve changes status to resolved."""
+        result = cli_runner.invoke(main, ["resolve", "seed-test2"])
+        assert result.exit_code == 0
+        assert "Resolved" in result.output
+
+        db = Database()
+        seed = db.get_seed("seed-test2")
+        assert seed.status == SeedStatus.RESOLVED
+        assert seed.resolved_at is not None
+        db.close()
+
+    def test_abandon_changes_status(self, cli_runner, env_with_seeds):
+        """Verify abandon changes status to abandoned."""
+        result = cli_runner.invoke(main, ["abandon", "seed-test2"])
+        assert result.exit_code == 0
+        assert "Abandoned" in result.output
+
+        db = Database()
+        seed = db.get_seed("seed-test2")
+        assert seed.status == SeedStatus.ABANDONED
+        db.close()
+
+    def test_abandon_with_reason(self, cli_runner, env_with_seeds):
+        """Verify abandon captures reason."""
+        result = cli_runner.invoke(
+            main,
+            ["abandon", "seed-test2", "--reason", "Not feasible"],
+        )
+        assert result.exit_code == 0
+        assert "Not feasible" in result.output
+
+        db = Database()
+        seed = db.get_seed("seed-test2")
+        assert "Not feasible" in seed.content
+        db.close()
+
+
+class TestUpdateCommand:
+    """Tests for 'seeds update' command."""
+
+    def test_update_title(self, cli_runner, env_with_seeds):
+        """Verify update can change title."""
+        result = cli_runner.invoke(
+            main,
+            ["update", "seed-test1", "--title", "New Title"],
+        )
+        assert result.exit_code == 0
+        assert "Updated" in result.output
+
+        db = Database()
+        seed = db.get_seed("seed-test1")
+        assert seed.title == "New Title"
+        db.close()
+
+    def test_update_append_content(self, cli_runner, env_with_seeds):
+        """Verify update --append adds to content."""
+        result = cli_runner.invoke(
+            main,
+            ["update", "seed-test1", "--append", "Additional thoughts"],
+        )
+        assert result.exit_code == 0
+
+        db = Database()
+        seed = db.get_seed("seed-test1")
+        assert "Additional thoughts" in seed.content
+        db.close()
+
+    def test_update_no_changes(self, cli_runner, env_with_seeds):
+        """Verify update without changes shows message."""
+        result = cli_runner.invoke(main, ["update", "seed-test1"])
+        assert result.exit_code == 0
+        assert "No changes specified" in result.output
+
+
+class TestQuestionCommands:
+    """Tests for question-related commands."""
+
+    def test_ask_creates_question(self, cli_runner, env_with_seeds):
+        """Verify ask creates a question attached to seed."""
+        result = cli_runner.invoke(
+            main,
+            ["ask", "What is the answer?", "--seed", "seed-test1"],
+        )
+        assert result.exit_code == 0
+        assert "q-" in result.output
+        assert "What is the answer?" in result.output
+        assert "Attached to: seed-test1" in result.output
+
+        db = Database()
+        questions = db.list_questions(seed_id="seed-test1")
+        assert len(questions) == 1
+        assert questions[0].text == "What is the answer?"
+        db.close()
+
+    def test_ask_invalid_seed(self, cli_runner, initialized_env):
+        """Verify ask fails with invalid seed."""
+        result = cli_runner.invoke(
+            main,
+            ["ask", "Question?", "--seed", "nonexistent"],
+        )
+        assert result.exit_code != 0
+        assert "not found" in result.output
+
+    def test_answer_updates_question(self, cli_runner, env_with_seeds):
+        """Verify answer updates question."""
+        # First create a question
+        db = Database()
+        question = Question(
+            id="q-test",
+            seed_id="seed-test1",
+            text="What is the answer?",
+        )
+        db.create_question(question)
+        db.close()
+
+        result = cli_runner.invoke(main, ["answer", "q-test", "42"])
+        assert result.exit_code == 0
+        assert "42" in result.output
+
+        db = Database()
+        q = db.get_question("q-test")
+        assert q.answer == "42"
+        assert q.status == QuestionStatus.ANSWERED
+        db.close()
+
+    def test_questions_lists_open(self, cli_runner, env_with_seeds):
+        """Verify questions shows open questions."""
+        db = Database()
+        question = Question(
+            id="q-test",
+            seed_id="seed-test1",
+            text="Open question?",
+        )
+        db.create_question(question)
+        db.close()
+
+        result = cli_runner.invoke(main, ["questions"])
+        assert result.exit_code == 0
+        assert "q-test" in result.output
+        assert "Open question?" in result.output
+
+
+class TestLinkCommand:
+    """Tests for 'seeds link' command."""
+
+    def test_link_creates_bidirectional_relationship(self, cli_runner, env_with_seeds):
+        """Verify link creates bidirectional relationship."""
+        result = cli_runner.invoke(
+            main,
+            ["link", "seed-test1", "--relates-to", "seed-test2"],
+        )
+        assert result.exit_code == 0
+        assert "Linked" in result.output
+
+        db = Database()
+        seed1 = db.get_seed("seed-test1")
+        seed2 = db.get_seed("seed-test2")
+        assert "seed-test2" in seed1.related_to
+        assert "seed-test1" in seed2.related_to
+        db.close()
+
+    def test_link_already_linked(self, cli_runner, env_with_seeds):
+        """Verify link handles already linked seeds."""
+        # Link first
+        cli_runner.invoke(
+            main,
+            ["link", "seed-test1", "--relates-to", "seed-test2"],
+        )
+
+        # Try to link again
+        result = cli_runner.invoke(
+            main,
+            ["link", "seed-test1", "--relates-to", "seed-test2"],
+        )
+        assert result.exit_code == 0
+        assert "Already linked" in result.output
+
+
+class TestReadyDeferredBlocked:
+    """Tests for ready, deferred, and blocked commands."""
+
+    def test_ready_shows_captured_seeds(self, cli_runner, env_with_seeds):
+        """Verify ready shows only captured seeds."""
+        result = cli_runner.invoke(main, ["ready"])
+        assert result.exit_code == 0
+        assert "seed-test1" in result.output
+        assert "seed-test2" not in result.output  # exploring, not captured
+
+    def test_deferred_shows_deferred_seeds(self, cli_runner, env_with_seeds):
+        """Verify deferred shows only deferred seeds."""
+        result = cli_runner.invoke(main, ["deferred"])
+        assert result.exit_code == 0
+        assert "seed-test3" in result.output
+        assert "seed-test1" not in result.output
+
+    def test_blocked_shows_blocked_seeds(self, cli_runner, env_with_seeds):
+        """Verify blocked shows seeds with unresolved children."""
+        result = cli_runner.invoke(main, ["blocked"])
+        assert result.exit_code == 0
+        # seed-test1 has child seed-test1.1 which is captured (unresolved)
+        assert "seed-test1" in result.output
+
+
+class TestTreeCommand:
+    """Tests for 'seeds tree' command."""
+
+    def test_tree_shows_hierarchy(self, cli_runner, env_with_seeds):
+        """Verify tree shows parent-child hierarchy."""
+        result = cli_runner.invoke(main, ["tree", "seed-test1"])
+        assert result.exit_code == 0
+        assert "Current:" in result.output
+        assert "seed-test1" in result.output
+        assert "Children:" in result.output
+        assert "seed-test1.1" in result.output
+
+
+class TestSyncCommand:
+    """Tests for 'seeds sync' command."""
+
+    def test_sync_exports_jsonl(self, cli_runner, env_with_seeds):
+        """Verify sync exports to JSONL."""
+        result = cli_runner.invoke(main, ["sync", "--flush-only"])
+        assert result.exit_code == 0
+        assert "Exported" in result.output
+        assert "seeds.jsonl" in result.output
+
+        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
+        assert jsonl_path.exists()
+
+
+class TestPrimeCommand:
+    """Tests for 'seeds prime' command."""
+
+    def test_prime_outputs_context(self, cli_runner):
+        """Verify prime outputs workflow context."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                result = cli_runner.invoke(main, ["prime"])
+                assert result.exit_code == 0
+                assert "SEEDS Workflow Context" in result.output
+                assert "seeds jot" in result.output
+            finally:
+                os.chdir(original_cwd)
+
+
+class TestDoctorCommand:
+    """Tests for 'seeds doctor' command."""
+
+    def test_doctor_passes_on_healthy_install(self, cli_runner, env_with_seeds):
+        """Verify doctor passes on healthy installation."""
+        # First sync to create JSONL
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        result = cli_runner.invoke(main, ["doctor"])
+        assert result.exit_code == 0
+        assert "Database exists" in result.output
+        assert "passed" in result.output
