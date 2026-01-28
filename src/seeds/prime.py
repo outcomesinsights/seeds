@@ -48,6 +48,15 @@ PRIME_OUTPUT = """# seeds Workflow Context
 - `seeds show <id>` - Detailed view
 - `seeds tree <id>` - Hierarchy and relationships
 
+### Displaying Seeds to User
+Claude Code CLI truncates bash output, so users can't see full seed content from `seeds show`.
+
+**When to display**: If user asks to see a seed, or you're about to discuss a seed together, paste the seed content in your response text so the user can see it.
+
+**When NOT to display**: If reading seeds for your own context/understanding, no need to show the user.
+
+**How**: Run `seeds show <id>`, then paste the output in your response. The bash output comes to you fully even if truncated on user's screen.
+
 ### Relationships
 - `seeds link <id> --relates-to <other-id>` - Link seeds
 

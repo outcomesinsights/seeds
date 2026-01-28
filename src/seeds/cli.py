@@ -204,12 +204,69 @@ def list_seeds(
         click.echo(format_seed_line(seed, db))
 
 
+def format_seed_detail(seed: Seed, db: Database, include_questions: bool = False) -> str:
+    """Format seed details as a string."""
+    lines = []
+
+    # Header
+    lines.append(f"{seed.id}: {seed.title}")
+    lines.append(f"  Status: {seed.status.value}")
+    lines.append(f"  Type: {seed.seed_type.value}")
+
+    if seed.tags:
+        lines.append(f"  Tags: {', '.join(seed.tags)}")
+
+    if seed.parent_id:
+        lines.append(f"  Parent: {seed.parent_id}")
+
+    # Check if blocked
+    if db.is_blocked(seed.id):
+        lines.append("  [BLOCKED by unresolved children]")
+
+    # Show children
+    children = db.get_children(seed.id)
+    if children:
+        lines.append(f"  Children: {len(children)}")
+        for child in children:
+            status_mark = "●" if child.is_terminal() else "○"
+            lines.append(f"    {status_mark} {child.id}: {child.title}")
+
+    # Show related
+    if seed.related_to:
+        lines.append(f"  Related to: {', '.join(seed.related_to)}")
+
+    # Content
+    if seed.content:
+        lines.append("")
+        lines.append("Content:")
+        lines.append(seed.content)
+
+    # Questions
+    if include_questions:
+        qs = db.list_questions(seed_id=seed.id)
+        if qs:
+            lines.append("")
+            lines.append("Questions:")
+            for q in qs:
+                status_mark = "●" if q.status == QuestionStatus.ANSWERED else "○"
+                lines.append(f"  {status_mark} {q.id}: {q.text}")
+                if q.answer:
+                    lines.append(f"    → {q.answer}")
+
+    return "\n".join(lines)
+
+
 @main.command()
 @click.argument("seed_id")
 @click.option("--questions", "-q", is_flag=True, help="Include attached questions")
+@click.option("--output-file", "-o", is_flag=True, help="Write to temp file, print path (for Claude Code)")
 @pass_context
-def show(ctx: Context, seed_id: str, questions: bool) -> None:
-    """Show detailed information about a seed."""
+def show(ctx: Context, seed_id: str, questions: bool, output_file: bool) -> None:
+    """Show detailed information about a seed.
+
+    Use --output-file to write output to a temp file and print the path.
+    This works around Claude Code CLI terminal truncation issues.
+    """
     db = ctx.get_db()
 
     seed = db.get_seed(seed_id)
@@ -217,50 +274,15 @@ def show(ctx: Context, seed_id: str, questions: bool) -> None:
         click.echo(f"Error: Seed '{seed_id}' not found.", err=True)
         sys.exit(1)
 
-    # Header
-    click.echo(f"{seed.id}: {seed.title}")
-    click.echo(f"  Status: {seed.status.value}")
-    click.echo(f"  Type: {seed.seed_type.value}")
+    output = format_seed_detail(seed, db, include_questions=questions)
 
-    if seed.tags:
-        click.echo(f"  Tags: {', '.join(seed.tags)}")
-
-    if seed.parent_id:
-        click.echo(f"  Parent: {seed.parent_id}")
-
-    # Check if blocked
-    if db.is_blocked(seed.id):
-        click.echo("  [BLOCKED by unresolved children]")
-
-    # Show children
-    children = db.get_children(seed.id)
-    if children:
-        click.echo(f"  Children: {len(children)}")
-        for child in children:
-            status_mark = "●" if child.is_terminal() else "○"
-            click.echo(f"    {status_mark} {child.id}: {child.title}")
-
-    # Show related
-    if seed.related_to:
-        click.echo(f"  Related to: {', '.join(seed.related_to)}")
-
-    # Content
-    if seed.content:
-        click.echo()
-        click.echo("Content:")
-        click.echo(seed.content)
-
-    # Questions
-    if questions:
-        qs = db.list_questions(seed_id=seed.id)
-        if qs:
-            click.echo()
-            click.echo("Questions:")
-            for q in qs:
-                status_mark = "●" if q.status == QuestionStatus.ANSWERED else "○"
-                click.echo(f"  {status_mark} {q.id}: {q.text}")
-                if q.answer:
-                    click.echo(f"    → {q.answer}")
+    if output_file:
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, prefix=f'seeds-{seed_id}-') as f:
+            f.write(output)
+            click.echo(f.name)
+    else:
+        click.echo(output)
 
 
 @main.command()
