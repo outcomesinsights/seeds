@@ -523,5 +523,102 @@ def questions(ctx: Context, seed_id: str | None) -> None:
         click.echo(f"    └─ {q.seed_id}: {seed_title}")
 
 
+# --- Relationship commands ---
+
+
+@main.command()
+@click.argument("seed_id")
+@click.option("--relates-to", "related_id", required=True, help="ID of related seed")
+@pass_context
+def link(ctx: Context, seed_id: str, related_id: str) -> None:
+    """Link a seed to another seed (loose coupling)."""
+    db = ctx.get_db()
+
+    seed = get_seed_or_exit(db, seed_id)
+    related = db.get_seed(related_id)
+    if related is None:
+        click.echo(f"Error: Seed '{related_id}' not found.", err=True)
+        sys.exit(1)
+
+    if related_id in seed.related_to:
+        click.echo(f"Already linked: {seed_id} ↔ {related_id}")
+        return
+
+    # Add bidirectional link
+    seed.related_to.append(related_id)
+    db.update_seed(seed)
+
+    if seed_id not in related.related_to:
+        related.related_to.append(seed_id)
+        db.update_seed(related)
+
+    click.echo(f"Linked: {seed_id} ↔ {related_id}")
+
+
+@main.command()
+@click.argument("seed_id")
+@pass_context
+def tree(ctx: Context, seed_id: str) -> None:
+    """Show hierarchy and relationships for a seed."""
+    db = ctx.get_db()
+
+    seed = get_seed_or_exit(db, seed_id)
+
+    def print_seed(s: Seed, indent: int = 0) -> None:
+        prefix = "  " * indent
+        status_icon = {
+            SeedStatus.CAPTURED: "○",
+            SeedStatus.EXPLORING: "◐",
+            SeedStatus.DEFERRED: "◌",
+            SeedStatus.RESOLVED: "●",
+            SeedStatus.ABANDONED: "✗",
+        }.get(s.status, "?")
+        click.echo(f"{prefix}{status_icon} {s.id}: {s.title}")
+
+    # Show parent chain
+    parent_chain = []
+    current_id = seed.parent_id
+    while current_id:
+        parent = db.get_seed(current_id)
+        if parent:
+            parent_chain.insert(0, parent)
+            current_id = parent.parent_id
+        else:
+            break
+
+    if parent_chain:
+        click.echo("Ancestors:")
+        for i, p in enumerate(parent_chain):
+            print_seed(p, i)
+
+    # Show current seed
+    click.echo()
+    click.echo("Current:")
+    print_seed(seed, 0)
+
+    # Show children
+    children = db.get_children(seed_id)
+    if children:
+        click.echo()
+        click.echo("Children:")
+        for child in children:
+            print_seed(child, 1)
+            # Show grandchildren
+            grandchildren = db.get_children(child.id)
+            for gc in grandchildren:
+                print_seed(gc, 2)
+
+    # Show related
+    if seed.related_to:
+        click.echo()
+        click.echo("Related:")
+        for related_id in seed.related_to:
+            related = db.get_seed(related_id)
+            if related:
+                click.echo(f"  ↔ {related.id}: {related.title}")
+            else:
+                click.echo(f"  ↔ {related_id}: (not found)")
+
+
 if __name__ == "__main__":
     main()
