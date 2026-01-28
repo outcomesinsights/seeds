@@ -1,6 +1,6 @@
-"""SEEDS prime command output for AI context injection."""
+"""seeds prime command output for AI context injection."""
 
-PRIME_OUTPUT = """# SEEDS Workflow Context
+PRIME_OUTPUT = """# seeds Workflow Context
 
 > **Context Recovery**: Run `seeds prime` after compaction, clear, or new session
 
@@ -13,7 +13,7 @@ PRIME_OUTPUT = """# SEEDS Workflow Context
 ```
 
 ## Core Rules
-- Use SEEDS to capture ideas, questions, and deliberation
+- Use seeds to capture ideas, questions, and deliberation
 - `seeds jot "..."` for quick capture during mind-racing
 - Mark seeds as `deferred` when not ready to explore
 - Questions are first-class - use `seeds ask` to track them

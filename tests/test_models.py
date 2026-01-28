@@ -1,4 +1,4 @@
-"""Tests for SEEDS data models."""
+"""Tests for seeds data models."""
 
 import pytest
 

@@ -1,4 +1,4 @@
-"""SEEDS export functionality."""
+"""seeds export functionality."""
 
 import json
 from datetime import datetime

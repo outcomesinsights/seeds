@@ -1,4 +1,4 @@
-"""Pytest fixtures for SEEDS tests."""
+"""Pytest fixtures for seeds tests."""
 
 import tempfile
 from pathlib import Path

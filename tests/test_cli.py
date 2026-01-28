@@ -1,4 +1,4 @@
-"""Tests for SEEDS CLI commands."""
+"""Tests for seeds CLI commands."""
 
 import os
 import tempfile
@@ -26,12 +26,12 @@ def cli_runner():
 
 @pytest.fixture
 def initialized_env():
-    """Create a temp directory with initialized SEEDS."""
+    """Create a temp directory with initialized seeds."""
     with tempfile.TemporaryDirectory() as tmpdir:
         original_cwd = os.getcwd()
         os.chdir(tmpdir)
         try:
-            # Initialize SEEDS
+            # Initialize seeds
             db = Database()
             db.init()
             db.close()
@@ -70,7 +70,7 @@ class TestInitCommand:
             try:
                 result = cli_runner.invoke(main, ["init"])
                 assert result.exit_code == 0
-                assert "Initialized SEEDS" in result.output
+                assert "Initialized seeds" in result.output
                 assert (Path(tmpdir) / SEEDS_DIR).exists()
             finally:
                 os.chdir(original_cwd)
@@ -467,16 +467,22 @@ class TestSyncCommand:
 class TestPrimeCommand:
     """Tests for 'seeds prime' command."""
 
-    def test_prime_outputs_context(self, cli_runner):
-        """Verify prime outputs workflow context."""
+    def test_prime_outputs_context_in_seeds_project(self, cli_runner, initialized_env):
+        """Verify prime outputs workflow context when in a seeds project."""
+        result = cli_runner.invoke(main, ["prime"])
+        assert result.exit_code == 0
+        assert "seeds Workflow Context" in result.output
+        assert "seeds jot" in result.output
+
+    def test_prime_silent_exit_outside_seeds_project(self, cli_runner):
+        """Verify prime silently exits when not in a seeds project."""
         with tempfile.TemporaryDirectory() as tmpdir:
             original_cwd = os.getcwd()
             os.chdir(tmpdir)
             try:
                 result = cli_runner.invoke(main, ["prime"])
                 assert result.exit_code == 0
-                assert "SEEDS Workflow Context" in result.output
-                assert "seeds jot" in result.output
+                assert result.output == ""  # Silent exit - no output
             finally:
                 os.chdir(original_cwd)
 

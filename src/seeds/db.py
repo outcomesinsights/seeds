@@ -1,4 +1,4 @@
-"""SEEDS SQLite database layer."""
+"""seeds SQLite database layer."""
 
 import json
 import sqlite3
@@ -18,6 +18,25 @@ from seeds.models import (
 
 SEEDS_DIR = ".seeds"
 DB_FILE = "seeds.db"
+
+
+def find_seeds_dir() -> Path | None:
+    """Find the .seeds directory by walking up the directory tree.
+
+    Returns the path to the .seeds directory if found, None otherwise.
+    Searches from current directory up to filesystem root.
+    """
+    current = Path.cwd()
+    while True:
+        seeds_dir = current / SEEDS_DIR
+        if seeds_dir.is_dir():
+            return seeds_dir
+        parent = current.parent
+        if parent == current:
+            # Reached filesystem root
+            return None
+        current = parent
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS seeds (
@@ -66,7 +85,7 @@ def _str_to_datetime(s: str | None) -> datetime | None:
 
 
 class Database:
-    """SQLite database for SEEDS."""
+    """SQLite database for seeds."""
 
     def __init__(self, path: Path | None = None):
         """Initialize database connection.

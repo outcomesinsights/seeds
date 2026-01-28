@@ -1,4 +1,4 @@
-"""Tests for SEEDS export/import functionality."""
+"""Tests for seeds export/import functionality."""
 
 import json
 from datetime import datetime, timezone

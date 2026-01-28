@@ -1,1 +1,1 @@
-"""SEEDS test suite."""
+"""seeds test suite."""

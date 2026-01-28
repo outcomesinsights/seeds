@@ -1,4 +1,4 @@
-"""SEEDS data models."""
+"""seeds data models."""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone

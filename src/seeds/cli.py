@@ -1,4 +1,4 @@
-"""SEEDS CLI entry point."""
+"""seeds CLI entry point."""
 
 import functools
 import sys
@@ -22,7 +22,7 @@ class Context:
         if self.db is None:
             self.db = Database()
             if not self.db.is_initialized():
-                click.echo("Error: SEEDS not initialized. Run 'seeds init' first.", err=True)
+                click.echo("Error: seeds not initialized. Run 'seeds init' first.", err=True)
                 sys.exit(1)
         return self.db
 
@@ -35,7 +35,7 @@ pass_context = click.make_pass_decorator(Context, ensure=True)
 
 
 def require_init(f):
-    """Decorator to require SEEDS to be initialized."""
+    """Decorator to require seeds to be initialized."""
     @functools.wraps(f)
     @click.pass_context
     def wrapper(click_ctx, *args, **kwargs):
@@ -49,21 +49,21 @@ def require_init(f):
 @click.version_option(version=__version__, prog_name="seeds")
 @click.pass_context
 def main(ctx: click.Context) -> None:
-    """SEEDS: A deliberation capture tool that helps ideas grow into decisions."""
+    """seeds: A deliberation capture tool that helps ideas grow into decisions."""
     ctx.ensure_object(Context)
 
 
 @main.command()
 def init() -> None:
-    """Initialize SEEDS in the current directory."""
+    """Initialize seeds in the current directory."""
     seeds_dir = Path.cwd() / SEEDS_DIR
     if seeds_dir.exists():
-        click.echo(f"SEEDS already initialized in {seeds_dir}")
+        click.echo(f"seeds already initialized in {seeds_dir}")
         return
 
     db = Database()
     db.init()
-    click.echo(f"Initialized SEEDS in {seeds_dir}")
+    click.echo(f"Initialized seeds in {seeds_dir}")
     click.echo("Run 'seeds jot \"Your first idea\"' to capture a thought.")
 
 
@@ -641,8 +641,21 @@ def sync(ctx: Context, flush_only: bool) -> None:
 
 @main.command()
 def prime() -> None:
-    """Output AI-optimized workflow context for Claude Code hooks."""
+    """Output AI-optimized workflow context for Claude Code hooks.
+
+    Silently exits with code 0 if not in a seeds project.
+    This enables cross-platform hook integration where both
+    seeds and beads hooks can coexist.
+    """
+    from seeds.db import find_seeds_dir
     from seeds.prime import get_prime_output
+
+    # Check if we're in a seeds project
+    seeds_dir = find_seeds_dir()
+    if seeds_dir is None:
+        # Not in a seeds project - silent exit with success
+        # CRITICAL: No output, exit 0 to enable hook coexistence
+        return
 
     click.echo(get_prime_output())
 
@@ -650,7 +663,7 @@ def prime() -> None:
 @main.command()
 @pass_context
 def doctor(ctx: Context) -> None:
-    """Check for issues with SEEDS installation and data."""
+    """Check for issues with seeds installation and data."""
     from seeds.export import JSONL_FILE
 
     passed = 0
@@ -672,7 +685,7 @@ def doctor(ctx: Context) -> None:
         click.echo(f"  ✗ {name}: {msg}")
         failed += 1
 
-    click.echo("SEEDS Doctor")
+    click.echo("seeds Doctor")
     click.echo()
 
     # Check database

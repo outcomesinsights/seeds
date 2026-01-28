@@ -1,8 +1,11 @@
-"""Tests for SEEDS database layer."""
+"""Tests for seeds database layer."""
+
+import os
+import tempfile
 
 import pytest
 
-from seeds.db import Database
+from seeds.db import Database, find_seeds_dir
 from seeds.models import (
     Question,
     QuestionStatus,
@@ -400,3 +403,54 @@ class TestTags:
 
         result = db.get_all_tags()
         assert result == ["alpha", "beta", "gamma"]  # Sorted, unique
+
+
+class TestFindSeedsDir:
+    """Tests for find_seeds_dir function."""
+
+    def test_find_seeds_dir_in_current_directory(self):
+        """Verify find_seeds_dir finds .seeds in current directory."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                # Create .seeds directory
+                seeds_dir = os.path.join(tmpdir, ".seeds")
+                os.makedirs(seeds_dir)
+
+                result = find_seeds_dir()
+                assert result is not None
+                assert str(result) == seeds_dir
+            finally:
+                os.chdir(original_cwd)
+
+    def test_find_seeds_dir_in_parent_directory(self):
+        """Verify find_seeds_dir walks up to find .seeds."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            try:
+                # Create .seeds in root of tmpdir
+                seeds_dir = os.path.join(tmpdir, ".seeds")
+                os.makedirs(seeds_dir)
+
+                # Create a subdirectory and cd into it
+                subdir = os.path.join(tmpdir, "subdir", "nested")
+                os.makedirs(subdir)
+                os.chdir(subdir)
+
+                result = find_seeds_dir()
+                assert result is not None
+                assert str(result) == seeds_dir
+            finally:
+                os.chdir(original_cwd)
+
+    def test_find_seeds_dir_returns_none_when_not_found(self):
+        """Verify find_seeds_dir returns None when no .seeds exists."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                result = find_seeds_dir()
+                assert result is None
+            finally:
+                os.chdir(original_cwd)
