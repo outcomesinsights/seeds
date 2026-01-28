@@ -318,5 +318,128 @@ def blocked(ctx: Context) -> None:
             click.echo(f"    ○ {child.id}: {child.title}")
 
 
+# --- Status change commands ---
+
+
+def get_seed_or_exit(db: Database, seed_id: str) -> Seed:
+    """Get a seed by ID or exit with error."""
+    seed = db.get_seed(seed_id)
+    if seed is None:
+        click.echo(f"Error: Seed '{seed_id}' not found.", err=True)
+        sys.exit(1)
+    return seed
+
+
+@main.command()
+@click.argument("seed_id")
+@pass_context
+def explore(ctx: Context, seed_id: str) -> None:
+    """Start exploring a seed (captured → exploring)."""
+    db = ctx.get_db()
+    seed = get_seed_or_exit(db, seed_id)
+
+    if seed.status != SeedStatus.CAPTURED:
+        click.echo(f"Warning: Seed is {seed.status.value}, not captured.")
+
+    seed.status = SeedStatus.EXPLORING
+    db.update_seed(seed)
+    click.echo(f"◐ {seed_id}: Now exploring")
+
+
+@main.command()
+@click.argument("seed_id")
+@pass_context
+def defer(ctx: Context, seed_id: str) -> None:
+    """Defer a seed to the backlog."""
+    db = ctx.get_db()
+    seed = get_seed_or_exit(db, seed_id)
+
+    seed.status = SeedStatus.DEFERRED
+    db.update_seed(seed)
+    click.echo(f"◌ {seed_id}: Deferred to backlog")
+
+
+@main.command()
+@click.argument("seed_id")
+@pass_context
+def resolve(ctx: Context, seed_id: str) -> None:
+    """Mark a seed as resolved."""
+    db = ctx.get_db()
+    seed = get_seed_or_exit(db, seed_id)
+
+    from seeds.models import now_utc
+
+    seed.status = SeedStatus.RESOLVED
+    seed.resolved_at = now_utc()
+    db.update_seed(seed)
+    click.echo(f"● {seed_id}: Resolved")
+
+
+@main.command()
+@click.argument("seed_id")
+@click.option("--reason", "-r", help="Reason for abandoning")
+@pass_context
+def abandon(ctx: Context, seed_id: str, reason: str | None) -> None:
+    """Abandon a seed (decided not to pursue)."""
+    db = ctx.get_db()
+    seed = get_seed_or_exit(db, seed_id)
+
+    from seeds.models import now_utc
+
+    seed.status = SeedStatus.ABANDONED
+    seed.resolved_at = now_utc()
+    if reason:
+        seed.content = f"{seed.content}\n\nAbandoned: {reason}".strip()
+    db.update_seed(seed)
+    click.echo(f"✗ {seed_id}: Abandoned")
+    if reason:
+        click.echo(f"  Reason: {reason}")
+
+
+@main.command()
+@click.argument("seed_id")
+@click.option("--title", "-t", help="New title")
+@click.option("--content", "-c", help="New content (replaces existing)")
+@click.option("--tags", help="New tags (comma-separated, replaces existing)")
+@click.option("--append", "-a", "append_text", help="Append to content")
+@pass_context
+def update(
+    ctx: Context,
+    seed_id: str,
+    title: str | None,
+    content: str | None,
+    tags: str | None,
+    append_text: str | None,
+) -> None:
+    """Update a seed's fields."""
+    db = ctx.get_db()
+    seed = get_seed_or_exit(db, seed_id)
+
+    changed = False
+
+    if title:
+        seed.title = title
+        changed = True
+
+    if content is not None:
+        seed.content = content
+        changed = True
+
+    if append_text:
+        seed.content = f"{seed.content}\n\n{append_text}".strip()
+        changed = True
+
+    if tags is not None:
+        seed.tags = [t.strip() for t in tags.split(",")] if tags else []
+        changed = True
+
+    if not changed:
+        click.echo("No changes specified.")
+        return
+
+    db.update_seed(seed)
+    click.echo(f"Updated {seed_id}")
+
+
 if __name__ == "__main__":
     main()
