@@ -1,13 +1,13 @@
 # Deliberation & Decision-Making Tools Research
 
 **Created:** 2026-01-27
-**Purpose:** Survey of tools that might provide the SEEDS vision - capturing the deliberation process, nurturing ideas from seed to fruit
+**Purpose:** Survey of tools that might provide the seeds vision - capturing the deliberation process, nurturing ideas from seed to fruit
 
 ---
 
 ## Executive Summary
 
-After extensive research, **no existing tool fully matches the SEEDS vision**. However, several tools address parts of it, and combining insights from multiple categories could inform SEEDS design.
+After extensive research, **no existing tool fully matches the seeds vision**. However, several tools address parts of it, and combining insights from multiple categories could inform seeds design.
 
 ### The Gap
 
@@ -106,7 +106,7 @@ The most complete IBIS implementation still available. Worth downloading to unde
 - **Concept:** Persistent, searchable memory of Claude sessions
 - **Reference:** https://skywork.ai/skypage/en/claude-conversation-logger-ai-engineer/
 
-Transforms Claude from stateless chat to a system with persistent, analyzable memory. Could be useful for SEEDS as underlying storage mechanism.
+Transforms Claude from stateless chat to a system with persistent, analyzable memory. Could be useful for seeds as underlying storage mechanism.
 
 ---
 
@@ -143,7 +143,7 @@ These tools excel at connecting ideas but lack deliberation-specific structure.
 - ✅ Graph view for connections
 - ❌ Page-level focus (not block-level)
 - ❌ No built-in deliberation structure
-- ❌ Would require custom plugins for SEEDS-like workflow
+- ❌ Would require custom plugins for seeds-like workflow
 
 **Plugin ecosystem includes:** Argdown integration, Dataview for queries, Canvas for spatial thinking.
 
@@ -163,7 +163,7 @@ These tools excel at connecting ideas but lack deliberation-specific structure.
 
 **Backlog pattern:** Users create `Backlog/<project>` pages with scheduled dates. Plugin `logseq-plugin-refile` helps move items to backlog.
 
-**Closest to SEEDS workflow** among PKM tools due to TODO/LATER states.
+**Closest to seeds workflow** among PKM tools due to TODO/LATER states.
 
 ### Tana
 - **Website:** https://tana.inc/
@@ -193,7 +193,7 @@ These tools excel at connecting ideas but lack deliberation-specific structure.
 - ❌ No deliberation structure
 - ❌ No idea lifecycle
 
-**Key concept:** Information organized around "objects" rather than pages or blocks. Closer to how SEEDS might model "ideas."
+**Key concept:** Information organized around "objects" rather than pages or blocks. Closer to how seeds might model "ideas."
 
 ### Mem AI
 - **Website:** https://mem.ai/
@@ -320,7 +320,7 @@ These tools excel at connecting ideas but lack deliberation-specific structure.
 
 **Key insight:** Loomio's workflow (discussion → proposal → decision with timeline) is close to deliberation as process. The time-bounding prevents endless deliberation.
 
-**Worth studying** for workflow design even if target audience (groups) differs from SEEDS (individual).
+**Worth studying** for workflow design even if target audience (groups) differs from seeds (individual).
 
 ### ConsiderIt
 - **Source:** https://github.com/Considerit/ConsiderIt
@@ -377,7 +377,7 @@ Can generate basic argument map structure from prompts. Free, widely used.
 - Decision updates based on discussion
 - Outperforms traditional explainable AI
 
-**Relevance:** Academic framework for exactly what SEEDS envisions - AI as deliberation partner. Not a tool you can use, but informs design.
+**Relevance:** Academic framework for exactly what seeds envisions - AI as deliberation partner. Not a tool you can use, but informs design.
 
 ### The Habermas Machine
 - **Publication:** Science, May 2025
@@ -389,7 +389,7 @@ AI system that outperformed human mediators at reducing intra-group divisions an
 - **Integration:** Works with Claude Desktop
 - **Function:** Explicit reasoning documentation during conversations
 
-Each reasoning step documented, with revision capabilities. Closer to what SEEDS might want for tracking deliberation within AI conversations.
+Each reasoning step documented, with revision capabilities. Closer to what seeds might want for tracking deliberation within AI conversations.
 
 ---
 
@@ -408,9 +408,9 @@ For developers who want note-taking in their IDE. Less polished than Obsidian.
 
 ---
 
-## Synthesis: What Would SEEDS Need to Be?
+## Synthesis: What Would seeds Need to Be?
 
-Based on this research, SEEDS would need to combine:
+Based on this research, seeds would need to combine:
 
 | Capability | Best Existing Example |
 |------------|----------------------|
@@ -425,7 +425,7 @@ Based on this research, SEEDS would need to combine:
 | **Deliberation workflow** | Loomio (discussion → proposal → decision) |
 | **Version history** | Intent.build (CRDT), Git |
 
-### The Unique SEEDS Value Proposition
+### The Unique seeds Value Proposition
 
 None of these tools:
 1. Are designed for **individual deliberation with AI assistance**
@@ -456,7 +456,7 @@ None of these tools:
 6. **From Intent.build:** Automatic capture, provenance linking
 7. **From Beads:** CLI-first, agent-friendly, backlog management
 
-### The SEEDS Differentiator
+### The seeds Differentiator
 
 Build the tool that:
 - **Helps ideas grow** (deliberation as nurturing, not just capture)
@@ -511,4 +511,4 @@ Build the tool that:
 
 ---
 
-*Research compiled 2026-01-27 for SEEDS project planning*
+*Research compiled 2026-01-27 for seeds project planning*

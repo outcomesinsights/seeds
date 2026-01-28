@@ -1,4 +1,4 @@
-# SEEDS MVP Specification
+# seeds MVP Specification
 
 **Version:** 0.1.1 (Post-Interview)
 **Created:** 2026-01-27
@@ -6,9 +6,9 @@
 
 ---
 
-## What is SEEDS?
+## What is seeds?
 
-SEEDS is a **deliberation capture tool** that helps ideas grow from initial seeds into mature decisions (the "fruit"). Unlike traditional decision-tracking tools that capture only outcomes, SEEDS captures the **journey**: the questions asked, alternatives considered, mind-racing tangents, and gradual refinement that leads to a decision.
+seeds is a **deliberation capture tool** that helps ideas grow from initial seeds into mature decisions (the "fruit"). Unlike traditional decision-tracking tools that capture only outcomes, seeds captures the **journey**: the questions asked, alternatives considered, mind-racing tangents, and gradual refinement that leads to a decision.
 
 ### Core Philosophy
 
@@ -22,7 +22,7 @@ SEEDS is a **deliberation capture tool** that helps ideas grow from initial seed
 
 ## MVP Scope
 
-The MVP focuses on the **minimal set of features** needed to start using SEEDS to design SEEDS itself. We can iterate from there.
+The MVP focuses on the **minimal set of features** needed to start using seeds to design seeds itself. We can iterate from there.
 
 ### In Scope
 
@@ -296,12 +296,12 @@ One seed per line, questions embedded:
 The `seeds prime` command outputs AI-optimized workflow context:
 
 ```markdown
-# SEEDS Workflow Context
+# seeds Workflow Context
 
 > **Context Recovery**: Run `seeds prime` after compaction, clear, or new session
 
 ## Core Rules
-- Use SEEDS to capture ideas, questions, and deliberation
+- Use seeds to capture ideas, questions, and deliberation
 - `seeds jot "..."` for quick capture during mind-racing
 - Mark seeds as `deferred` when not ready to explore
 - Questions are first-class - use `seeds ask` to track them
@@ -431,5 +431,5 @@ Based on user interview (2026-01-27):
 
 1. User interview to refine requirements
 2. Build MVP in Python with uv
-3. Use SEEDS to plan SEEDS improvements
+3. Use seeds to plan seeds improvements
 4. Iterate based on actual usage patterns
