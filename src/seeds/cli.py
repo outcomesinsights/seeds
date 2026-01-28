@@ -647,5 +647,103 @@ def prime() -> None:
     click.echo(get_prime_output())
 
 
+@main.command()
+@pass_context
+def doctor(ctx: Context) -> None:
+    """Check for issues with SEEDS installation and data."""
+    from seeds.export import JSONL_FILE
+
+    passed = 0
+    warnings = 0
+    failed = 0
+
+    def check_pass(name: str) -> None:
+        nonlocal passed
+        click.echo(f"  ✓ {name}")
+        passed += 1
+
+    def check_warn(name: str, msg: str) -> None:
+        nonlocal warnings
+        click.echo(f"  ⚠ {name}: {msg}")
+        warnings += 1
+
+    def check_fail(name: str, msg: str) -> None:
+        nonlocal failed
+        click.echo(f"  ✗ {name}: {msg}")
+        failed += 1
+
+    click.echo("SEEDS Doctor")
+    click.echo()
+
+    # Check database
+    click.echo("Database:")
+    db = ctx.get_db()
+    if db.is_initialized():
+        check_pass("Database exists")
+    else:
+        check_fail("Database", "Not initialized")
+        return
+
+    # Check seeds
+    click.echo()
+    click.echo("Seeds:")
+    all_seeds = db.list_seeds(include_terminal=True)
+    check_pass(f"{len(all_seeds)} seeds total")
+
+    open_seeds = db.list_seeds(include_terminal=False)
+    if open_seeds:
+        check_pass(f"{len(open_seeds)} open seeds")
+    else:
+        check_warn("Seeds", "No open seeds")
+
+    # Check for orphaned questions
+    click.echo()
+    click.echo("Questions:")
+    all_questions = db.list_questions()
+    orphaned = []
+    for q in all_questions:
+        if db.get_seed(q.seed_id) is None:
+            orphaned.append(q)
+
+    if not orphaned:
+        check_pass(f"{len(all_questions)} questions, no orphans")
+    else:
+        check_warn("Questions", f"{len(orphaned)} orphaned questions")
+
+    open_questions = db.get_open_questions()
+    if open_questions:
+        check_pass(f"{len(open_questions)} open questions")
+
+    # Check JSONL sync
+    click.echo()
+    click.echo("Sync:")
+    jsonl_path = Path.cwd() / SEEDS_DIR / JSONL_FILE
+    if jsonl_path.exists():
+        check_pass("JSONL file exists")
+
+        # Check if JSONL is stale
+        import os
+        db_mtime = os.path.getmtime(db.path)
+        jsonl_mtime = os.path.getmtime(jsonl_path)
+        if jsonl_mtime >= db_mtime:
+            check_pass("JSONL is up to date")
+        else:
+            check_warn("Sync", "JSONL may be stale, run 'seeds sync'")
+    else:
+        check_warn("Sync", "No JSONL file, run 'seeds sync'")
+
+    # Summary
+    click.echo()
+    click.echo("─" * 40)
+    status_parts = []
+    if passed:
+        status_parts.append(f"✓ {passed} passed")
+    if warnings:
+        status_parts.append(f"⚠ {warnings} warnings")
+    if failed:
+        status_parts.append(f"✗ {failed} failed")
+    click.echo("  ".join(status_parts))
+
+
 if __name__ == "__main__":
     main()
