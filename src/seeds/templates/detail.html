@@ -9,7 +9,7 @@
             <span class="seed-status status-{{ seed.status.value }}">{{ seed.status.value }}</span>
             <span class="seed-type">{{ seed.seed_type.value }}</span>
             {% for tag in seed.tags %}
-            <span class="tag">{{ tag }}</span>
+            <a href="/?tags={{ tag }}" class="tag">{{ tag }}</a>
             {% endfor %}
         </p>
         <h1>{{ seed.title }}</h1>

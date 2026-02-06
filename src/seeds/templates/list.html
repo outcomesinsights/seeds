@@ -72,7 +72,7 @@
                 <td><span class="seed-type">{{ node.seed.seed_type.value }}</span></td>
                 <td>
                     {% for tag in node.seed.tags %}
-                    <span class="tag">{{ tag }}</span>
+                    <a href="/?tags={{ tag }}" class="tag">{{ tag }}</a>
                     {% endfor %}
                 </td>
             </tr>
@@ -94,7 +94,7 @@
                 <td><span class="seed-type">{{ seed.seed_type.value }}</span></td>
                 <td>
                     {% for tag in seed.tags %}
-                    <span class="tag">{{ tag }}</span>
+                    <a href="/?tags={{ tag }}" class="tag">{{ tag }}</a>
                     {% endfor %}
                 </td>
             </tr>
@@ -323,6 +323,18 @@ function getColumnValue(row, col) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
+    // Check URL parameters for initial filter values
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('tags')) {
+        document.getElementById('filter-tags').value = params.get('tags');
+    }
+    if (params.get('status')) {
+        document.getElementById('filter-status').value = params.get('status');
+    }
+    if (params.get('type')) {
+        document.getElementById('filter-type').value = params.get('type');
+    }
+
     setView('nested');
 });
 </script>
