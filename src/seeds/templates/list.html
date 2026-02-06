@@ -59,11 +59,12 @@
                 data-type="{{ node.seed.seed_type.value }}"
                 data-tags="{{ node.seed.tags|join(',') }}"
                 data-depth="{{ node.depth }}"
-                data-parent-id="{{ node.seed.id.rsplit('.', 1)[0] if '.' in node.seed.id else '' }}">
+                data-parent-id="{{ node.seed.id.rsplit('.', 1)[0] if '.' in node.seed.id else '' }}"
+                data-short-id="{% if '.' in node.seed.id %}.{{ node.seed.id.rsplit('.', 1)[1] }}{% else %}{{ node.seed.id }}{% endif %}">
                 <td>
                     <span class="depth-{{ node.depth }}">
                         {% if node.depth > 0 %}<span class="child-indicator">└</span>{% endif %}
-                        <a href="/seed/{{ node.seed.id }}">{{ node.seed.id }}</a>
+                        <a href="/seed/{{ node.seed.id }}" title="{{ node.seed.id }}">{% if node.depth > 0 %}.{{ node.seed.id.rsplit('.', 1)[1] }}{% else %}{{ node.seed.id }}{% endif %}</a>
                     </span>
                 </td>
                 <td><a href="/seed/{{ node.seed.id }}">{{ node.seed.title }}</a></td>
@@ -175,6 +176,7 @@ function applyFilters() {
         const matches = visibleIds.has(row.dataset.id);
         const parentId = row.dataset.parentId;
         const depth = parseInt(row.dataset.depth);
+        const shortId = row.dataset.shortId;
 
         if (matches) {
             row.style.display = '';
@@ -186,13 +188,13 @@ function applyFilters() {
                 const depthCell = row.querySelector('td:first-child span');
 
                 if (!parentVisible) {
-                    // Bump to top level visually
+                    // Bump to top level visually - show full ID
                     depthCell.className = 'depth-0';
-                    depthCell.innerHTML = `<a href="/seed/${row.dataset.id}">${row.dataset.id}</a>`;
+                    depthCell.innerHTML = `<a href="/seed/${row.dataset.id}" title="${row.dataset.id}">${row.dataset.id}</a>`;
                 } else {
-                    // Keep original depth
+                    // Keep original depth - show short ID
                     depthCell.className = `depth-${depth}`;
-                    depthCell.innerHTML = `<span class="child-indicator">└</span><a href="/seed/${row.dataset.id}">${row.dataset.id}</a>`;
+                    depthCell.innerHTML = `<span class="child-indicator">└</span><a href="/seed/${row.dataset.id}" title="${row.dataset.id}">${shortId}</a>`;
                 }
             }
         } else {
@@ -204,12 +206,13 @@ function applyFilters() {
     if (currentView === 'nested' && !hasActiveFilters) {
         rows.forEach(row => {
             const depth = parseInt(row.dataset.depth);
+            const shortId = row.dataset.shortId;
             const depthCell = row.querySelector('td:first-child span');
             depthCell.className = `depth-${depth}`;
             if (depth > 0) {
-                depthCell.innerHTML = `<span class="child-indicator">└</span><a href="/seed/${row.dataset.id}">${row.dataset.id}</a>`;
+                depthCell.innerHTML = `<span class="child-indicator">└</span><a href="/seed/${row.dataset.id}" title="${row.dataset.id}">${shortId}</a>`;
             } else {
-                depthCell.innerHTML = `<a href="/seed/${row.dataset.id}">${row.dataset.id}</a>`;
+                depthCell.innerHTML = `<a href="/seed/${row.dataset.id}" title="${row.dataset.id}">${row.dataset.id}</a>`;
             }
         });
     }
