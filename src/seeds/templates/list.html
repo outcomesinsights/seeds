@@ -8,20 +8,85 @@
 <p class="meta">{{ seeds|length }} seed{% if seeds|length != 1 %}s{% endif %}</p>
 
 {% if seeds %}
+<!-- View toggle and filter controls -->
+<div class="filter-controls">
+    <div class="view-toggle">
+        <button type="button" id="btn-nested" class="active" onclick="setView('nested')">Nested</button>
+        <button type="button" id="btn-flat" onclick="setView('flat')">Flat</button>
+    </div>
+
+    <input type="text" id="filter-id" placeholder="Filter ID..." oninput="applyFilters()">
+    <input type="text" id="filter-title" placeholder="Filter Title..." oninput="applyFilters()">
+
+    <select id="filter-status" onchange="applyFilters()">
+        <option value="">All Status</option>
+        <option value="captured">captured</option>
+        <option value="exploring">exploring</option>
+        <option value="deferred">deferred</option>
+        <option value="resolved">resolved</option>
+        <option value="abandoned">abandoned</option>
+    </select>
+
+    <select id="filter-type" onchange="applyFilters()">
+        <option value="">All Types</option>
+        <option value="idea">idea</option>
+        <option value="question">question</option>
+        <option value="decision">decision</option>
+        <option value="exploration">exploration</option>
+        <option value="concern">concern</option>
+    </select>
+
+    <input type="text" id="filter-tags" placeholder="Filter Tags..." oninput="applyFilters()">
+</div>
+
 <figure>
-    <table>
+    <table id="seeds-table">
         <thead>
             <tr>
-                <th>ID</th>
-                <th>Title</th>
-                <th>Status</th>
-                <th>Type</th>
-                <th>Tags</th>
+                <th class="sortable" data-col="id" onclick="sortBy('id')">ID</th>
+                <th class="sortable" data-col="title" onclick="sortBy('title')">Title</th>
+                <th class="sortable" data-col="status" onclick="sortBy('status')">Status</th>
+                <th class="sortable" data-col="type" onclick="sortBy('type')">Type</th>
+                <th class="sortable" data-col="tags" onclick="sortBy('tags')">Tags</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="seeds-tbody-nested">
+            {% for node in tree %}
+            <tr class="seed-row nested-row"
+                data-id="{{ node.seed.id }}"
+                data-title="{{ node.seed.title }}"
+                data-status="{{ node.seed.status.value }}"
+                data-type="{{ node.seed.seed_type.value }}"
+                data-tags="{{ node.seed.tags|join(',') }}"
+                data-depth="{{ node.depth }}"
+                data-parent-id="{{ node.seed.id.rsplit('.', 1)[0] if '.' in node.seed.id else '' }}">
+                <td>
+                    <span class="depth-{{ node.depth }}">
+                        {% if node.depth > 0 %}<span class="child-indicator">└</span>{% endif %}
+                        <a href="/seed/{{ node.seed.id }}">{{ node.seed.id }}</a>
+                    </span>
+                </td>
+                <td><a href="/seed/{{ node.seed.id }}">{{ node.seed.title }}</a></td>
+                <td><span class="seed-status status-{{ node.seed.status.value }}">{{ node.seed.status.value }}</span></td>
+                <td><span class="seed-type">{{ node.seed.seed_type.value }}</span></td>
+                <td>
+                    {% for tag in node.seed.tags %}
+                    <span class="tag">{{ tag }}</span>
+                    {% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tbody id="seeds-tbody-flat" style="display: none;">
             {% for seed in seeds %}
-            <tr>
+            <tr class="seed-row flat-row"
+                data-id="{{ seed.id }}"
+                data-title="{{ seed.title }}"
+                data-status="{{ seed.status.value }}"
+                data-type="{{ seed.seed_type.value }}"
+                data-tags="{{ seed.tags|join(',') }}"
+                data-depth="0"
+                data-parent-id="{{ seed.id.rsplit('.', 1)[0] if '.' in seed.id else '' }}">
                 <td><a href="/seed/{{ seed.id }}">{{ seed.id }}</a></td>
                 <td><a href="/seed/{{ seed.id }}">{{ seed.title }}</a></td>
                 <td><span class="seed-status status-{{ seed.status.value }}">{{ seed.status.value }}</span></td>
@@ -39,4 +104,223 @@
 {% else %}
 <p>No seeds yet. Run <code>seeds jot "Your first idea"</code> to create one.</p>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentView = 'nested';
+let currentSort = { col: null, dir: 'asc' };
+
+function setView(view) {
+    currentView = view;
+
+    // Update toggle buttons
+    document.getElementById('btn-nested').classList.toggle('active', view === 'nested');
+    document.getElementById('btn-flat').classList.toggle('active', view === 'flat');
+
+    // Show/hide appropriate tbody
+    document.getElementById('seeds-tbody-nested').style.display = view === 'nested' ? '' : 'none';
+    document.getElementById('seeds-tbody-flat').style.display = view === 'flat' ? '' : 'none';
+
+    // Re-apply filters and sort
+    applyFilters();
+    if (currentSort.col) {
+        applySortVisual();
+    }
+}
+
+function applyFilters() {
+    const filterId = document.getElementById('filter-id').value.toLowerCase();
+    const filterTitle = document.getElementById('filter-title').value.toLowerCase();
+    const filterStatus = document.getElementById('filter-status').value;
+    const filterType = document.getElementById('filter-type').value;
+    const filterTags = document.getElementById('filter-tags').value.toLowerCase();
+
+    const tbody = currentView === 'nested'
+        ? document.getElementById('seeds-tbody-nested')
+        : document.getElementById('seeds-tbody-flat');
+
+    const rows = tbody.querySelectorAll('.seed-row');
+
+    // Track which parent IDs have visible children (for nested view bumping)
+    const visibleIds = new Set();
+    const matchingRows = [];
+
+    // First pass: find all matching rows
+    rows.forEach(row => {
+        const id = row.dataset.id.toLowerCase();
+        const title = row.dataset.title.toLowerCase();
+        const status = row.dataset.status;
+        const type = row.dataset.type;
+        const tags = row.dataset.tags.toLowerCase();
+
+        const matches = (
+            (!filterId || id.includes(filterId)) &&
+            (!filterTitle || title.includes(filterTitle)) &&
+            (!filterStatus || status === filterStatus) &&
+            (!filterType || type === filterType) &&
+            (!filterTags || tags.includes(filterTags))
+        );
+
+        if (matches) {
+            matchingRows.push(row);
+            visibleIds.add(row.dataset.id);
+        }
+    });
+
+    // In nested view with active filters, bump orphaned children to top level
+    const hasActiveFilters = filterId || filterTitle || filterStatus || filterType || filterTags;
+
+    rows.forEach(row => {
+        const matches = visibleIds.has(row.dataset.id);
+        const parentId = row.dataset.parentId;
+        const depth = parseInt(row.dataset.depth);
+
+        if (matches) {
+            row.style.display = '';
+
+            // In nested view with filters, adjust visual depth
+            if (currentView === 'nested' && hasActiveFilters && depth > 0) {
+                // Check if parent is visible
+                const parentVisible = parentId && visibleIds.has(parentId);
+                const depthCell = row.querySelector('td:first-child span');
+
+                if (!parentVisible) {
+                    // Bump to top level visually
+                    depthCell.className = 'depth-0';
+                    depthCell.innerHTML = `<a href="/seed/${row.dataset.id}">${row.dataset.id}</a>`;
+                } else {
+                    // Keep original depth
+                    depthCell.className = `depth-${depth}`;
+                    depthCell.innerHTML = `<span class="child-indicator">└</span><a href="/seed/${row.dataset.id}">${row.dataset.id}</a>`;
+                }
+            }
+        } else {
+            row.style.display = 'none';
+        }
+    });
+
+    // If no filters active in nested view, restore original depths
+    if (currentView === 'nested' && !hasActiveFilters) {
+        rows.forEach(row => {
+            const depth = parseInt(row.dataset.depth);
+            const depthCell = row.querySelector('td:first-child span');
+            depthCell.className = `depth-${depth}`;
+            if (depth > 0) {
+                depthCell.innerHTML = `<span class="child-indicator">└</span><a href="/seed/${row.dataset.id}">${row.dataset.id}</a>`;
+            } else {
+                depthCell.innerHTML = `<a href="/seed/${row.dataset.id}">${row.dataset.id}</a>`;
+            }
+        });
+    }
+}
+
+function sortBy(col) {
+    // Toggle direction if same column
+    if (currentSort.col === col) {
+        currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort.col = col;
+        currentSort.dir = 'asc';
+    }
+
+    applySortVisual();
+    performSort();
+}
+
+function applySortVisual() {
+    // Update header classes
+    document.querySelectorAll('th.sortable').forEach(th => {
+        th.classList.remove('sort-asc', 'sort-desc');
+        if (th.dataset.col === currentSort.col) {
+            th.classList.add(currentSort.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+        }
+    });
+}
+
+function performSort() {
+    const tbody = currentView === 'nested'
+        ? document.getElementById('seeds-tbody-nested')
+        : document.getElementById('seeds-tbody-flat');
+
+    if (currentView === 'nested') {
+        // In nested view, only sort top-level items, keeping children grouped
+        sortNestedView(tbody);
+    } else {
+        // In flat view, sort all rows uniformly
+        sortFlatView(tbody);
+    }
+}
+
+function sortFlatView(tbody) {
+    const rows = Array.from(tbody.querySelectorAll('.seed-row'));
+
+    rows.sort((a, b) => {
+        let aVal = getColumnValue(a, currentSort.col);
+        let bVal = getColumnValue(b, currentSort.col);
+
+        let cmp = aVal.localeCompare(bVal);
+        return currentSort.dir === 'asc' ? cmp : -cmp;
+    });
+
+    // Re-append in sorted order
+    rows.forEach(row => tbody.appendChild(row));
+}
+
+function sortNestedView(tbody) {
+    const rows = Array.from(tbody.querySelectorAll('.seed-row'));
+
+    // Group rows by their top-level parent
+    const groups = new Map(); // top-level id -> [rows in tree order]
+    const topLevelRows = [];
+
+    rows.forEach(row => {
+        const depth = parseInt(row.dataset.depth);
+        if (depth === 0) {
+            topLevelRows.push(row);
+            groups.set(row.dataset.id, [row]);
+        } else {
+            // Find top-level ancestor
+            let ancestorId = row.dataset.id;
+            while (ancestorId.includes('.')) {
+                ancestorId = ancestorId.rsplit ? ancestorId.rsplit('.', 1)[0] : ancestorId.substring(0, ancestorId.lastIndexOf('.'));
+            }
+            if (groups.has(ancestorId)) {
+                groups.get(ancestorId).push(row);
+            }
+        }
+    });
+
+    // Sort top-level rows
+    topLevelRows.sort((a, b) => {
+        let aVal = getColumnValue(a, currentSort.col);
+        let bVal = getColumnValue(b, currentSort.col);
+
+        let cmp = aVal.localeCompare(bVal);
+        return currentSort.dir === 'asc' ? cmp : -cmp;
+    });
+
+    // Re-append in sorted order, keeping children after their parents
+    topLevelRows.forEach(topRow => {
+        const group = groups.get(topRow.dataset.id) || [topRow];
+        group.forEach(row => tbody.appendChild(row));
+    });
+}
+
+function getColumnValue(row, col) {
+    switch(col) {
+        case 'id': return row.dataset.id;
+        case 'title': return row.dataset.title;
+        case 'status': return row.dataset.status;
+        case 'type': return row.dataset.type;
+        case 'tags': return row.dataset.tags;
+        default: return '';
+    }
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    setView('nested');
+});
+</script>
 {% endblock %}

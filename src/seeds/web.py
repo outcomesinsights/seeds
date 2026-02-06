@@ -4,6 +4,66 @@ from flask import Flask, render_template, abort
 from pathlib import Path
 
 from seeds.db import Database, find_seeds_dir, SEEDS_DIR, DB_FILE
+from seeds.models import Seed, get_parent_id
+
+
+def build_seed_tree(seeds: list[Seed]) -> list[dict]:
+    """Build a hierarchical tree structure from flat seed list.
+
+    Returns a list of top-level seeds, each with a 'children' list recursively populated.
+    Each dict has: 'seed' (the Seed object), 'children' (list of child dicts), 'depth' (int).
+    """
+    # Create a map of seed_id -> seed
+    seed_map = {s.id: s for s in seeds}
+
+    # Create tree nodes for each seed
+    nodes: dict[str, dict] = {}
+    for s in seeds:
+        nodes[s.id] = {"seed": s, "children": [], "depth": 0}
+
+    # Build parent-child relationships
+    top_level = []
+    for s in seeds:
+        parent_id = get_parent_id(s.id)
+        if parent_id and parent_id in nodes:
+            nodes[parent_id]["children"].append(nodes[s.id])
+        else:
+            top_level.append(nodes[s.id])
+
+    # Calculate depths recursively
+    def set_depths(node: dict, depth: int = 0):
+        node["depth"] = depth
+        for child in node["children"]:
+            set_depths(child, depth + 1)
+
+    for node in top_level:
+        set_depths(node)
+
+    # Sort children by ID within each parent
+    def sort_children(node: dict):
+        node["children"].sort(key=lambda n: n["seed"].id)
+        for child in node["children"]:
+            sort_children(child)
+
+    for node in top_level:
+        sort_children(node)
+
+    return top_level
+
+
+def flatten_tree(tree: list[dict]) -> list[dict]:
+    """Flatten tree to list, preserving depth information for indentation."""
+    result = []
+
+    def visit(node: dict):
+        result.append(node)
+        for child in node["children"]:
+            visit(child)
+
+    for node in tree:
+        visit(node)
+
+    return result
 
 
 def create_app(seeds_dir: Path | None = None) -> Flask:
@@ -36,7 +96,12 @@ def create_app(seeds_dir: Path | None = None) -> Flask:
         db = get_db()
         seeds = db.list_seeds(include_terminal=True)
         db.close()
-        return render_template("list.html", seeds=seeds)
+
+        # Build tree and flatten for template
+        tree = build_seed_tree(seeds)
+        flat_tree = flatten_tree(tree)
+
+        return render_template("list.html", seeds=seeds, tree=flat_tree)
 
     @app.route("/seed/<seed_id>")
     def seed_detail(seed_id: str):
