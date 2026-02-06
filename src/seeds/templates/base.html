@@ -155,11 +155,12 @@
             gap: 1em;
             flex-wrap: wrap;
             margin-bottom: 1em;
-            align-items: center;
+            align-items: stretch;
         }
 
         .filter-controls input,
-        .filter-controls select {
+        .filter-controls select,
+        .filter-controls .multi-select-button {
             margin-bottom: 0;
             width: auto;
             min-width: 120px;
@@ -216,6 +217,71 @@
 
         .view-toggle button:not(:last-child) {
             border-right: 1px solid #ccc;
+        }
+
+        /* Multi-select dropdown */
+        .multi-select {
+            position: relative;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .multi-select-button {
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            line-height: var(--pico-line-height);
+            border: 1px solid var(--pico-form-element-border-color);
+            border-radius: var(--pico-border-radius);
+            background: var(--pico-form-element-background-color) !important;
+            color: var(--pico-form-element-color) !important;
+            cursor: pointer;
+            min-width: 120px;
+            text-align: left;
+            box-sizing: border-box;
+            margin: 0;
+        }
+
+        .multi-select-button::after {
+            content: " ▼";
+            font-size: 0.7em;
+            float: right;
+            margin-left: 0.5em;
+        }
+
+        .multi-select-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 100;
+            min-width: 140px;
+            margin-top: 2px;
+        }
+
+        .multi-select.open .multi-select-dropdown {
+            display: block;
+        }
+
+        .multi-select-dropdown label {
+            display: block;
+            padding: 0.4em 0.8em;
+            cursor: pointer;
+            font-size: 0.85em;
+            margin: 0;
+            white-space: nowrap;
+        }
+
+        .multi-select-dropdown label:hover {
+            background: #f5f5f5;
+        }
+
+        .multi-select-dropdown input {
+            margin-right: 0.5em;
+            width: auto;
         }
 
         /* Markdown rendered content - override Pico defaults for tighter spacing */

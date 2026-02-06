@@ -18,23 +18,27 @@
     <input type="text" id="filter-id" placeholder="Filter ID..." oninput="applyFilters()">
     <input type="text" id="filter-title" placeholder="Filter Title..." oninput="applyFilters()">
 
-    <select id="filter-status" onchange="applyFilters()">
-        <option value="">All Status</option>
-        <option value="captured">captured</option>
-        <option value="exploring">exploring</option>
-        <option value="deferred">deferred</option>
-        <option value="resolved">resolved</option>
-        <option value="abandoned">abandoned</option>
-    </select>
+    <div class="multi-select" id="status-select">
+        <button type="button" class="multi-select-button" onclick="toggleDropdown('status-select')"><span class="multi-select-label">Status</span></button>
+        <div class="multi-select-dropdown">
+            <label><input type="checkbox" name="status" value="captured" checked onchange="updateDropdownLabel('status'); applyFilters()"> captured</label>
+            <label><input type="checkbox" name="status" value="exploring" checked onchange="updateDropdownLabel('status'); applyFilters()"> exploring</label>
+            <label><input type="checkbox" name="status" value="deferred" checked onchange="updateDropdownLabel('status'); applyFilters()"> deferred</label>
+            <label><input type="checkbox" name="status" value="resolved" onchange="updateDropdownLabel('status'); applyFilters()"> resolved</label>
+            <label><input type="checkbox" name="status" value="abandoned" onchange="updateDropdownLabel('status'); applyFilters()"> abandoned</label>
+        </div>
+    </div>
 
-    <select id="filter-type" onchange="applyFilters()">
-        <option value="">All Types</option>
-        <option value="idea">idea</option>
-        <option value="question">question</option>
-        <option value="decision">decision</option>
-        <option value="exploration">exploration</option>
-        <option value="concern">concern</option>
-    </select>
+    <div class="multi-select" id="type-select">
+        <button type="button" class="multi-select-button" onclick="toggleDropdown('type-select')"><span class="multi-select-label">Type</span></button>
+        <div class="multi-select-dropdown">
+            <label><input type="checkbox" name="type" value="idea" checked onchange="updateDropdownLabel('type'); applyFilters()"> idea</label>
+            <label><input type="checkbox" name="type" value="question" checked onchange="updateDropdownLabel('type'); applyFilters()"> question</label>
+            <label><input type="checkbox" name="type" value="decision" checked onchange="updateDropdownLabel('type'); applyFilters()"> decision</label>
+            <label><input type="checkbox" name="type" value="exploration" checked onchange="updateDropdownLabel('type'); applyFilters()"> exploration</label>
+            <label><input type="checkbox" name="type" value="concern" checked onchange="updateDropdownLabel('type'); applyFilters()"> concern</label>
+        </div>
+    </div>
 
     <input type="text" id="filter-tags" placeholder="Filter Tags..." oninput="applyFilters()">
 </div>
@@ -111,6 +115,95 @@
 <script>
 let currentView = 'nested';
 let currentSort = { col: null, dir: 'asc' };
+const DEFAULT_STATUSES = ['captured', 'exploring', 'deferred'];
+const DEFAULT_TYPES = ['idea', 'question', 'decision', 'exploration', 'concern'];
+
+function toggleDropdown(id) {
+    const dropdown = document.getElementById(id);
+    // Close other dropdowns
+    document.querySelectorAll('.multi-select.open').forEach(el => {
+        if (el.id !== id) el.classList.remove('open');
+    });
+    dropdown.classList.toggle('open');
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.multi-select')) {
+        document.querySelectorAll('.multi-select.open').forEach(el => el.classList.remove('open'));
+    }
+});
+
+function getCheckedValues(name) {
+    return Array.from(document.querySelectorAll(`input[name="${name}"]:checked`)).map(cb => cb.value);
+}
+
+function setCheckedValues(name, values) {
+    document.querySelectorAll(`input[name="${name}"]`).forEach(cb => {
+        cb.checked = values.includes(cb.value);
+    });
+    updateDropdownLabel(name);
+}
+
+function updateDropdownLabel(name) {
+    const values = getCheckedValues(name);
+    const total = document.querySelectorAll(`input[name="${name}"]`).length;
+    const selectId = name + '-select';
+    const label = document.querySelector(`#${selectId} .multi-select-label`);
+
+    const baseName = name.charAt(0).toUpperCase() + name.slice(1);
+    if (values.length === 0) {
+        label.textContent = `${baseName}: none`;
+    } else if (values.length === total) {
+        label.textContent = `${baseName}: all`;
+    } else if (values.length <= 2) {
+        label.textContent = values.join(', ');
+    } else {
+        label.textContent = `${baseName} (${values.length})`;
+    }
+}
+
+function updateURL() {
+    const params = new URLSearchParams();
+
+    // View
+    if (currentView !== 'nested') {
+        params.set('view', currentView);
+    }
+
+    // Sort
+    if (currentSort.col) {
+        params.set('sort', currentSort.col);
+        if (currentSort.dir !== 'asc') {
+            params.set('dir', currentSort.dir);
+        }
+    }
+
+    // Text filters
+    const filterId = document.getElementById('filter-id').value;
+    const filterTitle = document.getElementById('filter-title').value;
+    const filterTags = document.getElementById('filter-tags').value;
+
+    if (filterId) params.set('id', filterId);
+    if (filterTitle) params.set('title', filterTitle);
+    if (filterTags) params.set('tags', filterTags);
+
+    // Status - only include if different from default
+    const statuses = getCheckedValues('status');
+    if (JSON.stringify(statuses.sort()) !== JSON.stringify([...DEFAULT_STATUSES].sort())) {
+        params.set('status', statuses.join(','));
+    }
+
+    // Type - only include if different from default (all selected)
+    const types = getCheckedValues('type');
+    if (JSON.stringify(types.sort()) !== JSON.stringify([...DEFAULT_TYPES].sort())) {
+        params.set('type', types.join(','));
+    }
+
+    // Update URL without reload
+    const newURL = params.toString() ? `?${params.toString()}` : window.location.pathname;
+    history.replaceState(null, '', newURL);
+}
 
 function setView(view) {
     currentView = view;
@@ -128,13 +221,15 @@ function setView(view) {
     if (currentSort.col) {
         applySortVisual();
     }
+
+    updateURL();
 }
 
 function applyFilters() {
     const filterId = document.getElementById('filter-id').value.toLowerCase();
     const filterTitle = document.getElementById('filter-title').value.toLowerCase();
-    const filterStatus = document.getElementById('filter-status').value;
-    const filterType = document.getElementById('filter-type').value;
+    const filterStatuses = getCheckedValues('status');
+    const filterTypes = getCheckedValues('type');
     const filterTags = document.getElementById('filter-tags').value.toLowerCase();
 
     const tbody = currentView === 'nested'
@@ -158,8 +253,8 @@ function applyFilters() {
         const matches = (
             (!filterId || id.includes(filterId)) &&
             (!filterTitle || title.includes(filterTitle)) &&
-            (!filterStatus || status === filterStatus) &&
-            (!filterType || type === filterType) &&
+            (filterStatuses.length === 0 || filterStatuses.includes(status)) &&
+            (filterTypes.length === 0 || filterTypes.includes(type)) &&
             (!filterTags || tags.includes(filterTags))
         );
 
@@ -169,8 +264,10 @@ function applyFilters() {
         }
     });
 
-    // In nested view with active filters, bump orphaned children to top level
-    const hasActiveFilters = filterId || filterTitle || filterStatus || filterType || filterTags;
+    // Check if we have non-default filters active
+    const hasActiveFilters = filterId || filterTitle || filterTags ||
+        JSON.stringify(filterStatuses.sort()) !== JSON.stringify([...DEFAULT_STATUSES].sort()) ||
+        JSON.stringify(filterTypes.sort()) !== JSON.stringify([...DEFAULT_TYPES].sort());
 
     rows.forEach(row => {
         const matches = visibleIds.has(row.dataset.id);
@@ -216,6 +313,8 @@ function applyFilters() {
             }
         });
     }
+
+    updateURL();
 }
 
 function sortBy(col) {
@@ -229,6 +328,7 @@ function sortBy(col) {
 
     applySortVisual();
     performSort();
+    updateURL();
 }
 
 function applySortVisual() {
@@ -323,19 +423,47 @@ function getColumnValue(row, col) {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
-    // Check URL parameters for initial filter values
     const params = new URLSearchParams(window.location.search);
+
+    // Status checkboxes from URL or defaults
+    if (params.get('status')) {
+        setCheckedValues('status', params.get('status').split(','));
+    } else {
+        updateDropdownLabel('status');
+    }
+
+    // Type checkboxes from URL or defaults
+    if (params.get('type')) {
+        setCheckedValues('type', params.get('type').split(','));
+    } else {
+        updateDropdownLabel('type');
+    }
+
+    // View
+    const view = params.get('view') || 'nested';
+
+    // Sort
+    if (params.get('sort')) {
+        currentSort.col = params.get('sort');
+        currentSort.dir = params.get('dir') || 'asc';
+    }
+
+    // Text filters
+    if (params.get('id')) {
+        document.getElementById('filter-id').value = params.get('id');
+    }
+    if (params.get('title')) {
+        document.getElementById('filter-title').value = params.get('title');
+    }
     if (params.get('tags')) {
         document.getElementById('filter-tags').value = params.get('tags');
     }
-    if (params.get('status')) {
-        document.getElementById('filter-status').value = params.get('status');
-    }
-    if (params.get('type')) {
-        document.getElementById('filter-type').value = params.get('type');
-    }
 
-    setView('nested');
+    setView(view);
+    if (currentSort.col) {
+        applySortVisual();
+        performSort();
+    }
 });
 </script>
 {% endblock %}

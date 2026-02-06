@@ -44,6 +44,16 @@ uv run seeds prime                   # AI context output
 uv run pytest                        # Run tests
 ```
 
+## Deploy to Global CLI
+
+After making changes, deploy to the global `seeds` command:
+
+```bash
+uv cache clean seeds && uv tool uninstall seeds && uv tool install --reinstall /home/ryan/projects/outins/seeds
+```
+
+Then restart any running `seeds serve` processes.
+
 ## Relationships
 
 - **Depends on**: None
