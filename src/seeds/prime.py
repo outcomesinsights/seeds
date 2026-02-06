@@ -19,6 +19,27 @@ PRIME_OUTPUT = """# seeds Workflow Context
 - Questions are first-class - use `seeds ask` to track them
 - A seed is "blocked" if it has unresolved children
 
+## What to Capture (IMPORTANT)
+
+Seeds should capture the **journey**, not just conclusions. When investigating:
+
+**Capture DURING investigation, not just after:**
+- Before running a query: jot what you're checking and why
+- After findings: record what you found, with data/counts
+- When user clarifies something: capture their insight verbatim
+
+**Types of things worth capturing:**
+- Data discoveries: "Checked X table, found Y has 3 records vs Z has 10M"
+- Eliminated options: "Don't need feature X because data shows..."
+- User insights: Direct quotes of user clarifications/decisions
+- Queries/commands that revealed something important
+- Assumptions that were validated or invalidated
+
+**Bad capture:** "Decided to use CPT4/HCPCS/CDT only"
+**Good capture:** "Analyzed WIDGETTYP distribution: CPT4 (13M), HCPCS (11M), CDT (121K), ICD9Proc (3 total). Found when WIDGETTYP is NULL, PROC1 is also NULL—no default needed. User clarified: 'WIDGETTYP governs generator choice, not a mapped value.'"
+
+**Rule of thumb:** If you ran a query or the user said something insightful, capture it before moving on.
+
 ## Essential Commands
 
 ### Quick Capture
