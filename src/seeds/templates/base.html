@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}seeds{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+        :root {
+            --pico-font-size: 16px;
+        }
+        .seed-status {
+            display: inline-block;
+            padding: 0.2em 0.5em;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+        .status-captured { background: #e3f2fd; color: #1565c0; }
+        .status-exploring { background: #fff3e0; color: #ef6c00; }
+        .status-deferred { background: #f3e5f5; color: #7b1fa2; }
+        .status-resolved { background: #e8f5e9; color: #2e7d32; }
+        .status-abandoned { background: #ffebee; color: #c62828; }
+
+        .seed-type {
+            display: inline-block;
+            padding: 0.2em 0.5em;
+            border-radius: 4px;
+            font-size: 0.85em;
+            background: #f5f5f5;
+            color: #616161;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 0.15em 0.4em;
+            border-radius: 3px;
+            font-size: 0.8em;
+            background: #e0e0e0;
+            color: #424242;
+            margin-right: 0.3em;
+        }
+
+        .question-status-open { color: #ef6c00; }
+        .question-status-answered { color: #2e7d32; }
+        .question-status-deferred { color: #7b1fa2; }
+
+        .seed-content {
+            white-space: pre-wrap;
+            font-family: inherit;
+            background: #fafafa;
+            padding: 1em;
+            border-radius: 4px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .meta {
+            color: #757575;
+            font-size: 0.9em;
+        }
+
+        nav ul {
+            margin-bottom: 0;
+        }
+
+        .truncate {
+            max-width: 400px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    </style>
+</head>
+<body>
+    <nav class="container">
+        <ul>
+            <li><strong>seeds</strong></li>
+        </ul>
+        <ul>
+            <li><a href="/">All Seeds</a></li>
+            <li><a href="/questions">Open Questions</a></li>
+        </ul>
+    </nav>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="container">
+        <small class="meta">seeds - deliberation capture tool</small>
+    </footer>
+</body>
+</html>

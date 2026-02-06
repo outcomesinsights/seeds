@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}All Seeds - seeds{% endblock %}
+
+{% block content %}
+<h1>All Seeds</h1>
+
+<p class="meta">{{ seeds|length }} seed{% if seeds|length != 1 %}s{% endif %}</p>
+
+{% if seeds %}
+<figure>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Type</th>
+                <th>Tags</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for seed in seeds %}
+            <tr>
+                <td><a href="/seed/{{ seed.id }}">{{ seed.id }}</a></td>
+                <td><a href="/seed/{{ seed.id }}">{{ seed.title }}</a></td>
+                <td><span class="seed-status status-{{ seed.status.value }}">{{ seed.status.value }}</span></td>
+                <td><span class="seed-type">{{ seed.seed_type.value }}</span></td>
+                <td>
+                    {% for tag in seed.tags %}
+                    <span class="tag">{{ tag }}</span>
+                    {% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</figure>
+{% else %}
+<p>No seeds yet. Run <code>seeds jot "Your first idea"</code> to create one.</p>
+{% endif %}
+{% endblock %}

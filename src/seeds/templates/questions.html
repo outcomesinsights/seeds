@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Open Questions - seeds{% endblock %}
+
+{% block content %}
+<h1>Open Questions</h1>
+
+<p class="meta">{{ questions|length }} open question{% if questions|length != 1 %}s{% endif %}</p>
+
+{% if questions %}
+<figure>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Question</th>
+                <th>Parent Seed</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for question, seed in questions %}
+            <tr>
+                <td>{{ question.id }}</td>
+                <td>{{ question.text }}</td>
+                <td>
+                    {% if seed %}
+                    <a href="/seed/{{ seed.id }}">{{ seed.id }}</a>: {{ seed.title }}
+                    {% else %}
+                    <em>Unknown seed</em>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</figure>
+{% else %}
+<p>No open questions. Use <code>seeds ask "Your question?" --seed=SEED_ID</code> to create one.</p>
+{% endif %}
+{% endblock %}

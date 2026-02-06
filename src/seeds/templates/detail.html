@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}{{ seed.title }} - seeds{% endblock %}
+
+{% block content %}
+<article>
+    <header>
+        <p class="meta">
+            <span class="seed-status status-{{ seed.status.value }}">{{ seed.status.value }}</span>
+            <span class="seed-type">{{ seed.seed_type.value }}</span>
+            {% for tag in seed.tags %}
+            <span class="tag">{{ tag }}</span>
+            {% endfor %}
+        </p>
+        <h1>{{ seed.title }}</h1>
+        <p class="meta">
+            <strong>{{ seed.id }}</strong>
+            &middot; Created: {{ seed.created_at.strftime('%Y-%m-%d %H:%M') }}
+            &middot; Updated: {{ seed.updated_at.strftime('%Y-%m-%d %H:%M') }}
+            {% if seed.resolved_at %}
+            &middot; Resolved: {{ seed.resolved_at.strftime('%Y-%m-%d %H:%M') }}
+            {% endif %}
+        </p>
+    </header>
+
+    {% if seed.content %}
+    <section>
+        <h3>Content</h3>
+        <div class="seed-content">{{ seed.content }}</div>
+    </section>
+    {% endif %}
+
+    {% if parent %}
+    <section>
+        <h3>Parent</h3>
+        <p><a href="/seed/{{ parent.id }}">{{ parent.id }}</a>: {{ parent.title }}</p>
+    </section>
+    {% endif %}
+
+    {% if children %}
+    <section>
+        <h3>Children</h3>
+        <ul>
+            {% for child in children %}
+            <li>
+                <a href="/seed/{{ child.id }}">{{ child.id }}</a>: {{ child.title }}
+                <span class="seed-status status-{{ child.status.value }}">{{ child.status.value }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if related_seeds %}
+    <section>
+        <h3>Related Seeds</h3>
+        <ul>
+            {% for related in related_seeds %}
+            <li>
+                <a href="/seed/{{ related.id }}">{{ related.id }}</a>: {{ related.title }}
+                <span class="seed-status status-{{ related.status.value }}">{{ related.status.value }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if questions %}
+    <section>
+        <h3>Questions</h3>
+        {% for question in questions %}
+        <article>
+            <header>
+                <strong>{{ question.id }}</strong>
+                <span class="question-status-{{ question.status.value }}">{{ question.status.value }}</span>
+            </header>
+            <p><strong>Q:</strong> {{ question.text }}</p>
+            {% if question.answer %}
+            <p><strong>A:</strong> {{ question.answer }}</p>
+            {% endif %}
+        </article>
+        {% endfor %}
+    </section>
+    {% endif %}
+</article>
+
+<p><a href="/">&larr; Back to all seeds</a></p>
+{% endblock %}

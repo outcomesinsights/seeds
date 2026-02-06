@@ -780,5 +780,29 @@ def doctor(ctx: Context) -> None:
     click.echo("  ".join(status_parts))
 
 
+@main.command()
+@click.option("--host", "-h", default="127.0.0.1", help="Host to bind to")
+@click.option("--port", "-p", default=53365, type=int, help="Port to bind to")
+@click.option("--debug", is_flag=True, help="Enable debug mode")
+def serve(host: str, port: int, debug: bool) -> None:
+    """Start the web UI server for viewing seeds.
+
+    Opens a local web interface for browsing seeds.
+    """
+    from seeds.db import find_seeds_dir
+
+    # Check if we're in a seeds project
+    seeds_dir = find_seeds_dir()
+    if seeds_dir is None:
+        click.echo("Error: seeds not initialized. Run 'seeds init' first.", err=True)
+        sys.exit(1)
+
+    from seeds.web import run_server
+
+    click.echo(f"Starting seeds web UI at http://{host}:{port}")
+    click.echo("Press Ctrl+C to stop.")
+    run_server(host=host, port=port, debug=debug)
+
+
 if __name__ == "__main__":
     main()
