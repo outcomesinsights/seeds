@@ -207,8 +207,8 @@ class TestWebRoutes:
         html = response.data.decode()
         assert 'id="filter-id"' in html
         assert 'id="filter-title"' in html
-        assert 'id="filter-status"' in html
-        assert 'id="filter-type"' in html
+        assert 'id="status-select"' in html
+        assert 'id="type-select"' in html
         assert 'id="filter-tags"' in html
 
     def test_index_shows_sortable_headers(self, client, populated_db):

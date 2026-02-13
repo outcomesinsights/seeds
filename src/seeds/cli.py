@@ -64,6 +64,7 @@ def init() -> None:
     db = Database()
     db.init()
     click.echo(f"Initialized seeds in {seeds_dir}")
+    click.echo("  .seeds/.gitignore created (SQLite ignored, JSONL tracked)")
     click.echo("Run 'seeds jot \"Your first idea\"' to capture a thought.")
 
 

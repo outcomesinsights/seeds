@@ -40,8 +40,7 @@ htmlcov/
 .beads/*.db
 .beads/export-state/
 
-# seeds (own database - track JSONL, ignore SQLite)
-.seeds/*.db
+# seeds (internal .seeds/.gitignore handles DB exclusion)
 
 # Claude debug
 claude_stuff/

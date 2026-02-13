@@ -21,6 +21,16 @@ from seeds.models import (
 SEEDS_DIR = os.environ.get("SEEDS_DIR", ".seeds")
 DB_FILE = "seeds.db"
 
+# Gitignore template for .seeds/ directory (following beads' pattern).
+# Ignores SQLite DB and runtime files; JSONL is tracked by git by default.
+SEEDS_GITIGNORE = """\
+# SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+"""
+
 
 def find_seeds_dir() -> Path | None:
     """Find the .seeds directory by walking up the directory tree.
@@ -108,11 +118,17 @@ class Database:
         return self._conn
 
     def init(self) -> None:
-        """Initialize database schema."""
+        """Initialize database schema and .seeds/.gitignore."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         conn = self._get_conn()
         conn.executescript(SCHEMA)
         conn.commit()
+
+        # Create .gitignore inside .seeds/ (like beads' .beads/.gitignore)
+        # Ignores SQLite DB and runtime files; JSONL is tracked by default.
+        gitignore_path = self.path.parent / ".gitignore"
+        if not gitignore_path.exists():
+            gitignore_path.write_text(SEEDS_GITIGNORE)
 
     def close(self) -> None:
         """Close database connection."""
