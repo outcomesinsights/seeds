@@ -2,6 +2,48 @@
 
 > A deliberation capture CLI tool that helps ideas grow from seeds into decisions through structured lifecycle tracking.
 
+## CRITICAL: Do Not Pollute the Design Database
+
+The `.seeds/` directory in this project contains **real design data** used to develop and iterate on seeds. It is NOT a test database.
+
+### Forbidden Commands (in this project)
+
+**NEVER run these commands directly in this project:**
+- `seeds create` / `seeds jot` / `seeds ask` - Creates new seeds/questions
+- `seeds update` / `seeds explore` / `seeds resolve` / `seeds defer` / `seeds abandon` - Modifies seed state
+- `seeds answer` - Modifies questions
+- `seeds link` - Creates relationships
+- `seeds init` - Initializes database
+
+### Safe Commands (read-only)
+
+These are safe to run:
+- `seeds list` / `seeds show` / `seeds tree` - View data
+- `seeds ready` / `seeds questions` / `seeds deferred` / `seeds blocked` - Query status
+- `seeds --help` / `seeds --version` - Help and version
+- `seeds sync --flush-only` - Export only (no import)
+- `seeds prime` - Context for agents
+
+### How to Test seeds Commands
+
+Use the `SEEDS_DIR` environment variable to redirect to a test directory:
+
+```bash
+# Create a temp test directory and run commands there
+SEEDS_DIR=/tmp/test-seeds seeds init
+SEEDS_DIR=/tmp/test-seeds seeds jot "Test seed"
+SEEDS_DIR=/tmp/test-seeds seeds list
+```
+
+### Running the Test Suite
+
+The test suite uses its own isolated database and is safe to run:
+```bash
+uv run pytest
+```
+
+---
+
 ## Status
 
 - **Active**

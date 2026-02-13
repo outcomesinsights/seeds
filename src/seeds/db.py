@@ -1,6 +1,7 @@
 """seeds SQLite database layer."""
 
 import json
+import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -16,7 +17,8 @@ from seeds.models import (
     now_utc,
 )
 
-SEEDS_DIR = ".seeds"
+# Allow override via environment variable for testing/development
+SEEDS_DIR = os.environ.get("SEEDS_DIR", ".seeds")
 DB_FILE = "seeds.db"
 
 
