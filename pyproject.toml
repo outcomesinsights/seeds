@@ -1,7 +1,7 @@
 [project]
 name = "seeds"
 version = "0.1.0"
-description = "A deliberation capture tool that helps ideas grow from seeds into decisions"
+description = "Git-backed deliberation capture for ideas that need time to grow"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

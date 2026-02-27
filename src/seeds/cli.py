@@ -49,7 +49,7 @@ def require_init(f):
 @click.version_option(version=__version__, prog_name="seeds")
 @click.pass_context
 def main(ctx: click.Context) -> None:
-    """seeds: A deliberation capture tool that helps ideas grow into decisions."""
+    """seeds: Git-backed deliberation capture for ideas that need time to grow."""
     ctx.ensure_object(Context)
 
 

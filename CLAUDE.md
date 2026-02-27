@@ -1,6 +1,6 @@
 # seeds
 
-> A deliberation capture CLI tool that helps ideas grow from seeds into decisions through structured lifecycle tracking.
+> Git-backed deliberation capture for ideas that need time to grow.
 
 ## CRITICAL: Do Not Pollute the Design Database
 
