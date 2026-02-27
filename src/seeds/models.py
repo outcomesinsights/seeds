@@ -39,12 +39,12 @@ class QuestionStatus(Enum):
 
 
 def generate_id(prefix: str = "seed") -> str:
-    """Generate a short hash-based ID like 'seed-a1b2'.
+    """Generate a short hash-based ID like 'seed-a1b2c3d4'.
 
     Uses current time and random bytes to ensure uniqueness.
     """
     data = f"{time.time_ns()}{os.urandom(8).hex()}"
-    hash_val = hashlib.sha256(data.encode()).hexdigest()[:4]
+    hash_val = hashlib.sha256(data.encode()).hexdigest()[:8]
     return f"{prefix}-{hash_val}"
 
 

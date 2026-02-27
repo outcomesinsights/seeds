@@ -1,7 +1,6 @@
 """Tests for seeds data models."""
 
 import pytest
-
 from seeds.models import (
     Question,
     QuestionStatus,
@@ -74,13 +73,13 @@ class TestGenerateId:
         """Verify default prefix is 'seed'."""
         id1 = generate_id()
         assert id1.startswith("seed-")
-        assert len(id1) == 9  # "seed-" + 4 chars
+        assert len(id1) == 13  # "seed-" + 8 chars
 
     def test_generate_id_custom_prefix(self):
         """Verify custom prefix works."""
         id1 = generate_id("q")
         assert id1.startswith("q-")
-        assert len(id1) == 6  # "q-" + 4 chars
+        assert len(id1) == 10  # "q-" + 8 chars
 
     def test_generate_id_unique(self):
         """Verify generated IDs are unique."""
