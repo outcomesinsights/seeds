@@ -52,6 +52,7 @@ packages = ["src/seeds"]
 [tool.uv]
 dev-dependencies = [
     "mypy>=1.0.0",
+    "pre-commit>=4.3.0",
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
     "ruff>=0.4.0",

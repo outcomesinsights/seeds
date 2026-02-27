@@ -1,0 +1,23 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run pytest -x -q
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: beads-pre-commit
+        name: beads pre-commit
+        entry: bd hooks run pre-commit
+        language: system
+        pass_filenames: false
+        always_run: true

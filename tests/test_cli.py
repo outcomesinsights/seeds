@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
-
 from seeds.cli import main
 from seeds.db import SEEDS_DIR, Database
 from seeds.models import (
