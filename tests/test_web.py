@@ -2,7 +2,7 @@
 
 import pytest
 
-from seeds.models import Seed, SeedStatus, SeedType
+from seeds.models import Question, QuestionStatus, Seed, SeedStatus, SeedType
 from seeds.web import build_seed_tree, create_app, flatten_tree
 
 
@@ -289,3 +289,64 @@ class TestMarkdownPrettifier:
         response = client.get("/seed/seed-test")
         html = response.data.decode()
         assert 'data-markdown' in html
+
+
+class TestWebDetailWithRelations:
+    """Tests for seed detail page with related seeds and parent."""
+
+    def test_detail_page_shows_related_seeds(self, client, db):
+        """Verify detail page resolves and shows related seeds."""
+        seed1 = Seed(id="seed-main", title="Main Seed", related_to=["seed-rel"])
+        seed2 = Seed(id="seed-rel", title="Related Seed")
+        db.create_seed(seed1)
+        db.create_seed(seed2)
+
+        response = client.get("/seed/seed-main")
+        assert response.status_code == 200
+        html = response.data.decode()
+        assert "Related Seed" in html
+
+    def test_detail_page_shows_parent(self, client, db):
+        """Verify detail page shows parent seed link."""
+        parent = Seed(id="seed-parent", title="Parent Seed")
+        child = Seed(id="seed-parent.1", title="Child Seed")
+        db.create_seed(parent)
+        db.create_seed(child)
+
+        response = client.get("/seed/seed-parent.1")
+        assert response.status_code == 200
+        html = response.data.decode()
+        assert "seed-parent" in html
+
+    def test_questions_page_shows_parent_seed(self, client, db):
+        """Verify questions page resolves parent seed for each question."""
+        seed = Seed(id="seed-qp", title="Question Parent")
+        db.create_seed(seed)
+        question = Question(
+            id="q-web", seed_id="seed-qp", text="Web question?",
+            status=QuestionStatus.OPEN,
+        )
+        db.create_question(question)
+
+        response = client.get("/questions")
+        assert response.status_code == 200
+        html = response.data.decode()
+        assert "Web question?" in html
+        assert "seed-qp" in html
+
+
+class TestWebAppCreation:
+    """Tests for app creation edge cases."""
+
+    def test_create_app_without_seeds_dir_raises(self):
+        """Verify create_app raises when no .seeds directory found."""
+        import tempfile
+        import os
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                with pytest.raises(RuntimeError, match="No .seeds directory"):
+                    create_app()
+            finally:
+                os.chdir(original)

@@ -236,6 +236,19 @@ class TestSeedHierarchy:
         next_id = db.get_next_child_id("seed-a1b2")
         assert next_id == "seed-a1b2.4"  # Should be max + 1
 
+    def test_get_next_child_id_non_numeric_suffix(self, db):
+        """Verify next child ID handles non-numeric suffixes gracefully."""
+        parent = Seed(id="seed-a1b2", title="Parent")
+        # Child with a non-numeric suffix (edge case)
+        child_weird = Seed(id="seed-a1b2.abc", title="Weird Child")
+        child_normal = Seed(id="seed-a1b2.2", title="Normal Child")
+
+        for seed in [parent, child_weird, child_normal]:
+            db.create_seed(seed)
+
+        next_id = db.get_next_child_id("seed-a1b2")
+        assert next_id == "seed-a1b2.3"  # Should skip non-numeric, use max(2) + 1
+
 
 class TestBlockedState:
     """Tests for blocked state derivation."""

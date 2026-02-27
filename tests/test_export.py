@@ -269,6 +269,67 @@ class TestImportFromJsonl:
         assert seed.title == sample_seed.title  # Original title preserved
 
 
+class TestImportDefaultPath:
+    """Tests for import using default path."""
+
+    def test_import_default_path(self, db, temp_dir):
+        """Verify import uses default JSONL path when none specified."""
+        import os
+        original_cwd = os.getcwd()
+        os.chdir(temp_dir)
+        try:
+            # Create .seeds/seeds.jsonl at default location
+            seeds_dir = temp_dir / ".seeds"
+            seeds_dir.mkdir(exist_ok=True)
+            now = datetime.now(timezone.utc).isoformat()
+            data = {
+                "id": "seed-default",
+                "title": "Default Path Seed",
+                "content": "",
+                "status": "captured",
+                "seed_type": "idea",
+                "tags": [],
+                "related_to": [],
+                "created_at": now,
+                "updated_at": now,
+                "resolved_at": None,
+                "questions": [],
+            }
+            jsonl_path = seeds_dir / "seeds.jsonl"
+            jsonl_path.write_text(json.dumps(data) + "\n")
+
+            count = import_from_jsonl(db)
+            assert count == 1
+
+            seed = db.get_seed("seed-default")
+            assert seed is not None
+            assert seed.title == "Default Path Seed"
+        finally:
+            os.chdir(original_cwd)
+
+    def test_import_skips_blank_lines(self, db, temp_dir):
+        """Verify import skips blank lines in JSONL file."""
+        now = datetime.now(timezone.utc).isoformat()
+        data = {
+            "id": "seed-blank",
+            "title": "After Blank Lines",
+            "content": "",
+            "status": "captured",
+            "seed_type": "idea",
+            "tags": [],
+            "related_to": [],
+            "created_at": now,
+            "updated_at": now,
+            "resolved_at": None,
+            "questions": [],
+        }
+        input_path = temp_dir / "blanks.jsonl"
+        input_path.write_text("\n\n" + json.dumps(data) + "\n\n")
+
+        count = import_from_jsonl(db, input_path)
+        assert count == 1
+
+
 class TestRoundTrip:
     """Tests for export -> import round trip."""
 

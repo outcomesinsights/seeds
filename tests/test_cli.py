@@ -487,6 +487,268 @@ class TestPrimeCommand:
                 os.chdir(original_cwd)
 
 
+class TestShowOutputFile:
+    """Tests for 'seeds show --output-file' flag."""
+
+    def test_show_output_file_creates_temp_file(self, cli_runner, env_with_seeds):
+        """Verify show --output-file writes to temp file and prints path."""
+        result = cli_runner.invoke(main, ["show", "seed-test1", "--output-file"])
+        assert result.exit_code == 0
+        # Output should be a file path
+        output_path = result.output.strip()
+        assert "seeds-seed-test1-" in output_path
+
+        # File should contain seed details
+        content = Path(output_path).read_text()
+        assert "seed-test1" in content
+        assert "Test Seed 1" in content
+
+        # Cleanup
+        Path(output_path).unlink(missing_ok=True)
+
+
+class TestShowDetailFormatting:
+    """Tests for format_seed_detail covering tags, parent, related, content, questions."""
+
+    def test_show_with_tags(self, cli_runner, initialized_env):
+        """Verify show displays tags."""
+        db = Database()
+        seed = Seed(id="seed-tagged", title="Tagged Seed", tags=["important", "urgent"])
+        db.create_seed(seed)
+        db.close()
+
+        result = cli_runner.invoke(main, ["show", "seed-tagged"])
+        assert result.exit_code == 0
+        assert "Tags:" in result.output
+        assert "important" in result.output
+
+    def test_show_with_content(self, cli_runner, initialized_env):
+        """Verify show displays content."""
+        db = Database()
+        seed = Seed(id="seed-content", title="Content Seed", content="Detailed content here")
+        db.create_seed(seed)
+        db.close()
+
+        result = cli_runner.invoke(main, ["show", "seed-content"])
+        assert result.exit_code == 0
+        assert "Content:" in result.output
+        assert "Detailed content here" in result.output
+
+    def test_show_with_related(self, cli_runner, initialized_env):
+        """Verify show displays related seeds."""
+        db = Database()
+        seed1 = Seed(id="seed-r1", title="Seed 1", related_to=["seed-r2"])
+        seed2 = Seed(id="seed-r2", title="Seed 2", related_to=["seed-r1"])
+        db.create_seed(seed1)
+        db.create_seed(seed2)
+        db.close()
+
+        result = cli_runner.invoke(main, ["show", "seed-r1"])
+        assert result.exit_code == 0
+        assert "Related to:" in result.output
+        assert "seed-r2" in result.output
+
+    def test_show_child_displays_parent(self, cli_runner, env_with_seeds):
+        """Verify show of child displays parent ID."""
+        result = cli_runner.invoke(main, ["show", "seed-test1.1"])
+        assert result.exit_code == 0
+        assert "Parent: seed-test1" in result.output
+
+    def test_show_with_questions_flag(self, cli_runner, env_with_seeds):
+        """Verify show --questions displays attached questions."""
+        db = Database()
+        question = Question(id="q-show", seed_id="seed-test1", text="Show this?")
+        db.create_question(question)
+        db.close()
+
+        result = cli_runner.invoke(main, ["show", "seed-test1", "--questions"])
+        assert result.exit_code == 0
+        assert "Questions:" in result.output
+        assert "q-show" in result.output
+        assert "Show this?" in result.output
+
+    def test_show_with_answered_question(self, cli_runner, env_with_seeds):
+        """Verify show displays answered questions with answers."""
+        db = Database()
+        question = Question(
+            id="q-answered", seed_id="seed-test1", text="Answered?",
+            answer="Yes it is", status=QuestionStatus.ANSWERED,
+        )
+        db.create_question(question)
+        db.close()
+
+        result = cli_runner.invoke(main, ["show", "seed-test1", "--questions"])
+        assert result.exit_code == 0
+        assert "Yes it is" in result.output
+
+
+class TestEmptyStateLists:
+    """Tests for empty state messages in ready/deferred/blocked."""
+
+    def test_ready_no_seeds(self, cli_runner, initialized_env):
+        """Verify ready shows message when no captured seeds."""
+        result = cli_runner.invoke(main, ["ready"])
+        assert result.exit_code == 0
+        assert "No captured seeds" in result.output
+
+    def test_deferred_no_seeds(self, cli_runner, initialized_env):
+        """Verify deferred shows message when no deferred seeds."""
+        result = cli_runner.invoke(main, ["deferred"])
+        assert result.exit_code == 0
+        assert "No deferred seeds" in result.output
+
+    def test_blocked_no_seeds(self, cli_runner, initialized_env):
+        """Verify blocked shows message when no blocked seeds."""
+        result = cli_runner.invoke(main, ["blocked"])
+        assert result.exit_code == 0
+        assert "No blocked seeds" in result.output
+
+
+class TestExploreWarning:
+    """Tests for explore warning when seed is not captured."""
+
+    def test_explore_non_captured_shows_warning(self, cli_runner, env_with_seeds):
+        """Verify explore warns when seed is not in captured state."""
+        result = cli_runner.invoke(main, ["explore", "seed-test2"])
+        assert result.exit_code == 0
+        assert "Warning" in result.output
+        assert "not captured" in result.output
+
+
+class TestUpdateContentAndTags:
+    """Tests for update --content and --tags flags."""
+
+    def test_update_content(self, cli_runner, env_with_seeds):
+        """Verify update --content replaces content."""
+        result = cli_runner.invoke(
+            main, ["update", "seed-test1", "--content", "New content"],
+        )
+        assert result.exit_code == 0
+
+        db = Database()
+        seed = db.get_seed("seed-test1")
+        assert seed.content == "New content"
+        db.close()
+
+    def test_update_tags(self, cli_runner, env_with_seeds):
+        """Verify update --tags replaces tags."""
+        result = cli_runner.invoke(
+            main, ["update", "seed-test1", "--tags", "new,tags"],
+        )
+        assert result.exit_code == 0
+
+        db = Database()
+        seed = db.get_seed("seed-test1")
+        assert seed.tags == ["new", "tags"]
+        db.close()
+
+    def test_update_clear_tags(self, cli_runner, env_with_seeds):
+        """Verify update --tags '' clears tags."""
+        result = cli_runner.invoke(
+            main, ["update", "seed-test1", "--tags", ""],
+        )
+        assert result.exit_code == 0
+
+        db = Database()
+        seed = db.get_seed("seed-test1")
+        assert seed.tags == []
+        db.close()
+
+
+class TestAnswerNotFound:
+    """Test for answering nonexistent question."""
+
+    def test_answer_nonexistent_question(self, cli_runner, initialized_env):
+        """Verify answer fails for nonexistent question."""
+        result = cli_runner.invoke(main, ["answer", "q-nonexistent", "The answer"])
+        assert result.exit_code != 0
+        assert "not found" in result.output
+
+
+class TestQuestionsFiltering:
+    """Tests for questions command filtering and empty state."""
+
+    def test_questions_no_open(self, cli_runner, initialized_env):
+        """Verify questions shows message when no open questions."""
+        result = cli_runner.invoke(main, ["questions"])
+        assert result.exit_code == 0
+        assert "No open questions" in result.output
+
+    def test_questions_filter_by_seed(self, cli_runner, env_with_seeds):
+        """Verify questions --seed filters by seed."""
+        db = Database()
+        q1 = Question(id="q-s1", seed_id="seed-test1", text="Q for seed1?")
+        q2 = Question(id="q-s2", seed_id="seed-test2", text="Q for seed2?")
+        db.create_question(q1)
+        db.create_question(q2)
+        db.close()
+
+        result = cli_runner.invoke(main, ["questions", "--seed", "seed-test1"])
+        assert result.exit_code == 0
+        assert "q-s1" in result.output
+        assert "q-s2" not in result.output
+
+
+class TestLinkNotFound:
+    """Test for linking to nonexistent seed."""
+
+    def test_link_nonexistent_related(self, cli_runner, env_with_seeds):
+        """Verify link fails when related seed doesn't exist."""
+        result = cli_runner.invoke(
+            main, ["link", "seed-test1", "--relates-to", "nonexistent"],
+        )
+        assert result.exit_code != 0
+        assert "not found" in result.output
+
+
+class TestTreeAdvanced:
+    """Tests for tree with parent chains, grandchildren, and related seeds."""
+
+    def test_tree_shows_parent_chain(self, cli_runner, env_with_seeds):
+        """Verify tree shows ancestor chain for child seeds."""
+        result = cli_runner.invoke(main, ["tree", "seed-test1.1"])
+        assert result.exit_code == 0
+        assert "Ancestors:" in result.output
+        assert "seed-test1" in result.output
+
+    def test_tree_shows_grandchildren(self, cli_runner, initialized_env):
+        """Verify tree shows grandchildren."""
+        db = Database()
+        db.create_seed(Seed(id="seed-p", title="Parent"))
+        db.create_seed(Seed(id="seed-p.1", title="Child"))
+        db.create_seed(Seed(id="seed-p.1.1", title="Grandchild"))
+        db.close()
+
+        result = cli_runner.invoke(main, ["tree", "seed-p"])
+        assert result.exit_code == 0
+        assert "Children:" in result.output
+        assert "seed-p.1" in result.output
+        assert "seed-p.1.1" in result.output
+
+    def test_tree_shows_related(self, cli_runner, initialized_env):
+        """Verify tree shows related seeds."""
+        db = Database()
+        db.create_seed(Seed(id="seed-x", title="Main", related_to=["seed-y"]))
+        db.create_seed(Seed(id="seed-y", title="Related"))
+        db.close()
+
+        result = cli_runner.invoke(main, ["tree", "seed-x"])
+        assert result.exit_code == 0
+        assert "Related:" in result.output
+        assert "seed-y" in result.output
+
+    def test_tree_shows_missing_related(self, cli_runner, initialized_env):
+        """Verify tree handles missing related seeds gracefully."""
+        db = Database()
+        db.create_seed(Seed(id="seed-x", title="Main", related_to=["seed-gone"]))
+        db.close()
+
+        result = cli_runner.invoke(main, ["tree", "seed-x"])
+        assert result.exit_code == 0
+        assert "seed-gone" in result.output
+        assert "(not found)" in result.output
+
+
 class TestDoctorCommand:
     """Tests for 'seeds doctor' command."""
 
@@ -499,3 +761,30 @@ class TestDoctorCommand:
         assert result.exit_code == 0
         assert "Database exists" in result.output
         assert "passed" in result.output
+
+    def test_doctor_warns_no_jsonl(self, cli_runner, env_with_seeds):
+        """Verify doctor warns when JSONL file doesn't exist."""
+        result = cli_runner.invoke(main, ["doctor"])
+        assert result.exit_code == 0
+        assert "No JSONL file" in result.output or "JSONL" in result.output
+
+    def test_doctor_shows_warnings_count(self, cli_runner, initialized_env):
+        """Verify doctor shows warning count when there are issues."""
+        result = cli_runner.invoke(main, ["doctor"])
+        assert result.exit_code == 0
+        # No open seeds = warning, no JSONL = warning
+        assert "warning" in result.output
+
+    def test_doctor_shows_open_questions(self, cli_runner, env_with_seeds):
+        """Verify doctor reports open questions."""
+        db = Database()
+        question = Question(id="q-doc", seed_id="seed-test1", text="Doctor question?")
+        db.create_question(question)
+        db.close()
+
+        # Create JSONL to avoid stale warning noise
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        result = cli_runner.invoke(main, ["doctor"])
+        assert result.exit_code == 0
+        assert "open question" in result.output
