@@ -1,8 +1,11 @@
 """seeds CLI entry point."""
 
+from __future__ import annotations
+
 import functools
 import sys
 from pathlib import Path
+from typing import Any, Callable
 
 import click
 
@@ -36,12 +39,12 @@ class Context:
 pass_context = click.make_pass_decorator(Context, ensure=True)
 
 
-def require_init(f):
+def require_init(f: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator to require seeds to be initialized."""
 
     @functools.wraps(f)
     @click.pass_context
-    def wrapper(click_ctx, *args, **kwargs):
+    def wrapper(click_ctx: click.Context, *args: Any, **kwargs: Any) -> Any:
         ctx = click_ctx.ensure_object(Context)
         ctx.ensure_init()
         return click_ctx.invoke(f, *args, **kwargs)
@@ -613,7 +616,7 @@ def tree(ctx: Context, seed_id: str) -> None:
         click.echo(f"{prefix}{status_icon} {s.id}: {s.title}")
 
     # Show parent chain
-    parent_chain = []
+    parent_chain: list[Seed] = []
     current_id = seed.parent_id
     while current_id:
         parent = db.get_seed(current_id)

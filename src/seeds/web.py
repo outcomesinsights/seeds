@@ -1,6 +1,9 @@
 """seeds web UI - simple Flask app for viewing seeds."""
 
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Any
 
 from flask import Flask, abort, render_template
 
@@ -8,7 +11,7 @@ from seeds.db import DB_FILE, Database, find_seeds_dir
 from seeds.models import Seed, get_parent_id
 
 
-def build_seed_tree(seeds: list[Seed]) -> list[dict]:
+def build_seed_tree(seeds: list[Seed]) -> list[dict[str, Any]]:
     """Build a hierarchical tree structure from flat seed list.
 
     Returns a list of top-level seeds, each with a 'children' list
@@ -17,12 +20,12 @@ def build_seed_tree(seeds: list[Seed]) -> list[dict]:
     """
 
     # Create tree nodes for each seed
-    nodes: dict[str, dict] = {}
+    nodes: dict[str, dict[str, Any]] = {}
     for s in seeds:
         nodes[s.id] = {"seed": s, "children": [], "depth": 0}
 
     # Build parent-child relationships
-    top_level = []
+    top_level: list[dict[str, Any]] = []
     for s in seeds:
         parent_id = get_parent_id(s.id)
         if parent_id and parent_id in nodes:
@@ -31,7 +34,7 @@ def build_seed_tree(seeds: list[Seed]) -> list[dict]:
             top_level.append(nodes[s.id])
 
     # Calculate depths recursively
-    def set_depths(node: dict, depth: int = 0):
+    def set_depths(node: dict[str, Any], depth: int = 0) -> None:
         node["depth"] = depth
         for child in node["children"]:
             set_depths(child, depth + 1)
@@ -40,7 +43,7 @@ def build_seed_tree(seeds: list[Seed]) -> list[dict]:
         set_depths(node)
 
     # Sort children by ID within each parent
-    def sort_children(node: dict):
+    def sort_children(node: dict[str, Any]) -> None:
         node["children"].sort(key=lambda n: n["seed"].id)
         for child in node["children"]:
             sort_children(child)
@@ -51,11 +54,11 @@ def build_seed_tree(seeds: list[Seed]) -> list[dict]:
     return top_level
 
 
-def flatten_tree(tree: list[dict]) -> list[dict]:
+def flatten_tree(tree: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Flatten tree to list, preserving depth information for indentation."""
-    result = []
+    result: list[dict[str, Any]] = []
 
-    def visit(node: dict):
+    def visit(node: dict[str, Any]) -> None:
         result.append(node)
         for child in node["children"]:
             visit(child)
@@ -85,11 +88,10 @@ def create_app(seeds_dir: Path | None = None) -> Flask:
 
     def get_db() -> Database:
         """Get database instance."""
-        db = Database(db_path)
-        return db
+        return Database(db_path)
 
     @app.route("/")
-    def index():
+    def index() -> str:
         """List all seeds."""
         db = get_db()
         seeds = db.list_seeds(include_terminal=True)
@@ -102,7 +104,7 @@ def create_app(seeds_dir: Path | None = None) -> Flask:
         return render_template("list.html", seeds=seeds, tree=flat_tree)
 
     @app.route("/seed/<seed_id>")
-    def seed_detail(seed_id: str):
+    def seed_detail(seed_id: str) -> str:
         """Show details for a single seed."""
         db = get_db()
         seed = db.get_seed(seed_id)
@@ -136,7 +138,7 @@ def create_app(seeds_dir: Path | None = None) -> Flask:
         )
 
     @app.route("/questions")
-    def questions_list():
+    def questions_list() -> str:
         """List all open questions."""
         db = get_db()
         questions = db.get_open_questions()
@@ -153,7 +155,7 @@ def create_app(seeds_dir: Path | None = None) -> Flask:
     return app
 
 
-def run_server(host: str = "127.0.0.1", port: int = 53365, debug: bool = False):
+def run_server(host: str = "127.0.0.1", port: int = 53365, debug: bool = False) -> None:
     """Run the development server.
 
     Args:

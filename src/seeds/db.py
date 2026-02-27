@@ -1,5 +1,7 @@
 """seeds SQLite database layer."""
 
+from __future__ import annotations
+
 import json
 import os
 import sqlite3
@@ -235,7 +237,7 @@ class Database:
         """List seeds with optional filters."""
         conn = self._get_conn()
         query = "SELECT * FROM seeds WHERE 1=1"
-        params: list = []
+        params: list[str] = []
 
         if status is not None:
             query += " AND status = ?"
@@ -389,7 +391,7 @@ class Database:
         """List questions with optional filters."""
         conn = self._get_conn()
         query = "SELECT * FROM questions WHERE 1=1"
-        params: list = []
+        params: list[str] = []
 
         if seed_id is not None:
             query += " AND seed_id = ?"

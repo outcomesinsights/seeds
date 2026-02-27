@@ -1,8 +1,11 @@
 """seeds export functionality."""
 
+from __future__ import annotations
+
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from seeds.db import SEEDS_DIR, Database
 from seeds.models import Question, QuestionStatus, Seed, SeedStatus, SeedType
@@ -17,7 +20,7 @@ def _datetime_to_str(dt: datetime | None) -> str | None:
     return dt.isoformat()
 
 
-def seed_to_dict(seed: Seed, questions: list[Question]) -> dict:
+def seed_to_dict(seed: Seed, questions: list[Question]) -> dict[str, Any]:
     """Convert a seed and its questions to a dictionary for export."""
     return {
         "id": seed.id,
