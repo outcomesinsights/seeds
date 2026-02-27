@@ -3,11 +3,41 @@ name = "seeds"
 version = "0.1.0"
 description = "Git-backed deliberation capture for ideas that need time to grow"
 readme = "README.md"
-requires-python = ">=3.13"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [
+    { name = "Ryan Duryea", email = "aguynamedryan@gmail.com" },
+]
+keywords = [
+    "deliberation",
+    "decision-making",
+    "idea-tracker",
+    "cli",
+    "ai-agent",
+    "knowledge-management",
+    "brainstorming",
+    "seed",
+    "exploration",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 dependencies = [
     "click>=8.1.0",
     "flask>=3.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/outcomesinsights/seeds"
+Repository = "https://github.com/outcomesinsights/seeds"
+Issues = "https://github.com/outcomesinsights/seeds/issues"
 
 [project.scripts]
 seeds = "seeds.cli:main"
