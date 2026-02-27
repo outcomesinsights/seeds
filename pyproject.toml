@@ -51,5 +51,38 @@ packages = ["src/seeds"]
 
 [tool.uv]
 dev-dependencies = [
+    "mypy>=1.0.0",
     "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.4.0",
 ]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific rules
+]
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
