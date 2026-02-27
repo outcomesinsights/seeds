@@ -4,9 +4,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from seeds.db import Database, SEEDS_DIR
-from seeds.models import Seed, Question, SeedStatus, SeedType, QuestionStatus
-
+from seeds.db import SEEDS_DIR, Database
+from seeds.models import Question, QuestionStatus, Seed, SeedStatus, SeedType
 
 JSONL_FILE = "seeds.jsonl"
 

@@ -73,6 +73,9 @@ select = [
     "RUF",  # ruff-specific rules
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"src/seeds/prime.py" = ["E501"]  # Prose content in string constant
+
 [tool.mypy]
 python_version = "3.9"
 strict = true

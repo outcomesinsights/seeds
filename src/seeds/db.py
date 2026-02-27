@@ -12,8 +12,6 @@ from seeds.models import (
     Seed,
     SeedStatus,
     SeedType,
-    generate_id,
-    get_parent_id,
     now_utc,
 )
 
@@ -162,7 +160,10 @@ class Database:
         conn = self._get_conn()
         conn.execute(
             """
-            INSERT INTO seeds (id, title, content, status, seed_type, tags, related_to, created_at, updated_at, resolved_at)
+            INSERT INTO seeds (
+                id, title, content, status, seed_type,
+                tags, related_to, created_at, updated_at, resolved_at
+            )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -294,10 +295,7 @@ class Database:
     def is_blocked(self, seed_id: str) -> bool:
         """Check if a seed is blocked (has unresolved children)."""
         children = self.get_children(seed_id)
-        for child in children:
-            if not child.is_terminal():
-                return True
-        return False
+        return any(not child.is_terminal() for child in children)
 
     def get_blocked_seeds(self) -> list[Seed]:
         """Get all seeds that are blocked by unresolved children."""
@@ -327,7 +325,10 @@ class Database:
         conn = self._get_conn()
         conn.execute(
             """
-            INSERT INTO questions (id, seed_id, text, answer, status, created_at, answered_at)
+            INSERT INTO questions (
+                id, seed_id, text, answer,
+                status, created_at, answered_at
+            )
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (

@@ -1,20 +1,20 @@
 """seeds web UI - simple Flask app for viewing seeds."""
 
-from flask import Flask, render_template, abort
 from pathlib import Path
 
-from seeds.db import Database, find_seeds_dir, SEEDS_DIR, DB_FILE
+from flask import Flask, abort, render_template
+
+from seeds.db import DB_FILE, Database, find_seeds_dir
 from seeds.models import Seed, get_parent_id
 
 
 def build_seed_tree(seeds: list[Seed]) -> list[dict]:
     """Build a hierarchical tree structure from flat seed list.
 
-    Returns a list of top-level seeds, each with a 'children' list recursively populated.
-    Each dict has: 'seed' (the Seed object), 'children' (list of child dicts), 'depth' (int).
+    Returns a list of top-level seeds, each with a 'children' list
+    recursively populated. Each dict has: 'seed' (the Seed object),
+    'children' (list of child dicts), 'depth' (int).
     """
-    # Create a map of seed_id -> seed
-    seed_map = {s.id: s for s in seeds}
 
     # Create tree nodes for each seed
     nodes: dict[str, dict] = {}
@@ -79,9 +79,7 @@ def create_app(seeds_dir: Path | None = None) -> Flask:
         seeds_dir = find_seeds_dir()
 
     if seeds_dir is None:
-        raise RuntimeError(
-            "No .seeds directory found. Run 'seeds init' first."
-        )
+        raise RuntimeError("No .seeds directory found. Run 'seeds init' first.")
 
     db_path = seeds_dir / DB_FILE
 

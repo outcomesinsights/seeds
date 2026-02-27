@@ -8,7 +8,7 @@ import pytest
 from click.testing import CliRunner
 
 from seeds.cli import main
-from seeds.db import Database, SEEDS_DIR
+from seeds.db import SEEDS_DIR, Database
 from seeds.models import (
     Question,
     QuestionStatus,
@@ -127,7 +127,15 @@ class TestCreateCommand:
         """Verify create with type and tags works."""
         result = cli_runner.invoke(
             main,
-            ["create", "--title", "Decision", "--type", "decision", "--tags", "important,urgent"],
+            [
+                "create",
+                "--title",
+                "Decision",
+                "--type",
+                "decision",
+                "--tags",
+                "important,urgent",
+            ],
         )
         assert result.exit_code == 0
 
@@ -508,7 +516,7 @@ class TestShowOutputFile:
 
 
 class TestShowDetailFormatting:
-    """Tests for format_seed_detail covering tags, parent, related, content, questions."""
+    """Tests for format_seed_detail covering various fields."""
 
     def test_show_with_tags(self, cli_runner, initialized_env):
         """Verify show displays tags."""
@@ -525,7 +533,9 @@ class TestShowDetailFormatting:
     def test_show_with_content(self, cli_runner, initialized_env):
         """Verify show displays content."""
         db = Database()
-        seed = Seed(id="seed-content", title="Content Seed", content="Detailed content here")
+        seed = Seed(
+            id="seed-content", title="Content Seed", content="Detailed content here"
+        )
         db.create_seed(seed)
         db.close()
 
@@ -571,8 +581,11 @@ class TestShowDetailFormatting:
         """Verify show displays answered questions with answers."""
         db = Database()
         question = Question(
-            id="q-answered", seed_id="seed-test1", text="Answered?",
-            answer="Yes it is", status=QuestionStatus.ANSWERED,
+            id="q-answered",
+            seed_id="seed-test1",
+            text="Answered?",
+            answer="Yes it is",
+            status=QuestionStatus.ANSWERED,
         )
         db.create_question(question)
         db.close()
@@ -621,7 +634,8 @@ class TestUpdateContentAndTags:
     def test_update_content(self, cli_runner, env_with_seeds):
         """Verify update --content replaces content."""
         result = cli_runner.invoke(
-            main, ["update", "seed-test1", "--content", "New content"],
+            main,
+            ["update", "seed-test1", "--content", "New content"],
         )
         assert result.exit_code == 0
 
@@ -633,7 +647,8 @@ class TestUpdateContentAndTags:
     def test_update_tags(self, cli_runner, env_with_seeds):
         """Verify update --tags replaces tags."""
         result = cli_runner.invoke(
-            main, ["update", "seed-test1", "--tags", "new,tags"],
+            main,
+            ["update", "seed-test1", "--tags", "new,tags"],
         )
         assert result.exit_code == 0
 
@@ -645,7 +660,8 @@ class TestUpdateContentAndTags:
     def test_update_clear_tags(self, cli_runner, env_with_seeds):
         """Verify update --tags '' clears tags."""
         result = cli_runner.invoke(
-            main, ["update", "seed-test1", "--tags", ""],
+            main,
+            ["update", "seed-test1", "--tags", ""],
         )
         assert result.exit_code == 0
 
@@ -695,7 +711,8 @@ class TestLinkNotFound:
     def test_link_nonexistent_related(self, cli_runner, env_with_seeds):
         """Verify link fails when related seed doesn't exist."""
         result = cli_runner.invoke(
-            main, ["link", "seed-test1", "--relates-to", "nonexistent"],
+            main,
+            ["link", "seed-test1", "--relates-to", "nonexistent"],
         )
         assert result.exit_code != 0
         assert "not found" in result.output

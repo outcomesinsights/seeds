@@ -7,8 +7,8 @@ from pathlib import Path
 import click
 
 from seeds import __version__
-from seeds.db import Database, SEEDS_DIR
-from seeds.models import Seed, SeedStatus, SeedType, QuestionStatus, generate_id
+from seeds.db import SEEDS_DIR, Database
+from seeds.models import QuestionStatus, Seed, SeedStatus, SeedType, generate_id
 
 
 class Context:
@@ -22,7 +22,9 @@ class Context:
         if self.db is None:
             self.db = Database()
             if not self.db.is_initialized():
-                click.echo("Error: seeds not initialized. Run 'seeds init' first.", err=True)
+                click.echo(
+                    "Error: seeds not initialized. Run 'seeds init' first.", err=True
+                )
                 sys.exit(1)
         return self.db
 
@@ -36,12 +38,14 @@ pass_context = click.make_pass_decorator(Context, ensure=True)
 
 def require_init(f):
     """Decorator to require seeds to be initialized."""
+
     @functools.wraps(f)
     @click.pass_context
     def wrapper(click_ctx, *args, **kwargs):
         ctx = click_ctx.ensure_object(Context)
         ctx.ensure_init()
         return click_ctx.invoke(f, *args, **kwargs)
+
     return wrapper
 
 
@@ -205,7 +209,9 @@ def list_seeds(
         click.echo(format_seed_line(seed, db))
 
 
-def format_seed_detail(seed: Seed, db: Database, include_questions: bool = False) -> str:
+def format_seed_detail(
+    seed: Seed, db: Database, include_questions: bool = False
+) -> str:
     """Format seed details as a string."""
     lines = []
 
@@ -260,7 +266,12 @@ def format_seed_detail(seed: Seed, db: Database, include_questions: bool = False
 @main.command()
 @click.argument("seed_id")
 @click.option("--questions", "-q", is_flag=True, help="Include attached questions")
-@click.option("--output-file", "-o", is_flag=True, help="Write to temp file, print path (for Claude Code)")
+@click.option(
+    "--output-file",
+    "-o",
+    is_flag=True,
+    help="Write to temp file, print path (for Claude Code)",
+)
 @pass_context
 def show(ctx: Context, seed_id: str, questions: bool, output_file: bool) -> None:
     """Show detailed information about a seed.
@@ -279,7 +290,10 @@ def show(ctx: Context, seed_id: str, questions: bool, output_file: bool) -> None
 
     if output_file:
         import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, prefix=f'seeds-{seed_id}-') as f:
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False, prefix=f"seeds-{seed_id}-"
+        ) as f:
             f.write(output)
             click.echo(f.name)
     else:
@@ -759,6 +773,7 @@ def doctor(ctx: Context) -> None:
 
         # Check if JSONL is stale
         import os
+
         db_mtime = os.path.getmtime(db.path)
         jsonl_mtime = os.path.getmtime(jsonl_path)
         if jsonl_mtime >= db_mtime:

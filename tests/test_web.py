@@ -10,7 +10,7 @@ from seeds.web import build_seed_tree, create_app, flatten_tree
 def app(db):
     """Create Flask test app with test database."""
     app = create_app(seeds_dir=db.path.parent)
-    app.config['TESTING'] = True
+    app.config["TESTING"] = True
     return app
 
 
@@ -25,16 +25,58 @@ def populated_db(db):
     """Create a database with hierarchical seeds for testing."""
     # Top-level seeds
     seeds = [
-        Seed(id="seed-aaa", title="First Idea", status=SeedStatus.CAPTURED, seed_type=SeedType.IDEA, tags=["ui", "feature"]),
-        Seed(id="seed-bbb", title="Second Idea", status=SeedStatus.EXPLORING, seed_type=SeedType.EXPLORATION, tags=["backend"]),
-        Seed(id="seed-ccc", title="Third Idea", status=SeedStatus.RESOLVED, seed_type=SeedType.DECISION, tags=["ui"]),
+        Seed(
+            id="seed-aaa",
+            title="First Idea",
+            status=SeedStatus.CAPTURED,
+            seed_type=SeedType.IDEA,
+            tags=["ui", "feature"],
+        ),
+        Seed(
+            id="seed-bbb",
+            title="Second Idea",
+            status=SeedStatus.EXPLORING,
+            seed_type=SeedType.EXPLORATION,
+            tags=["backend"],
+        ),
+        Seed(
+            id="seed-ccc",
+            title="Third Idea",
+            status=SeedStatus.RESOLVED,
+            seed_type=SeedType.DECISION,
+            tags=["ui"],
+        ),
         # Children of seed-aaa
-        Seed(id="seed-aaa.1", title="Sub-idea 1", status=SeedStatus.CAPTURED, seed_type=SeedType.IDEA, tags=["detail"]),
-        Seed(id="seed-aaa.2", title="Sub-idea 2", status=SeedStatus.DEFERRED, seed_type=SeedType.CONCERN, tags=["risk"]),
+        Seed(
+            id="seed-aaa.1",
+            title="Sub-idea 1",
+            status=SeedStatus.CAPTURED,
+            seed_type=SeedType.IDEA,
+            tags=["detail"],
+        ),
+        Seed(
+            id="seed-aaa.2",
+            title="Sub-idea 2",
+            status=SeedStatus.DEFERRED,
+            seed_type=SeedType.CONCERN,
+            tags=["risk"],
+        ),
         # Grandchild
-        Seed(id="seed-aaa.1.1", title="Deep thought", status=SeedStatus.CAPTURED, seed_type=SeedType.QUESTION, tags=["meta"]),
+        Seed(
+            id="seed-aaa.1.1",
+            title="Deep thought",
+            status=SeedStatus.CAPTURED,
+            seed_type=SeedType.QUESTION,
+            tags=["meta"],
+        ),
         # Child of seed-bbb
-        Seed(id="seed-bbb.1", title="Backend detail", status=SeedStatus.EXPLORING, seed_type=SeedType.EXPLORATION, tags=["api"]),
+        Seed(
+            id="seed-bbb.1",
+            title="Backend detail",
+            status=SeedStatus.EXPLORING,
+            seed_type=SeedType.EXPLORATION,
+            tags=["api"],
+        ),
     ]
     for seed in seeds:
         db.create_seed(seed)
@@ -282,13 +324,13 @@ class TestMarkdownPrettifier:
         seed = Seed(
             id="seed-test",
             title="Test",
-            content="# Header\n\nSome content with **bold** text."
+            content="# Header\n\nSome content with **bold** text.",
         )
         db.create_seed(seed)
 
         response = client.get("/seed/seed-test")
         html = response.data.decode()
-        assert 'data-markdown' in html
+        assert "data-markdown" in html
 
 
 class TestWebDetailWithRelations:
@@ -323,7 +365,9 @@ class TestWebDetailWithRelations:
         seed = Seed(id="seed-qp", title="Question Parent")
         db.create_seed(seed)
         question = Question(
-            id="q-web", seed_id="seed-qp", text="Web question?",
+            id="q-web",
+            seed_id="seed-qp",
+            text="Web question?",
             status=QuestionStatus.OPEN,
         )
         db.create_question(question)
@@ -340,13 +384,14 @@ class TestWebAppCreation:
 
     def test_create_app_without_seeds_dir_raises(self):
         """Verify create_app raises when no .seeds directory found."""
-        import tempfile
         import os
+        import tempfile
+
         with tempfile.TemporaryDirectory() as tmpdir:
             original = os.getcwd()
             os.chdir(tmpdir)
             try:
-                with pytest.raises(RuntimeError, match="No .seeds directory"):
+                with pytest.raises(RuntimeError, match=r"No \.seeds directory"):
                     create_app()
             finally:
                 os.chdir(original)

@@ -3,8 +3,6 @@
 import os
 import tempfile
 
-import pytest
-
 from seeds.db import Database, find_seeds_dir
 from seeds.models import (
     Question,
@@ -286,16 +284,26 @@ class TestBlockedState:
         """Verify get_blocked_seeds returns only blocked seeds."""
         # Blocked parent with unresolved child
         blocked = Seed(id="seed-b1", title="Blocked")
-        blocked_child = Seed(id="seed-b1.1", title="Unresolved", status=SeedStatus.EXPLORING)
+        blocked_child = Seed(
+            id="seed-b1.1", title="Unresolved", status=SeedStatus.EXPLORING
+        )
 
         # Not blocked - no children
         not_blocked1 = Seed(id="seed-n1", title="No Children")
 
         # Not blocked - all children resolved
         not_blocked2 = Seed(id="seed-n2", title="All Resolved")
-        resolved_child = Seed(id="seed-n2.1", title="Resolved", status=SeedStatus.RESOLVED)
+        resolved_child = Seed(
+            id="seed-n2.1", title="Resolved", status=SeedStatus.RESOLVED
+        )
 
-        for seed in [blocked, blocked_child, not_blocked1, not_blocked2, resolved_child]:
+        for seed in [
+            blocked,
+            blocked_child,
+            not_blocked1,
+            not_blocked2,
+            resolved_child,
+        ]:
             db.create_seed(seed)
 
         result = db.get_blocked_seeds()
@@ -375,8 +383,12 @@ class TestQuestionListing:
         """Verify filtering questions by status works."""
         db.create_seed(sample_seed)
 
-        q1 = Question(id="q-1", seed_id=sample_seed.id, text="Q1", status=QuestionStatus.OPEN)
-        q2 = Question(id="q-2", seed_id=sample_seed.id, text="Q2", status=QuestionStatus.ANSWERED)
+        q1 = Question(
+            id="q-1", seed_id=sample_seed.id, text="Q1", status=QuestionStatus.OPEN
+        )
+        q2 = Question(
+            id="q-2", seed_id=sample_seed.id, text="Q2", status=QuestionStatus.ANSWERED
+        )
         db.create_question(q1)
         db.create_question(q2)
 
@@ -388,9 +400,21 @@ class TestQuestionListing:
         """Verify get_open_questions returns only open questions."""
         db.create_seed(sample_seed)
 
-        q1 = Question(id="q-1", seed_id=sample_seed.id, text="Open", status=QuestionStatus.OPEN)
-        q2 = Question(id="q-2", seed_id=sample_seed.id, text="Answered", status=QuestionStatus.ANSWERED)
-        q3 = Question(id="q-3", seed_id=sample_seed.id, text="Deferred", status=QuestionStatus.DEFERRED)
+        q1 = Question(
+            id="q-1", seed_id=sample_seed.id, text="Open", status=QuestionStatus.OPEN
+        )
+        q2 = Question(
+            id="q-2",
+            seed_id=sample_seed.id,
+            text="Answered",
+            status=QuestionStatus.ANSWERED,
+        )
+        q3 = Question(
+            id="q-3",
+            seed_id=sample_seed.id,
+            text="Deferred",
+            status=QuestionStatus.DEFERRED,
+        )
         for q in [q1, q2, q3]:
             db.create_question(q)
 

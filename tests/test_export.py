@@ -3,8 +3,6 @@
 import json
 from datetime import datetime, timezone
 
-import pytest
-
 from seeds.db import Database
 from seeds.export import export_to_jsonl, import_from_jsonl, seed_to_dict
 from seeds.models import (
@@ -145,7 +143,9 @@ class TestExportToJsonl:
         lines = output_path.read_text().strip().split("\n")
         assert len(lines) == 3
 
-    def test_export_includes_questions(self, db, temp_dir, sample_seed, sample_question):
+    def test_export_includes_questions(
+        self, db, temp_dir, sample_seed, sample_question
+    ):
         """Verify export includes questions embedded in seeds."""
         db.create_seed(sample_seed)
         db.create_question(sample_question)
@@ -275,6 +275,7 @@ class TestImportDefaultPath:
     def test_import_default_path(self, db, temp_dir):
         """Verify import uses default JSONL path when none specified."""
         import os
+
         original_cwd = os.getcwd()
         os.chdir(temp_dir)
         try:

@@ -13,7 +13,6 @@ from seeds.models import (
     Seed,
     SeedStatus,
     SeedType,
-    generate_id,
 )
 
 
