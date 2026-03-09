@@ -91,7 +91,7 @@ uv run pytest                        # Run tests
 After making changes, deploy to the global `seeds` command:
 
 ```bash
-uv cache clean seeds && uv tool uninstall seeds && uv tool install --reinstall /home/ryan/projects/outins/seeds
+uv cache clean seeds && uv tool uninstall seeds && uv tool install --reinstall .
 ```
 
 Then restart any running `seeds serve` processes.
