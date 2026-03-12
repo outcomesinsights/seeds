@@ -90,7 +90,7 @@ def _import_v1_record(db: Database, data: dict[str, Any]) -> bool:
     if db.get_seed(data["id"]):
         return False
 
-    # Create seed (v1 has related_to on the seed object)
+    # Create seed (v1 had related_to on the seed object, now handled via relationships)
     seed = Seed(
         id=data["id"],
         title=data["title"],
@@ -98,7 +98,6 @@ def _import_v1_record(db: Database, data: dict[str, Any]) -> bool:
         status=SeedStatus(data["status"]),
         seed_type=SeedType(data["seed_type"]),
         tags=data.get("tags", []),
-        related_to=data.get("related_to", []),
         created_at=datetime.fromisoformat(data["created_at"]),
         updated_at=datetime.fromisoformat(data["updated_at"]),
         resolved_at=(

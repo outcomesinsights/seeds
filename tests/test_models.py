@@ -2,8 +2,6 @@
 
 import pytest
 from seeds.models import (
-    Question,
-    QuestionStatus,
     Relationship,
     RelationType,
     Seed,
@@ -56,16 +54,6 @@ class TestSeedType:
         assert SeedType("idea") == SeedType.IDEA
         assert SeedType("question") == SeedType.QUESTION
         assert SeedType("exploration") == SeedType.EXPLORATION
-
-
-class TestQuestionStatus:
-    """Tests for QuestionStatus enum."""
-
-    def test_all_statuses_exist(self):
-        """Verify all expected question statuses are defined."""
-        assert QuestionStatus.OPEN.value == "open"
-        assert QuestionStatus.ANSWERED.value == "answered"
-        assert QuestionStatus.DEFERRED.value == "deferred"
 
 
 class TestGenerateId:
@@ -126,7 +114,6 @@ class TestSeed:
         assert seed.status == SeedStatus.CAPTURED
         assert seed.seed_type == SeedType.IDEA
         assert seed.tags == []
-        assert seed.related_to == []
         assert seed.resolved_at is None
 
     def test_create_full_seed(self):
@@ -138,13 +125,11 @@ class TestSeed:
             status=SeedStatus.EXPLORING,
             seed_type=SeedType.DECISION,
             tags=["important", "urgent"],
-            related_to=["seed-other"],
         )
         assert seed.id == "seed-full"
         assert seed.status == SeedStatus.EXPLORING
         assert seed.seed_type == SeedType.DECISION
         assert seed.tags == ["important", "urgent"]
-        assert seed.related_to == ["seed-other"]
 
     def test_parent_id_property(self):
         """Verify parent_id property works correctly."""
@@ -213,38 +198,3 @@ class TestRelationship:
             rel_type=RelationType.QUESTIONS,
         )
         assert rel.rel_type == RelationType.QUESTIONS
-
-
-class TestQuestion:
-    """Tests for Question dataclass."""
-
-    def test_create_minimal_question(self):
-        """Verify question can be created with minimal args."""
-        question = Question(
-            id="q-test",
-            seed_id="seed-test",
-            text="What is the answer?",
-        )
-        assert question.id == "q-test"
-        assert question.seed_id == "seed-test"
-        assert question.text == "What is the answer?"
-        assert question.answer is None
-        assert question.status == QuestionStatus.OPEN
-        assert question.answered_at is None
-
-    def test_create_answered_question(self):
-        """Verify answered question has all fields."""
-        from datetime import datetime, timezone
-
-        now = datetime.now(timezone.utc)
-        question = Question(
-            id="q-test",
-            seed_id="seed-test",
-            text="What is the answer?",
-            answer="42",
-            status=QuestionStatus.ANSWERED,
-            answered_at=now,
-        )
-        assert question.answer == "42"
-        assert question.status == QuestionStatus.ANSWERED
-        assert question.answered_at == now

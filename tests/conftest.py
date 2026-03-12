@@ -8,8 +8,6 @@ from click.testing import CliRunner
 
 from seeds.db import Database
 from seeds.models import (
-    Question,
-    QuestionStatus,
     Relationship,
     RelationType,
     Seed,
@@ -45,17 +43,6 @@ def sample_seed():
         status=SeedStatus.CAPTURED,
         seed_type=SeedType.IDEA,
         tags=["test", "sample"],
-    )
-
-
-@pytest.fixture
-def sample_question():
-    """Create a sample question for testing."""
-    return Question(
-        id="q-test",
-        seed_id="seed-test",
-        text="What is the answer?",
-        status=QuestionStatus.OPEN,
     )
 
 

@@ -6,14 +6,44 @@ import tempfile
 
 from seeds.db import SCHEMA, Database, find_seeds_dir
 from seeds.models import (
-    Question,
-    QuestionStatus,
     Relationship,
     RelationType,
     Seed,
     SeedStatus,
     SeedType,
 )
+
+# Legacy v1 schema for migration tests — has questions table and related_to column
+V1_SCHEMA = """
+CREATE TABLE IF NOT EXISTS seeds (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    content TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'captured',
+    seed_type TEXT NOT NULL DEFAULT 'idea',
+    tags TEXT DEFAULT '[]',
+    related_to TEXT DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    resolved_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS questions (
+    id TEXT PRIMARY KEY,
+    seed_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    answer TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at TEXT NOT NULL,
+    answered_at TEXT,
+    FOREIGN KEY (seed_id) REFERENCES seeds(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_seeds_status ON seeds(status);
+CREATE INDEX IF NOT EXISTS idx_seeds_type ON seeds(seed_type);
+CREATE INDEX IF NOT EXISTS idx_questions_seed ON questions(seed_id);
+CREATE INDEX IF NOT EXISTS idx_questions_status ON questions(status);
+"""
 
 
 class TestDatabaseInit:
@@ -89,13 +119,15 @@ class TestSeedCRUD:
         result = db.delete_seed("seed-nonexistent")
         assert result is False
 
-    def test_delete_seed_deletes_questions(self, db, sample_seed, sample_question):
-        """Verify deleting a seed also deletes its questions."""
+    def test_delete_seed_deletes_relationships(self, db, sample_seed):
+        """Verify deleting a seed also deletes its relationships."""
         db.create_seed(sample_seed)
-        db.create_question(sample_question)
+        other = Seed(id="seed-other", title="Other")
+        db.create_seed(other)
+        db.create_relationship(sample_seed.id, other.id, RelationType.RELATES_TO)
 
         db.delete_seed(sample_seed.id)
-        assert db.get_question(sample_question.id) is None
+        assert len(db.get_relationships(other.id)) == 0
 
 
 class TestSeedListing:
@@ -316,116 +348,6 @@ class TestBlockedState:
         assert "seed-n2" not in ids
 
 
-class TestQuestionCRUD:
-    """Tests for question CRUD operations."""
-
-    def test_create_and_get_question(self, db, sample_seed, sample_question):
-        """Verify question can be created and retrieved."""
-        db.create_seed(sample_seed)
-        db.create_question(sample_question)
-
-        retrieved = db.get_question(sample_question.id)
-        assert retrieved is not None
-        assert retrieved.id == sample_question.id
-        assert retrieved.seed_id == sample_question.seed_id
-        assert retrieved.text == sample_question.text
-        assert retrieved.status == sample_question.status
-
-    def test_get_nonexistent_question_returns_none(self, db):
-        """Verify get_question returns None for missing ID."""
-        result = db.get_question("q-nonexistent")
-        assert result is None
-
-    def test_update_question(self, db, sample_seed, sample_question):
-        """Verify question can be updated."""
-        db.create_seed(sample_seed)
-        db.create_question(sample_question)
-
-        sample_question.answer = "42"
-        sample_question.status = QuestionStatus.ANSWERED
-        db.update_question(sample_question)
-
-        retrieved = db.get_question(sample_question.id)
-        assert retrieved.answer == "42"
-        assert retrieved.status == QuestionStatus.ANSWERED
-
-    def test_delete_question(self, db, sample_seed, sample_question):
-        """Verify question can be deleted."""
-        db.create_seed(sample_seed)
-        db.create_question(sample_question)
-
-        result = db.delete_question(sample_question.id)
-        assert result is True
-        assert db.get_question(sample_question.id) is None
-
-
-class TestQuestionListing:
-    """Tests for question listing and filtering."""
-
-    def test_list_questions_empty(self, db):
-        """Verify list_questions returns empty list when no questions."""
-        result = db.list_questions()
-        assert result == []
-
-    def test_list_questions_filter_by_seed(self, db, sample_seed):
-        """Verify filtering questions by seed_id works."""
-        other_seed = Seed(id="seed-other", title="Other Seed")
-        db.create_seed(sample_seed)
-        db.create_seed(other_seed)
-
-        q1 = Question(id="q-1", seed_id=sample_seed.id, text="Q1")
-        q2 = Question(id="q-2", seed_id="seed-other", text="Q2")
-        db.create_question(q1)
-        db.create_question(q2)
-
-        result = db.list_questions(seed_id=sample_seed.id)
-        assert len(result) == 1
-        assert result[0].id == "q-1"
-
-    def test_list_questions_filter_by_status(self, db, sample_seed):
-        """Verify filtering questions by status works."""
-        db.create_seed(sample_seed)
-
-        q1 = Question(
-            id="q-1", seed_id=sample_seed.id, text="Q1", status=QuestionStatus.OPEN
-        )
-        q2 = Question(
-            id="q-2", seed_id=sample_seed.id, text="Q2", status=QuestionStatus.ANSWERED
-        )
-        db.create_question(q1)
-        db.create_question(q2)
-
-        result = db.list_questions(status=QuestionStatus.OPEN)
-        assert len(result) == 1
-        assert result[0].id == "q-1"
-
-    def test_get_open_questions(self, db, sample_seed):
-        """Verify get_open_questions returns only open questions."""
-        db.create_seed(sample_seed)
-
-        q1 = Question(
-            id="q-1", seed_id=sample_seed.id, text="Open", status=QuestionStatus.OPEN
-        )
-        q2 = Question(
-            id="q-2",
-            seed_id=sample_seed.id,
-            text="Answered",
-            status=QuestionStatus.ANSWERED,
-        )
-        q3 = Question(
-            id="q-3",
-            seed_id=sample_seed.id,
-            text="Deferred",
-            status=QuestionStatus.DEFERRED,
-        )
-        for q in [q1, q2, q3]:
-            db.create_question(q)
-
-        result = db.get_open_questions()
-        assert len(result) == 1
-        assert result[0].id == "q-1"
-
-
 class TestTags:
     """Tests for tag operations."""
 
@@ -530,18 +452,6 @@ class TestSearch:
         assert len(results) == 1
         assert results[0].id == "seed-1"
 
-    def test_search_by_question_text(self, db):
-        """Verify search matches attached question text."""
-        db.create_seed(Seed(id="seed-1", title="Design question"))
-        db.create_question(
-            Question(id="q-1", seed_id="seed-1", text="Should we use polymorphic models?")
-        )
-        db.create_seed(Seed(id="seed-2", title="Unrelated"))
-
-        results = db.search("polymorphic")
-        assert len(results) == 1
-        assert results[0].id == "seed-1"
-
     def test_search_excludes_terminal_by_default(self, db):
         """Verify search excludes resolved/abandoned seeds."""
         db.create_seed(Seed(id="seed-1", title="Active deliberation"))
@@ -623,8 +533,8 @@ class TestSearch:
         conn = sqlite3.connect(db_path)
         conn.executescript(SCHEMA)
         conn.execute(
-            "INSERT INTO seeds (id, title, content, status, seed_type, tags, related_to, created_at, updated_at) "
-            "VALUES ('seed-old', 'Legacy seed about prototyping', 'Old content', 'captured', 'idea', '[]', '[]', "
+            "INSERT INTO seeds (id, title, content, status, seed_type, tags, created_at, updated_at) "
+            "VALUES ('seed-old', 'Legacy seed about prototyping', 'Old content', 'captured', 'idea', '[]', "
             "'2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')"
         )
         conn.commit()
@@ -886,7 +796,7 @@ class TestMigration:
 
         # Create a v1 database with related_to
         conn = sqlite3.connect(db_path)
-        conn.executescript(SCHEMA)
+        conn.executescript(V1_SCHEMA)
         now = "2026-01-01T00:00:00+00:00"
         conn.execute(
             "INSERT INTO seeds (id, title, status, seed_type, tags, related_to, created_at, updated_at) "
@@ -915,7 +825,7 @@ class TestMigration:
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
         conn = sqlite3.connect(db_path)
-        conn.executescript(SCHEMA)
+        conn.executescript(V1_SCHEMA)
         now = "2026-01-01T00:00:00+00:00"
 
         # Create a seed with questions
@@ -971,7 +881,7 @@ class TestMigration:
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
         conn = sqlite3.connect(db_path)
-        conn.executescript(SCHEMA)
+        conn.executescript(V1_SCHEMA)
         now = "2026-01-01T00:00:00+00:00"
         conn.execute(
             "INSERT INTO seeds (id, title, status, seed_type, tags, related_to, created_at, updated_at) "

@@ -30,18 +30,6 @@ class SeedType(Enum):
     CONCERN = "concern"  # Risk or worry
 
 
-class QuestionStatus(Enum):
-    """States for a question attached to a seed.
-
-    Deprecated: Questions are being migrated to seeds with relationships.
-    Will be removed in Phase 2.
-    """
-
-    OPEN = "open"  # Needs an answer
-    ANSWERED = "answered"  # Has been answered
-    DEFERRED = "deferred"  # Postponed for later
-
-
 class RelationType(Enum):
     """Types of relationships between seeds."""
 
@@ -99,7 +87,6 @@ class Seed:
     status: SeedStatus = SeedStatus.CAPTURED
     seed_type: SeedType = SeedType.IDEA
     tags: list[str] = field(default_factory=list)
-    related_to: list[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=now_utc)
     updated_at: datetime = field(default_factory=now_utc)
     resolved_at: datetime | None = None
@@ -124,18 +111,3 @@ class Relationship:
     created_at: datetime = field(default_factory=now_utc)
 
 
-@dataclass
-class Question:
-    """A question attached to a seed.
-
-    Deprecated: Questions are being migrated to seeds with relationships.
-    Will be removed in Phase 2.
-    """
-
-    id: str
-    seed_id: str
-    text: str
-    answer: str | None = None
-    status: QuestionStatus = QuestionStatus.OPEN
-    created_at: datetime = field(default_factory=now_utc)
-    answered_at: datetime | None = None

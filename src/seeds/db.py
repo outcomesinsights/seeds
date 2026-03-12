@@ -9,8 +9,6 @@ from datetime import datetime
 from pathlib import Path
 
 from seeds.models import (
-    Question,
-    QuestionStatus,
     Relationship,
     RelationType,
     Seed,
@@ -61,21 +59,9 @@ CREATE TABLE IF NOT EXISTS seeds (
     status TEXT NOT NULL DEFAULT 'captured',
     seed_type TEXT NOT NULL DEFAULT 'idea',
     tags TEXT DEFAULT '[]',
-    related_to TEXT DEFAULT '[]',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     resolved_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS questions (
-    id TEXT PRIMARY KEY,
-    seed_id TEXT NOT NULL,
-    text TEXT NOT NULL,
-    answer TEXT,
-    status TEXT NOT NULL DEFAULT 'open',
-    created_at TEXT NOT NULL,
-    answered_at TEXT,
-    FOREIGN KEY (seed_id) REFERENCES seeds(id)
 );
 
 CREATE TABLE IF NOT EXISTS relationships (
@@ -91,22 +77,18 @@ CREATE TABLE IF NOT EXISTS relationships (
 
 CREATE INDEX IF NOT EXISTS idx_seeds_status ON seeds(status);
 CREATE INDEX IF NOT EXISTS idx_seeds_type ON seeds(seed_type);
-CREATE INDEX IF NOT EXISTS idx_questions_seed ON questions(seed_id);
-CREATE INDEX IF NOT EXISTS idx_questions_status ON questions(status);
 CREATE INDEX IF NOT EXISTS idx_relationships_source ON relationships(source_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(target_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_type ON relationships(rel_type);
 """
 
-# FTS5 virtual table for full-text search across seeds and questions.
-# Uses a content-less ("external content") approach synced via triggers.
+# FTS5 virtual table for full-text search across seeds.
 FTS_SCHEMA = """
 CREATE VIRTUAL TABLE IF NOT EXISTS seeds_fts USING fts5(
     id UNINDEXED,
     title,
     content,
     tags,
-    question_texts,
     tokenize='porter unicode61'
 );
 """
@@ -115,51 +97,20 @@ CREATE VIRTUAL TABLE IF NOT EXISTS seeds_fts USING fts5(
 FTS_TRIGGERS = """
 CREATE TRIGGER IF NOT EXISTS seeds_fts_insert AFTER INSERT ON seeds
 BEGIN
-    INSERT INTO seeds_fts(id, title, content, tags, question_texts)
-    VALUES (NEW.id, NEW.title, COALESCE(NEW.content, ''), COALESCE(NEW.tags, ''), '');
+    INSERT INTO seeds_fts(id, title, content, tags)
+    VALUES (NEW.id, NEW.title, COALESCE(NEW.content, ''), COALESCE(NEW.tags, ''));
 END;
 
 CREATE TRIGGER IF NOT EXISTS seeds_fts_update AFTER UPDATE ON seeds
 BEGIN
     DELETE FROM seeds_fts WHERE id = OLD.id;
-    INSERT INTO seeds_fts(id, title, content, tags, question_texts)
-    VALUES (
-        NEW.id, NEW.title, COALESCE(NEW.content, ''),
-        COALESCE(NEW.tags, ''),
-        COALESCE((SELECT GROUP_CONCAT(text, ' ') FROM questions WHERE seed_id = NEW.id), '')
-    );
+    INSERT INTO seeds_fts(id, title, content, tags)
+    VALUES (NEW.id, NEW.title, COALESCE(NEW.content, ''), COALESCE(NEW.tags, ''));
 END;
 
 CREATE TRIGGER IF NOT EXISTS seeds_fts_delete AFTER DELETE ON seeds
 BEGIN
     DELETE FROM seeds_fts WHERE id = OLD.id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS questions_fts_insert AFTER INSERT ON questions
-BEGIN
-    DELETE FROM seeds_fts WHERE id = NEW.seed_id;
-    INSERT INTO seeds_fts(id, title, content, tags, question_texts)
-    SELECT s.id, s.title, COALESCE(s.content, ''), COALESCE(s.tags, ''),
-           COALESCE((SELECT GROUP_CONCAT(text, ' ') FROM questions WHERE seed_id = s.id), '')
-    FROM seeds s WHERE s.id = NEW.seed_id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS questions_fts_update AFTER UPDATE ON questions
-BEGIN
-    DELETE FROM seeds_fts WHERE id = NEW.seed_id;
-    INSERT INTO seeds_fts(id, title, content, tags, question_texts)
-    SELECT s.id, s.title, COALESCE(s.content, ''), COALESCE(s.tags, ''),
-           COALESCE((SELECT GROUP_CONCAT(text, ' ') FROM questions WHERE seed_id = s.id), '')
-    FROM seeds s WHERE s.id = NEW.seed_id;
-END;
-
-CREATE TRIGGER IF NOT EXISTS questions_fts_delete AFTER DELETE ON questions
-BEGIN
-    DELETE FROM seeds_fts WHERE id = OLD.seed_id;
-    INSERT OR IGNORE INTO seeds_fts(id, title, content, tags, question_texts)
-    SELECT s.id, s.title, COALESCE(s.content, ''), COALESCE(s.tags, ''),
-           COALESCE((SELECT GROUP_CONCAT(text, ' ') FROM questions WHERE seed_id = s.id), '')
-    FROM seeds s WHERE s.id = OLD.seed_id;
 END;
 """
 
@@ -235,7 +186,6 @@ class Database:
             status=SeedStatus(row["status"]),
             seed_type=SeedType(row["seed_type"]),
             tags=json.loads(row["tags"]) if row["tags"] else [],
-            related_to=json.loads(row["related_to"]) if row["related_to"] else [],
             created_at=_str_to_datetime(row["created_at"]) or now_utc(),
             updated_at=_str_to_datetime(row["updated_at"]) or now_utc(),
             resolved_at=_str_to_datetime(row["resolved_at"]),
@@ -248,9 +198,9 @@ class Database:
             """
             INSERT INTO seeds (
                 id, title, content, status, seed_type,
-                tags, related_to, created_at, updated_at, resolved_at
+                tags, created_at, updated_at, resolved_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 seed.id,
@@ -259,7 +209,6 @@ class Database:
                 seed.status.value,
                 seed.seed_type.value,
                 json.dumps(seed.tags),
-                json.dumps(seed.related_to),
                 _datetime_to_str(seed.created_at),
                 _datetime_to_str(seed.updated_at),
                 _datetime_to_str(seed.resolved_at),
@@ -284,7 +233,7 @@ class Database:
             """
             UPDATE seeds SET
                 title = ?, content = ?, status = ?, seed_type = ?,
-                tags = ?, related_to = ?, updated_at = ?, resolved_at = ?
+                tags = ?, updated_at = ?, resolved_at = ?
             WHERE id = ?
             """,
             (
@@ -293,7 +242,6 @@ class Database:
                 seed.status.value,
                 seed.seed_type.value,
                 json.dumps(seed.tags),
-                json.dumps(seed.related_to),
                 _datetime_to_str(seed.updated_at),
                 _datetime_to_str(seed.resolved_at),
                 seed.id,
@@ -305,11 +253,9 @@ class Database:
     def delete_seed(self, seed_id: str) -> bool:
         """Delete a seed by ID. Returns True if deleted.
 
-        Also deletes associated questions (legacy) and relationships.
+        Also cascade-deletes relationships involving this seed.
         """
         conn = self._get_conn()
-        # Delete associated questions (legacy, until Phase 2)
-        conn.execute("DELETE FROM questions WHERE seed_id = ?", (seed_id,))
         # Cascade-delete relationships where this seed is source or target
         conn.execute(
             "DELETE FROM relationships WHERE source_id = ? OR target_id = ?",
@@ -401,115 +347,13 @@ class Database:
         return any(not qs.is_terminal() for qs in question_seeds)
 
     def get_blocked_seeds(self) -> list[Seed]:
-        """Get all seeds that are blocked by unresolved children."""
+        """Get all seeds that are blocked by unresolved children or questions."""
         all_seeds = self.list_seeds(include_terminal=False)
         blocked = []
         for seed in all_seeds:
             if self.is_blocked(seed.id):
                 blocked.append(seed)
         return blocked
-
-    # --- Question operations ---
-
-    def _row_to_question(self, row: sqlite3.Row) -> Question:
-        """Convert database row to Question object."""
-        return Question(
-            id=row["id"],
-            seed_id=row["seed_id"],
-            text=row["text"],
-            answer=row["answer"],
-            status=QuestionStatus(row["status"]),
-            created_at=_str_to_datetime(row["created_at"]) or now_utc(),
-            answered_at=_str_to_datetime(row["answered_at"]),
-        )
-
-    def create_question(self, question: Question) -> Question:
-        """Insert a new question into the database."""
-        conn = self._get_conn()
-        conn.execute(
-            """
-            INSERT INTO questions (
-                id, seed_id, text, answer,
-                status, created_at, answered_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                question.id,
-                question.seed_id,
-                question.text,
-                question.answer,
-                question.status.value,
-                _datetime_to_str(question.created_at),
-                _datetime_to_str(question.answered_at),
-            ),
-        )
-        conn.commit()
-        return question
-
-    def get_question(self, question_id: str) -> Question | None:
-        """Get a question by ID."""
-        conn = self._get_conn()
-        row = conn.execute(
-            "SELECT * FROM questions WHERE id = ?", (question_id,)
-        ).fetchone()
-        if row is None:
-            return None
-        return self._row_to_question(row)
-
-    def update_question(self, question: Question) -> Question:
-        """Update an existing question."""
-        conn = self._get_conn()
-        conn.execute(
-            """
-            UPDATE questions SET
-                text = ?, answer = ?, status = ?, answered_at = ?
-            WHERE id = ?
-            """,
-            (
-                question.text,
-                question.answer,
-                question.status.value,
-                _datetime_to_str(question.answered_at),
-                question.id,
-            ),
-        )
-        conn.commit()
-        return question
-
-    def delete_question(self, question_id: str) -> bool:
-        """Delete a question by ID. Returns True if deleted."""
-        conn = self._get_conn()
-        result = conn.execute("DELETE FROM questions WHERE id = ?", (question_id,))
-        conn.commit()
-        return result.rowcount > 0
-
-    def list_questions(
-        self,
-        seed_id: str | None = None,
-        status: QuestionStatus | None = None,
-    ) -> list[Question]:
-        """List questions with optional filters."""
-        conn = self._get_conn()
-        query = "SELECT * FROM questions WHERE 1=1"
-        params: list[str] = []
-
-        if seed_id is not None:
-            query += " AND seed_id = ?"
-            params.append(seed_id)
-
-        if status is not None:
-            query += " AND status = ?"
-            params.append(status.value)
-
-        query += " ORDER BY created_at DESC"
-
-        rows = conn.execute(query, params).fetchall()
-        return [self._row_to_question(row) for row in rows]
-
-    def get_open_questions(self) -> list[Question]:
-        """Get all open questions across all seeds."""
-        return self.list_questions(status=QuestionStatus.OPEN)
 
     # --- Relationship operations ---
 
@@ -658,7 +502,6 @@ class Database:
         1. Creates relationships table if needed
         2. Converts related_to JSON arrays to bidirectional relates-to relationships
         3. Converts questions to question-type seeds with 'questions' relationships
-        4. Does NOT drop old tables (that happens when CLI/export are updated in Phase 2)
 
         Returns dict with counts: {'related_to': N, 'questions': N}
         """
@@ -739,9 +582,9 @@ class Database:
                     """
                     INSERT OR IGNORE INTO seeds (
                         id, title, content, status, seed_type,
-                        tags, related_to, created_at, updated_at, resolved_at
+                        tags, created_at, updated_at, resolved_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         new_id,
@@ -749,7 +592,6 @@ class Database:
                         q["answer"] or "",
                         seed_status,
                         SeedType.QUESTION.value,
-                        "[]",
                         "[]",
                         q["created_at"],
                         q["created_at"],
@@ -788,23 +630,20 @@ class Database:
             self.rebuild_fts()
 
     def rebuild_fts(self) -> None:
-        """Rebuild FTS index from current seed and question data."""
+        """Rebuild FTS index from current seed data."""
         conn = self._get_conn()
         conn.execute("DELETE FROM seeds_fts")
         conn.execute(
             """
-            INSERT INTO seeds_fts(id, title, content, tags, question_texts)
-            SELECT
-                s.id, s.title, COALESCE(s.content, ''), COALESCE(s.tags, ''),
-                COALESCE((SELECT GROUP_CONCAT(q.text, ' ')
-                          FROM questions q WHERE q.seed_id = s.id), '')
+            INSERT INTO seeds_fts(id, title, content, tags)
+            SELECT s.id, s.title, COALESCE(s.content, ''), COALESCE(s.tags, '')
             FROM seeds s
             """
         )
         conn.commit()
 
     def search(self, query: str, include_terminal: bool = False) -> list[Seed]:
-        """Full-text search across seed titles, content, tags, and questions.
+        """Full-text search across seed titles, content, and tags.
 
         Args:
             query: FTS5 query string (supports AND, OR, NOT, prefix*, "phrases").
