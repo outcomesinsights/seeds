@@ -30,40 +30,50 @@ Remove `question_texts` column — questions are now seeds with their own FTS en
 ## Key Design Decisions
 
 - **Directed edges**: `relates-to` stored as two rows (A→B, B→A) for bidirectional. `questions` is one directed edge (question-seed → parent-seed).
-- **Question → seed mapping**: `q.text` → `seed.title`, `q.answer` → `seed.content`, status: OPEN→CAPTURED, ANSWERED→RESOLVED, DEFERRED→DEFERRED. Keep `q-` ID prefix.
+- **Question → seed mapping**: `q.text` → `seed.title`, `q.answer` → `seed.content`, status: OPEN→CAPTURED, ANSWERED→RESOLVED, DEFERRED→DEFERRED. Migrated questions get new project-prefixed IDs (e.g., `seeds-a1b2c3d4`), same as all other seeds. The `q-` prefix is retired.
+- **ID prefix convention**: All seeds use the project name as their ID prefix. In this project, that's `seeds-`. Other projects using the seeds tool would use their own prefix (e.g., `myproject-`). This applies uniformly — questions-turned-seeds are no exception.
 - **CLI stays familiar**: `seeds ask` and `seeds answer` remain as convenience commands, but create seeds + relationships under the hood.
-- **Relationship types enum**: `relates-to`, `questions`, `answers`, `supersedes`, `duplicates`. Only first two used initially.
+- **Relationship types enum**: Start minimal with `relates-to` and `questions`. `relates-to` serves as a placeholder indicating "we haven't identified the specific relationship type yet" — it's a signal that the edge needs refinement, not a permanent category. Additional types (e.g., `blocks`, `answers`, `supersedes`, `duplicates`) will be discovered organically as usage patterns emerge rather than defined speculatively upfront.
+- **`blocks` relationship**: Inspired by beads' blocking concept — some decisions can't be made until other decisions are resolved. This is a strong candidate for an early addition once the base infrastructure is in place.
 - **Export format**: Add `format_version: 2` to JSONL. Relationships exported as outbound edges on each seed. Import handles both v1 (embedded questions, related_to array) and v2.
+
+## Migration
+
+**Scope**: Migration runs on any existing seeds database (there are a few in the wild, all owned by the same user). Since adoption is minimal, we're keeping migration simple:
+
+- Migration is idempotent (checks table/column existence before acting)
+- Runs in a transaction with DB backup beforehand
+- JSONL is the git-tracked source of truth — data is always recoverable
+- No phased rollout needed; we can do a clean cut since all instances are under one user's control
+
+**No separate migration phase**: Rather than a multi-phase approach where old and new code coexist, we'll do a single atomic migration. The old `questions` table and `related_to` column are migrated and removed in one pass.
 
 ## Phased Implementation
 
-### Phase 1: Add relationships table + migration (non-breaking)
-All existing code continues to work. New table created alongside old structures.
+### Phase 1: Models + DB layer
+Build the foundation without touching CLI or export.
 
 **`src/seeds/models.py`**:
-- Add `RelationType` enum
+- Add `RelationType` enum (initially: `relates-to`, `questions`)
 - Add `Relationship` dataclass (source_id, target_id, rel_type, created_at)
+- Remove `Question` dataclass and `QuestionStatus` enum
+- Remove `related_to` from `Seed` dataclass
 
 **`src/seeds/db.py`**:
-- Add `relationships` table to schema
-- Add `ensure_relationships()` migration: creates table, populates from `related_to` JSON arrays
+- Add `relationships` table to schema, remove `questions` table and `related_to` column
+- Add migration: create relationships table, populate from `related_to` JSON arrays and `questions` table, then drop old structures
 - Add CRUD: `create_relationship()`, `get_relationships(seed_id, rel_type=None, direction='both')`, `delete_relationship()`
-- Indexes on source_id, target_id, rel_type
-
-**Tests**: New `TestRelationships` class in `test_db.py`
-
-### Phase 2: Migrate questions to seeds
-The big change. Questions become seeds with typed relationships.
-
-**`src/seeds/db.py`**:
-- Add `_migrate_questions_to_seeds()`: for each question row, INSERT a seed (type=question) + INSERT a `questions` relationship. Runs in transaction. Backs up DB first.
-- Remove all Question CRUD methods
 - Add `get_questions_for_seed(seed_id)` → returns Seed objects via relationship query
 - Update `delete_seed()` to cascade-delete relationships
 - Update `is_blocked()`: blocked if unresolved children OR unresolved question-seeds
+- Remove all Question CRUD methods
+- Simplify FTS: remove `question_texts` column, drop question triggers, rebuild index
+- Indexes on source_id, target_id, rel_type
 
-**`src/seeds/models.py`**:
-- Remove `Question` dataclass and `QuestionStatus` enum
+**Tests**: New `TestRelationships` class in `test_db.py`, rewrite question tests
+
+### Phase 2: CLI + export + web
+Wire up the new DB layer to user-facing code.
 
 **`src/seeds/cli.py`**:
 - `ask`: creates seed (type=question) + `questions` relationship
@@ -85,15 +95,9 @@ The big change. Questions become seeds with typed relationships.
 - Read relationships from DB instead of `seed.related_to`
 - Questions page queries question-type seeds
 
-### Phase 3: Remove `related_to` column + cleanup
-- Drop `related_to` from seeds table (SQLite table rebuild)
-- Remove `related_to` from Seed dataclass
-- Simplify FTS: remove `question_texts` column, drop question triggers, rebuild index
-- Update all tests
-
 ## Files Modified (in order)
 1. `src/seeds/models.py` — add RelationType, Relationship; remove Question, QuestionStatus, related_to
-2. `src/seeds/db.py` — relationships table, migrations, new queries, remove question methods
+2. `src/seeds/db.py` — relationships table, migration, new queries, remove question methods, simplify FTS
 3. `src/seeds/cli.py` — rewrite ask/answer/questions/link/show/tree/doctor
 4. `src/seeds/export.py` — v2 format with backward-compatible import
 5. `src/seeds/prime.py` — update command descriptions
@@ -103,24 +107,27 @@ The big change. Questions become seeds with typed relationships.
 9. `tests/test_cli.py` — update command tests
 10. `tests/test_export.py` — add v1→v2 import test, update roundtrip
 
-## Migration Safety
-- Back up `seeds.db` → `seeds.db.bak` before migration
-- JSONL is git-tracked source of truth — data recoverable even if SQLite migration fails
-- Migrations are idempotent (check table/column existence)
-- All migration steps in transactions
-- `seeds sync --flush-only` after migration to update JSONL
-
 ## Verification
-1. `uv run pytest` — all tests pass
-2. `uv run seeds list` — shows all seeds (including former questions as question-type seeds)
-3. `uv run seeds questions` — shows open questions (via relationship query)
-4. `uv run seeds show <id> -q` — shows question-seeds attached via relationship
-5. `uv run seeds search "polymorphic"` — FTS still works
-6. `uv run seeds link <a> --relates-to <b>` — creates typed relationship
-7. `uv run seeds sync --flush-only` — exports v2 JSONL
-8. Reimport from v1 JSONL into fresh DB — backward compat verified
-9. `uv run seeds doctor` — clean health check
+
+All verification is done through the test suite — no manual smoke tests against the production database.
+
+1. **`uv run pytest`** — the single source of truth for correctness
+2. Tests use `SEEDS_DIR` pointed at `tmp_path` fixtures (pytest's built-in temp directories)
+3. Test fixtures include:
+   - A v1 JSONL file with embedded questions and `related_to` arrays (for migration/import testing)
+   - A v2 JSONL file with relationships as outbound edges (for roundtrip testing)
+4. Specific test coverage:
+   - Relationship CRUD (create, query by type/direction, delete, cascade on seed delete)
+   - Question-as-seed lifecycle (`ask` creates seed + relationship, `answer` resolves it)
+   - `is_blocked()` considers both unresolved children and unresolved question-seeds
+   - v1 → v2 import (old format JSONL reconstructed correctly)
+   - v2 export roundtrip
+   - FTS indexes question-seeds by their title/content (no separate `question_texts` column)
+   - `link` command creates typed relationships
+   - `doctor` detects orphaned relationships
 
 ## Open Questions
 
-(To be populated with feedback)
+1. **Relationship type discovery**: How do we handle adding new relationship types over time? Options: (a) just add to the enum and bump a version, (b) allow freeform strings in the DB but validate in the CLI, (c) registry pattern. Leaning toward (a) for simplicity.
+2. **`blocks` relationship**: Strong candidate for early addition. Should `blocks` be directional (A blocks B) and integrate with the existing `is_blocked()` / `blocked` command? This would give seeds the same blocking semantics beads has for issues.
+3. **ID prefix configuration**: The plan assumes `seeds-` as the prefix for this project. Should the prefix be configurable per-project (stored in `.seeds/config` or similar), or is it always derived from the project name?
