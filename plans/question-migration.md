@@ -6,6 +6,54 @@ Two design decisions converging: (1) relationships need types (`relates-to`, `qu
 
 The current model has a `questions` table (separate entity) and a `related_to` JSON array on each seed (untyped, bidirectional). The new model has a single `relationships` table with typed, directed edges, and questions become seeds of type=question linked via a `questions` relationship.
 
+## Relationship Analysis from Production Data
+
+Examined 114 seeds, 36 questions, and 65 seeds with `related_to` links. Here are the relationship patterns actually present:
+
+### Pattern 1: Decision → Idea ("addresses" / "decides-for")
+Decisions linked to the idea they resolve. Strongly directional.
+- `seed-061a` (decision: Use Flask) → `seed-5f7b` (idea: Web UI)
+- `seed-4950` (decision: Use Pico CSS) → `seed-5f7b` (idea: Web UI)
+- `seed-43a0` (decision: Read-only) → `seed-5f7b` (idea: Web UI)
+- `seed-91dc` (decision: Default port) → `seed-5f7b` (idea: Web UI)
+- `seed-80e3` (decision: Show questions in detail) → `seed-5f7b` (idea: Web UI)
+
+### Pattern 2: Concern → Idea/Concern ("raises-concern-about" / clustering)
+Concerns linked to what they're concerned about, or clustered with related concerns.
+- `seed-ed41` (concern: AI adoption) ← `seed-5c22`, `seed-aeb6` (specific friction instances)
+- `seed-f537` (concern: exponential growth) ← `seed-39d3`, `seed-5c7b`, `seed-502a`, `seed-bac9` (related mitigations/observations)
+- `seed-80ba` (concern: question confusion) ↔ `seed-29c0` (idea: question/exploration overlap)
+
+### Pattern 3: Question → Seed ("questions")
+The `questions` table is a clear directed relationship: question asks about a seed.
+- 36 questions across 14 seeds, heavily concentrated on `seed-81a4` (18 questions about shipping beta)
+- Questions have answers (25 answered, 11 open) — the answer relationship is implicit in the current model
+
+### Pattern 4: Exploration → Topic ("explores")
+Explorations linked to the thing they're investigating.
+- `seed-1f89` (exploration: options modeling) ↔ `seed-eedd` (idea: where do alternatives live?)
+- `seed-134e` (exploration: knowledge accumulation) ↔ `seed-dedd.2`, `seed-7e8e`, `seed-1def`, `seed-d2e765de`
+- `seed-73f0` (exploration: why no MCP in beads) ↔ `seed-c989.1` (idea: MCP transport)
+
+### Pattern 5: Mutual/symmetric ("relates-to" — genuinely undifferentiated)
+Some links are genuinely symmetric with no clear directionality:
+- `seed-0301` (markdown rendering) ↔ `seed-ccf0` (prettify markdown) — related ideas, neither depends on the other
+- `seed-7102` (nested view) ↔ `seed-76a1` (toggle nested/flat) — complementary features
+- `seed-4653` ↔ `seed-1fadaed5` — both about linking seeds to external things
+
+### Summary of Observed Relationship Types
+
+| Pattern | Candidate type | Direction | Count (approx) |
+|---------|---------------|-----------|-----------------|
+| Question asks about seed | `questions` | directed | 36 |
+| Answer resolves question | `answers` | directed | 25 |
+| Decision addresses idea | relates-to (TBD) | directed | ~15 |
+| Concern about something | relates-to (TBD) | directed | ~12 |
+| Exploration investigates | relates-to (TBD) | directed | ~8 |
+| Symmetric/undifferentiated | `relates-to` | bidirectional | ~20 |
+
+**Conclusion**: `questions` and `answers` are clearly distinct relationship types. The other patterns (decision-addresses, concern-about, explores) are real but less urgent — they can be refined from `relates-to` over time as the organic discovery process reveals which distinctions matter in practice.
+
 ## Schema Changes
 
 ### New table: `relationships`
@@ -29,12 +77,16 @@ Remove `question_texts` column — questions are now seeds with their own FTS en
 
 ## Key Design Decisions
 
-- **Directed edges**: `relates-to` stored as two rows (A→B, B→A) for bidirectional. `questions` is one directed edge (question-seed → parent-seed).
+- **Directed edges**: `relates-to` stored as two rows (A→B, B→A) for bidirectional. `questions` and `answers` are single directed edges.
 - **Question → seed mapping**: `q.text` → `seed.title`, `q.answer` → `seed.content`, status: OPEN→CAPTURED, ANSWERED→RESOLVED, DEFERRED→DEFERRED. Migrated questions get new project-prefixed IDs (e.g., `seeds-a1b2c3d4`), same as all other seeds. The `q-` prefix is retired.
-- **ID prefix convention**: All seeds use the project name as their ID prefix. In this project, that's `seeds-`. Other projects using the seeds tool would use their own prefix (e.g., `myproject-`). This applies uniformly — questions-turned-seeds are no exception.
+- **ID prefix convention**: All seeds use the project name as their ID prefix. In this project, that's `seeds-`. Hardcoded default for now — no config file exists yet, and adding one isn't necessary for this change. If/when we add project-level configuration, the prefix can become configurable then.
 - **CLI stays familiar**: `seeds ask` and `seeds answer` remain as convenience commands, but create seeds + relationships under the hood.
-- **Relationship types enum**: Start minimal with `relates-to` and `questions`. `relates-to` serves as a placeholder indicating "we haven't identified the specific relationship type yet" — it's a signal that the edge needs refinement, not a permanent category. Additional types (e.g., `blocks`, `answers`, `supersedes`, `duplicates`) will be discovered organically as usage patterns emerge rather than defined speculatively upfront.
-- **`blocks` relationship**: Inspired by beads' blocking concept — some decisions can't be made until other decisions are resolved. This is a strong candidate for an early addition once the base infrastructure is in place.
+- **Relationship types enum**: `relates-to`, `questions`, `answers`. Three types to start:
+  - `questions` — directed: question-seed → seed it asks about
+  - `answers` — directed: answer content lives in the question-seed itself (content field + RESOLVED status), but if a separate seed answers a question, the `answers` edge captures that
+  - `relates-to` — bidirectional placeholder: indicates two seeds are related but we haven't identified the specific relationship yet. Serves as a triage signal — periodic review of `relates-to` edges should extract more specific types over time.
+- **Relationship type discovery**: New types are added to the enum as patterns emerge from reviewing `relates-to` edges. The process is: (1) use `relates-to` by default, (2) periodically look for clusters of `relates-to` that share a pattern, (3) name the pattern and add it to the enum. This is evolutionary, not speculative.
+- **Blocking semantics**: Seeds that have unresolved question-seeds (via `questions` relationship) or unresolved children cannot themselves be resolved. This gives seeds the same "blocked" concept beads has — some decisions can't be made until prerequisite questions/decisions are resolved first.
 - **Export format**: Add `format_version: 2` to JSONL. Relationships exported as outbound edges on each seed. Import handles both v1 (embedded questions, related_to array) and v2.
 
 ## Migration
@@ -48,13 +100,20 @@ Remove `question_texts` column — questions are now seeds with their own FTS en
 
 **No separate migration phase**: Rather than a multi-phase approach where old and new code coexist, we'll do a single atomic migration. The old `questions` table and `related_to` column are migrated and removed in one pass.
 
+**What migration does**:
+1. Creates `relationships` table
+2. For each seed with `related_to` entries: creates bidirectional `relates-to` relationship rows
+3. For each question row: creates a new seed (type=question, title=text, content=answer, appropriate status) and a `questions` relationship from the new seed to its parent seed
+4. Drops `questions` table and `related_to` column
+5. Rebuilds FTS index (simplified, no `question_texts`)
+
 ## Phased Implementation
 
 ### Phase 1: Models + DB layer
 Build the foundation without touching CLI or export.
 
 **`src/seeds/models.py`**:
-- Add `RelationType` enum (initially: `relates-to`, `questions`)
+- Add `RelationType` enum (`relates-to`, `questions`, `answers`)
 - Add `Relationship` dataclass (source_id, target_id, rel_type, created_at)
 - Remove `Question` dataclass and `QuestionStatus` enum
 - Remove `related_to` from `Seed` dataclass
@@ -125,9 +184,4 @@ All verification is done through the test suite — no manual smoke tests agains
    - FTS indexes question-seeds by their title/content (no separate `question_texts` column)
    - `link` command creates typed relationships
    - `doctor` detects orphaned relationships
-
-## Open Questions
-
-1. **Relationship type discovery**: How do we handle adding new relationship types over time? Options: (a) just add to the enum and bump a version, (b) allow freeform strings in the DB but validate in the CLI, (c) registry pattern. Leaning toward (a) for simplicity.
-2. **`blocks` relationship**: Strong candidate for early addition. Should `blocks` be directional (A blocks B) and integrate with the existing `is_blocked()` / `blocked` command? This would give seeds the same blocking semantics beads has for issues.
-3. **ID prefix configuration**: The plan assumes `seeds-` as the prefix for this project. Should the prefix be configurable per-project (stored in `.seeds/config` or similar), or is it always derived from the project name?
+   - Migration from a pre-populated v1 database (questions table + related_to arrays) produces correct relationships
