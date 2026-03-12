@@ -1,9 +1,10 @@
 """Tests for seeds database layer."""
 
 import os
+import sqlite3
 import tempfile
 
-from seeds.db import Database, find_seeds_dir
+from seeds.db import SCHEMA, Database, find_seeds_dir
 from seeds.models import (
     Question,
     QuestionStatus,
@@ -491,3 +492,161 @@ class TestFindSeedsDir:
                 assert result is None
             finally:
                 os.chdir(original_cwd)
+
+
+class TestSearch:
+    """Tests for full-text search."""
+
+    def test_search_by_title(self, db):
+        """Verify search matches seed titles."""
+        db.create_seed(Seed(id="seed-1", title="Deliberation workflow patterns"))
+        db.create_seed(Seed(id="seed-2", title="Database optimization ideas"))
+
+        results = db.search("deliberation")
+        assert len(results) == 1
+        assert results[0].id == "seed-1"
+
+    def test_search_by_content(self, db):
+        """Verify search matches seed content."""
+        db.create_seed(
+            Seed(id="seed-1", title="Some idea", content="We need better prototyping tools")
+        )
+        db.create_seed(
+            Seed(id="seed-2", title="Other idea", content="The database layer is solid")
+        )
+
+        results = db.search("prototyping")
+        assert len(results) == 1
+        assert results[0].id == "seed-1"
+
+    def test_search_by_tags(self, db):
+        """Verify search matches tags stored as JSON."""
+        db.create_seed(Seed(id="seed-1", title="Tagged seed", tags=["architecture", "mcp"]))
+        db.create_seed(Seed(id="seed-2", title="Other seed", tags=["workflow"]))
+
+        results = db.search("architecture")
+        assert len(results) == 1
+        assert results[0].id == "seed-1"
+
+    def test_search_by_question_text(self, db):
+        """Verify search matches attached question text."""
+        db.create_seed(Seed(id="seed-1", title="Design question"))
+        db.create_question(
+            Question(id="q-1", seed_id="seed-1", text="Should we use polymorphic models?")
+        )
+        db.create_seed(Seed(id="seed-2", title="Unrelated"))
+
+        results = db.search("polymorphic")
+        assert len(results) == 1
+        assert results[0].id == "seed-1"
+
+    def test_search_excludes_terminal_by_default(self, db):
+        """Verify search excludes resolved/abandoned seeds."""
+        db.create_seed(Seed(id="seed-1", title="Active deliberation"))
+        db.create_seed(
+            Seed(id="seed-2", title="Old deliberation", status=SeedStatus.RESOLVED)
+        )
+
+        results = db.search("deliberation")
+        assert len(results) == 1
+        assert results[0].id == "seed-1"
+
+    def test_search_include_terminal(self, db):
+        """Verify include_terminal=True returns resolved/abandoned seeds."""
+        db.create_seed(Seed(id="seed-1", title="Active deliberation"))
+        db.create_seed(
+            Seed(id="seed-2", title="Old deliberation", status=SeedStatus.RESOLVED)
+        )
+
+        results = db.search("deliberation", include_terminal=True)
+        assert len(results) == 2
+
+    def test_search_no_results(self, db):
+        """Verify search returns empty list for no matches."""
+        db.create_seed(Seed(id="seed-1", title="Something completely different"))
+
+        results = db.search("nonexistent")
+        assert results == []
+
+    def test_search_prefix_query(self, db):
+        """Verify FTS5 prefix queries work."""
+        db.create_seed(Seed(id="seed-1", title="Deliberation patterns"))
+        db.create_seed(Seed(id="seed-2", title="Delivery pipeline"))
+
+        results = db.search("delib*")
+        assert len(results) == 1
+        assert results[0].id == "seed-1"
+
+    def test_search_multiple_terms(self, db):
+        """Verify multi-word queries match."""
+        db.create_seed(Seed(id="seed-1", title="Agent reasoning capture"))
+        db.create_seed(Seed(id="seed-2", title="Agent workflow patterns"))
+        db.create_seed(Seed(id="seed-3", title="Database optimization"))
+
+        results = db.search("agent reasoning")
+        assert len(results) >= 1
+        ids = [s.id for s in results]
+        assert "seed-1" in ids
+
+    def test_search_updated_content(self, db):
+        """Verify search reflects updated seed content."""
+        seed = Seed(id="seed-1", title="Original title")
+        db.create_seed(seed)
+
+        # Should not match yet
+        assert db.search("polymorphic") == []
+
+        # Update content
+        seed.content = "Explore polymorphic seed models"
+        db.update_seed(seed)
+
+        results = db.search("polymorphic")
+        assert len(results) == 1
+        assert results[0].id == "seed-1"
+
+    def test_search_deleted_seed_removed(self, db):
+        """Verify deleted seeds are removed from search index."""
+        db.create_seed(Seed(id="seed-1", title="Ephemeral idea"))
+
+        assert len(db.search("ephemeral")) == 1
+
+        db.delete_seed("seed-1")
+        assert db.search("ephemeral") == []
+
+    def test_ensure_fts_migrates_existing_db(self, temp_dir):
+        """Verify ensure_fts populates index for pre-FTS databases."""
+        # Create a database with only the base schema (no FTS)
+        db_path = temp_dir / ".seeds" / "seeds.db"
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(db_path)
+        conn.executescript(SCHEMA)
+        conn.execute(
+            "INSERT INTO seeds (id, title, content, status, seed_type, tags, related_to, created_at, updated_at) "
+            "VALUES ('seed-old', 'Legacy seed about prototyping', 'Old content', 'captured', 'idea', '[]', '[]', "
+            "'2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')"
+        )
+        conn.commit()
+        conn.close()
+
+        # Open with Database class — ensure_fts should migrate
+        db = Database(path=db_path)
+        results = db.search("prototyping")
+        assert len(results) == 1
+        assert results[0].id == "seed-old"
+        db.close()
+
+    def test_rebuild_fts(self, db):
+        """Verify rebuild_fts repopulates the entire index."""
+        db.create_seed(Seed(id="seed-1", title="Deliberation patterns"))
+        db.create_seed(Seed(id="seed-2", title="Workflow automation"))
+
+        # Manually corrupt FTS by clearing it
+        conn = db._get_conn()
+        conn.execute("DELETE FROM seeds_fts")
+        conn.commit()
+
+        assert db.search("deliberation") == []
+
+        db.rebuild_fts()
+        assert len(db.search("deliberation")) == 1
+        assert len(db.search("automation")) == 1

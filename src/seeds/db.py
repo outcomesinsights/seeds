@@ -81,6 +81,71 @@ CREATE INDEX IF NOT EXISTS idx_questions_seed ON questions(seed_id);
 CREATE INDEX IF NOT EXISTS idx_questions_status ON questions(status);
 """
 
+# FTS5 virtual table for full-text search across seeds and questions.
+# Uses a content-less ("external content") approach synced via triggers.
+FTS_SCHEMA = """
+CREATE VIRTUAL TABLE IF NOT EXISTS seeds_fts USING fts5(
+    id UNINDEXED,
+    title,
+    content,
+    tags,
+    question_texts,
+    tokenize='porter unicode61'
+);
+"""
+
+# Triggers to keep FTS index in sync with seed changes.
+FTS_TRIGGERS = """
+CREATE TRIGGER IF NOT EXISTS seeds_fts_insert AFTER INSERT ON seeds
+BEGIN
+    INSERT INTO seeds_fts(id, title, content, tags, question_texts)
+    VALUES (NEW.id, NEW.title, COALESCE(NEW.content, ''), COALESCE(NEW.tags, ''), '');
+END;
+
+CREATE TRIGGER IF NOT EXISTS seeds_fts_update AFTER UPDATE ON seeds
+BEGIN
+    DELETE FROM seeds_fts WHERE id = OLD.id;
+    INSERT INTO seeds_fts(id, title, content, tags, question_texts)
+    VALUES (
+        NEW.id, NEW.title, COALESCE(NEW.content, ''),
+        COALESCE(NEW.tags, ''),
+        COALESCE((SELECT GROUP_CONCAT(text, ' ') FROM questions WHERE seed_id = NEW.id), '')
+    );
+END;
+
+CREATE TRIGGER IF NOT EXISTS seeds_fts_delete AFTER DELETE ON seeds
+BEGIN
+    DELETE FROM seeds_fts WHERE id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS questions_fts_insert AFTER INSERT ON questions
+BEGIN
+    DELETE FROM seeds_fts WHERE id = NEW.seed_id;
+    INSERT INTO seeds_fts(id, title, content, tags, question_texts)
+    SELECT s.id, s.title, COALESCE(s.content, ''), COALESCE(s.tags, ''),
+           COALESCE((SELECT GROUP_CONCAT(text, ' ') FROM questions WHERE seed_id = s.id), '')
+    FROM seeds s WHERE s.id = NEW.seed_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS questions_fts_update AFTER UPDATE ON questions
+BEGIN
+    DELETE FROM seeds_fts WHERE id = NEW.seed_id;
+    INSERT INTO seeds_fts(id, title, content, tags, question_texts)
+    SELECT s.id, s.title, COALESCE(s.content, ''), COALESCE(s.tags, ''),
+           COALESCE((SELECT GROUP_CONCAT(text, ' ') FROM questions WHERE seed_id = s.id), '')
+    FROM seeds s WHERE s.id = NEW.seed_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS questions_fts_delete AFTER DELETE ON questions
+BEGIN
+    DELETE FROM seeds_fts WHERE id = OLD.seed_id;
+    INSERT OR IGNORE INTO seeds_fts(id, title, content, tags, question_texts)
+    SELECT s.id, s.title, COALESCE(s.content, ''), COALESCE(s.tags, ''),
+           COALESCE((SELECT GROUP_CONCAT(text, ' ') FROM questions WHERE seed_id = s.id), '')
+    FROM seeds s WHERE s.id = OLD.seed_id;
+END;
+"""
+
 
 def _datetime_to_str(dt: datetime | None) -> str | None:
     """Convert datetime to ISO format string."""
@@ -122,6 +187,8 @@ class Database:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         conn = self._get_conn()
         conn.executescript(SCHEMA)
+        conn.executescript(FTS_SCHEMA)
+        conn.executescript(FTS_TRIGGERS)
         conn.commit()
 
         # Create .gitignore inside .seeds/ (like beads' .beads/.gitignore)
@@ -409,6 +476,68 @@ class Database:
     def get_open_questions(self) -> list[Question]:
         """Get all open questions across all seeds."""
         return self.list_questions(status=QuestionStatus.OPEN)
+
+    # --- Search operations ---
+
+    def ensure_fts(self) -> None:
+        """Ensure FTS tables and triggers exist, creating and populating if needed.
+
+        Safe to call on existing databases — migrates them to FTS support.
+        """
+        conn = self._get_conn()
+        # Check if FTS table exists
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='seeds_fts'"
+        ).fetchone()
+        if row is None:
+            conn.executescript(FTS_SCHEMA)
+            conn.executescript(FTS_TRIGGERS)
+            self.rebuild_fts()
+
+    def rebuild_fts(self) -> None:
+        """Rebuild FTS index from current seed and question data."""
+        conn = self._get_conn()
+        conn.execute("DELETE FROM seeds_fts")
+        conn.execute(
+            """
+            INSERT INTO seeds_fts(id, title, content, tags, question_texts)
+            SELECT
+                s.id, s.title, COALESCE(s.content, ''), COALESCE(s.tags, ''),
+                COALESCE((SELECT GROUP_CONCAT(q.text, ' ')
+                          FROM questions q WHERE q.seed_id = s.id), '')
+            FROM seeds s
+            """
+        )
+        conn.commit()
+
+    def search(self, query: str, include_terminal: bool = False) -> list[Seed]:
+        """Full-text search across seed titles, content, tags, and questions.
+
+        Args:
+            query: FTS5 query string (supports AND, OR, NOT, prefix*, "phrases").
+            include_terminal: If True, include resolved/abandoned seeds.
+
+        Returns:
+            Seeds matching the query, ordered by relevance.
+        """
+        self.ensure_fts()
+        conn = self._get_conn()
+
+        sql = """
+            SELECT s.* FROM seeds s
+            JOIN seeds_fts fts ON s.id = fts.id
+            WHERE seeds_fts MATCH ?
+        """
+        params: list[str] = [query]
+
+        if not include_terminal:
+            sql += " AND s.status NOT IN (?, ?)"
+            params.extend([SeedStatus.RESOLVED.value, SeedStatus.ABANDONED.value])
+
+        sql += " ORDER BY rank"
+
+        rows = conn.execute(sql, params).fetchall()
+        return [self._row_to_seed(row) for row in rows]
 
     # --- Tag operations ---
 

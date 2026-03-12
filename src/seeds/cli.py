@@ -267,6 +267,32 @@ def format_seed_detail(
 
 
 @main.command()
+@click.argument("query")
+@click.option("--all", "include_all", is_flag=True, help="Include resolved/abandoned")
+@pass_context
+def search(ctx: Context, query: str, include_all: bool) -> None:
+    """Full-text search across seeds and questions.
+
+    QUERY is an FTS5 search string. Supports:
+      - Simple words: seeds search deliberation
+      - Phrases: seeds search '"agent reasoning"'
+      - Prefix: seeds search 'delib*'
+      - Boolean: seeds search 'agent OR sweep'
+    """
+    db = ctx.get_db()
+
+    results = db.search(query, include_terminal=include_all)
+
+    if not results:
+        click.echo(f"No seeds matching '{query}'.")
+        return
+
+    click.echo(f"Found {len(results)} seed(s):")
+    for seed in results:
+        click.echo(format_seed_line(seed, db))
+
+
+@main.command()
 @click.argument("seed_id")
 @click.option("--questions", "-q", is_flag=True, help="Include attached questions")
 @click.option(
