@@ -4,6 +4,8 @@ import pytest
 from seeds.models import (
     Question,
     QuestionStatus,
+    Relationship,
+    RelationType,
     Seed,
     SeedStatus,
     SeedType,
@@ -169,6 +171,48 @@ class TestSeed:
         for status in [SeedStatus.CAPTURED, SeedStatus.EXPLORING, SeedStatus.DEFERRED]:
             seed = Seed(id="seed-test", title="Test", status=status)
             assert seed.is_terminal() is False, f"{status} should not be terminal"
+
+
+class TestRelationType:
+    """Tests for RelationType enum."""
+
+    def test_all_types_exist(self):
+        """Verify all expected relationship types are defined."""
+        assert RelationType.RELATES_TO.value == "relates-to"
+        assert RelationType.QUESTIONS.value == "questions"
+        assert RelationType.ANSWERS.value == "answers"
+
+    def test_type_from_value(self):
+        """Verify types can be created from string values."""
+        assert RelationType("relates-to") == RelationType.RELATES_TO
+        assert RelationType("questions") == RelationType.QUESTIONS
+        assert RelationType("answers") == RelationType.ANSWERS
+
+    def test_invalid_type_raises(self):
+        """Verify invalid relationship type raises ValueError."""
+        with pytest.raises(ValueError):
+            RelationType("invalid")
+
+
+class TestRelationship:
+    """Tests for Relationship dataclass."""
+
+    def test_create_minimal_relationship(self):
+        """Verify relationship can be created with minimal args."""
+        rel = Relationship(source_id="seed-a", target_id="seed-b")
+        assert rel.source_id == "seed-a"
+        assert rel.target_id == "seed-b"
+        assert rel.rel_type == RelationType.RELATES_TO
+        assert rel.created_at is not None
+
+    def test_create_typed_relationship(self):
+        """Verify relationship with explicit type."""
+        rel = Relationship(
+            source_id="seed-q",
+            target_id="seed-t",
+            rel_type=RelationType.QUESTIONS,
+        )
+        assert rel.rel_type == RelationType.QUESTIONS
 
 
 class TestQuestion:

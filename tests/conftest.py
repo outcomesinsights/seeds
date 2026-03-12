@@ -10,6 +10,8 @@ from seeds.db import Database
 from seeds.models import (
     Question,
     QuestionStatus,
+    Relationship,
+    RelationType,
     Seed,
     SeedStatus,
     SeedType,

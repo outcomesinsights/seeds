@@ -31,11 +31,23 @@ class SeedType(Enum):
 
 
 class QuestionStatus(Enum):
-    """States for a question attached to a seed."""
+    """States for a question attached to a seed.
+
+    Deprecated: Questions are being migrated to seeds with relationships.
+    Will be removed in Phase 2.
+    """
 
     OPEN = "open"  # Needs an answer
     ANSWERED = "answered"  # Has been answered
     DEFERRED = "deferred"  # Postponed for later
+
+
+class RelationType(Enum):
+    """Types of relationships between seeds."""
+
+    RELATES_TO = "relates-to"  # Bidirectional, undifferentiated
+    QUESTIONS = "questions"  # Directed: question-seed → seed it asks about
+    ANSWERS = "answers"  # Directed: answering-seed → question-seed
 
 
 def generate_id(prefix: str = "seed") -> str:
@@ -103,8 +115,22 @@ class Seed:
 
 
 @dataclass
+class Relationship:
+    """A typed, directed relationship between two seeds."""
+
+    source_id: str
+    target_id: str
+    rel_type: RelationType = RelationType.RELATES_TO
+    created_at: datetime = field(default_factory=now_utc)
+
+
+@dataclass
 class Question:
-    """A question attached to a seed."""
+    """A question attached to a seed.
+
+    Deprecated: Questions are being migrated to seeds with relationships.
+    Will be removed in Phase 2.
+    """
 
     id: str
     seed_id: str

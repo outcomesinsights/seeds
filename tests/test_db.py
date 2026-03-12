@@ -8,6 +8,8 @@ from seeds.db import SCHEMA, Database, find_seeds_dir
 from seeds.models import (
     Question,
     QuestionStatus,
+    Relationship,
+    RelationType,
     Seed,
     SeedStatus,
     SeedType,
@@ -650,3 +652,345 @@ class TestSearch:
         db.rebuild_fts()
         assert len(db.search("deliberation")) == 1
         assert len(db.search("automation")) == 1
+
+
+class TestRelationships:
+    """Tests for relationship CRUD operations."""
+
+    def test_create_relates_to_bidirectional(self, db):
+        """Verify relates-to creates two rows (bidirectional)."""
+        db.create_seed(Seed(id="seed-a", title="A"))
+        db.create_seed(Seed(id="seed-b", title="B"))
+
+        rel = db.create_relationship("seed-a", "seed-b", RelationType.RELATES_TO)
+        assert rel.source_id == "seed-a"
+        assert rel.target_id == "seed-b"
+        assert rel.rel_type == RelationType.RELATES_TO
+
+        # Both directions should exist
+        outbound = db.get_relationships("seed-a", direction="outbound")
+        assert len(outbound) == 1
+        assert outbound[0].target_id == "seed-b"
+
+        inbound = db.get_relationships("seed-a", direction="inbound")
+        assert len(inbound) == 1
+        assert inbound[0].source_id == "seed-b"
+
+    def test_create_directed_relationship(self, db):
+        """Verify questions/answers relationships are one-directional."""
+        db.create_seed(Seed(id="seed-q", title="Why?", seed_type=SeedType.QUESTION))
+        db.create_seed(Seed(id="seed-t", title="Target"))
+
+        db.create_relationship("seed-q", "seed-t", RelationType.QUESTIONS)
+
+        # Only outbound from question
+        outbound = db.get_relationships("seed-q", direction="outbound")
+        assert len(outbound) == 1
+        assert outbound[0].rel_type == RelationType.QUESTIONS
+
+        # No reverse edge created
+        outbound_from_target = db.get_relationships(
+            "seed-t", rel_type=RelationType.QUESTIONS, direction="outbound"
+        )
+        assert len(outbound_from_target) == 0
+
+    def test_get_relationships_filter_by_type(self, db):
+        """Verify filtering relationships by type."""
+        db.create_seed(Seed(id="seed-a", title="A"))
+        db.create_seed(Seed(id="seed-b", title="B"))
+        db.create_seed(Seed(id="seed-q", title="Q?", seed_type=SeedType.QUESTION))
+
+        db.create_relationship("seed-a", "seed-b", RelationType.RELATES_TO)
+        db.create_relationship("seed-q", "seed-a", RelationType.QUESTIONS)
+
+        relates = db.get_relationships("seed-a", rel_type=RelationType.RELATES_TO)
+        assert len(relates) == 2  # Both directions of relates-to
+
+        questions = db.get_relationships("seed-a", rel_type=RelationType.QUESTIONS)
+        assert len(questions) == 1  # Only inbound question
+
+    def test_get_relationships_both_direction(self, db):
+        """Verify 'both' direction returns all relationships."""
+        db.create_seed(Seed(id="seed-a", title="A"))
+        db.create_seed(Seed(id="seed-b", title="B"))
+        db.create_seed(Seed(id="seed-q", title="Q?", seed_type=SeedType.QUESTION))
+
+        db.create_relationship("seed-a", "seed-b", RelationType.RELATES_TO)
+        db.create_relationship("seed-q", "seed-a", RelationType.QUESTIONS)
+
+        all_rels = db.get_relationships("seed-a")
+        # relates-to: a→b and b→a, plus questions: q→a
+        assert len(all_rels) == 3
+
+    def test_delete_relationship_relates_to(self, db):
+        """Verify deleting relates-to removes both directions."""
+        db.create_seed(Seed(id="seed-a", title="A"))
+        db.create_seed(Seed(id="seed-b", title="B"))
+
+        db.create_relationship("seed-a", "seed-b", RelationType.RELATES_TO)
+        assert len(db.get_relationships("seed-a")) == 2
+
+        result = db.delete_relationship("seed-a", "seed-b", RelationType.RELATES_TO)
+        assert result is True
+        assert len(db.get_relationships("seed-a")) == 0
+        assert len(db.get_relationships("seed-b")) == 0
+
+    def test_delete_relationship_directed(self, db):
+        """Verify deleting directed relationship removes only one row."""
+        db.create_seed(Seed(id="seed-q", title="Q?", seed_type=SeedType.QUESTION))
+        db.create_seed(Seed(id="seed-t", title="Target"))
+
+        db.create_relationship("seed-q", "seed-t", RelationType.QUESTIONS)
+        result = db.delete_relationship("seed-q", "seed-t", RelationType.QUESTIONS)
+        assert result is True
+        assert len(db.get_relationships("seed-q")) == 0
+
+    def test_delete_nonexistent_relationship(self, db):
+        """Verify deleting nonexistent relationship returns False."""
+        result = db.delete_relationship("seed-x", "seed-y", RelationType.RELATES_TO)
+        assert result is False
+
+    def test_create_duplicate_relationship_ignored(self, db):
+        """Verify creating duplicate relationship is silently ignored."""
+        db.create_seed(Seed(id="seed-a", title="A"))
+        db.create_seed(Seed(id="seed-b", title="B"))
+
+        db.create_relationship("seed-a", "seed-b", RelationType.RELATES_TO)
+        db.create_relationship("seed-a", "seed-b", RelationType.RELATES_TO)
+
+        # Should still be just 2 rows (bidirectional), not 4
+        all_rels = db.get_relationships("seed-a")
+        assert len(all_rels) == 2
+
+    def test_delete_seed_cascades_relationships(self, db):
+        """Verify deleting a seed removes its relationships."""
+        db.create_seed(Seed(id="seed-a", title="A"))
+        db.create_seed(Seed(id="seed-b", title="B"))
+        db.create_seed(Seed(id="seed-q", title="Q?", seed_type=SeedType.QUESTION))
+
+        db.create_relationship("seed-a", "seed-b", RelationType.RELATES_TO)
+        db.create_relationship("seed-q", "seed-a", RelationType.QUESTIONS)
+
+        db.delete_seed("seed-a")
+
+        # All relationships involving seed-a should be gone
+        assert len(db.get_relationships("seed-b")) == 0
+        assert len(db.get_relationships("seed-q")) == 0
+
+
+class TestQuestionsForSeed:
+    """Tests for get_questions_for_seed (relationship-based)."""
+
+    def test_get_questions_for_seed_empty(self, db):
+        """Verify returns empty list when no question relationships."""
+        db.create_seed(Seed(id="seed-t", title="Target"))
+        result = db.get_questions_for_seed("seed-t")
+        assert result == []
+
+    def test_get_questions_for_seed(self, db):
+        """Verify returns question-seeds linked via 'questions' relationship."""
+        db.create_seed(Seed(id="seed-t", title="Target"))
+        db.create_seed(
+            Seed(id="seed-q1", title="Question 1?", seed_type=SeedType.QUESTION)
+        )
+        db.create_seed(
+            Seed(id="seed-q2", title="Question 2?", seed_type=SeedType.QUESTION)
+        )
+
+        db.create_relationship("seed-q1", "seed-t", RelationType.QUESTIONS)
+        db.create_relationship("seed-q2", "seed-t", RelationType.QUESTIONS)
+
+        questions = db.get_questions_for_seed("seed-t")
+        assert len(questions) == 2
+        ids = [q.id for q in questions]
+        assert "seed-q1" in ids
+        assert "seed-q2" in ids
+
+    def test_get_questions_excludes_relates_to(self, db):
+        """Verify get_questions_for_seed only returns 'questions' relationships."""
+        db.create_seed(Seed(id="seed-t", title="Target"))
+        db.create_seed(Seed(id="seed-r", title="Related"))
+        db.create_seed(
+            Seed(id="seed-q", title="Question?", seed_type=SeedType.QUESTION)
+        )
+
+        db.create_relationship("seed-r", "seed-t", RelationType.RELATES_TO)
+        db.create_relationship("seed-q", "seed-t", RelationType.QUESTIONS)
+
+        questions = db.get_questions_for_seed("seed-t")
+        assert len(questions) == 1
+        assert questions[0].id == "seed-q"
+
+
+class TestBlockedWithQuestionSeeds:
+    """Tests for is_blocked considering question-seed relationships."""
+
+    def test_blocked_by_unresolved_question_seed(self, db):
+        """Verify seed is blocked by unresolved question-seeds."""
+        db.create_seed(Seed(id="seed-t", title="Target"))
+        db.create_seed(
+            Seed(
+                id="seed-q",
+                title="Unanswered?",
+                seed_type=SeedType.QUESTION,
+                status=SeedStatus.CAPTURED,
+            )
+        )
+        db.create_relationship("seed-q", "seed-t", RelationType.QUESTIONS)
+
+        assert db.is_blocked("seed-t") is True
+
+    def test_not_blocked_when_question_resolved(self, db):
+        """Verify seed is not blocked when question-seed is resolved."""
+        db.create_seed(Seed(id="seed-t", title="Target"))
+        db.create_seed(
+            Seed(
+                id="seed-q",
+                title="Answered",
+                seed_type=SeedType.QUESTION,
+                status=SeedStatus.RESOLVED,
+            )
+        )
+        db.create_relationship("seed-q", "seed-t", RelationType.QUESTIONS)
+
+        assert db.is_blocked("seed-t") is False
+
+    def test_blocked_by_either_children_or_questions(self, db):
+        """Verify blocked considers both children and question-seeds."""
+        db.create_seed(Seed(id="seed-p", title="Parent"))
+        # Resolved child — not blocking
+        db.create_seed(
+            Seed(id="seed-p.1", title="Child", status=SeedStatus.RESOLVED)
+        )
+        # Unresolved question — blocking
+        db.create_seed(
+            Seed(
+                id="seed-q",
+                title="Blocking question?",
+                seed_type=SeedType.QUESTION,
+                status=SeedStatus.CAPTURED,
+            )
+        )
+        db.create_relationship("seed-q", "seed-p", RelationType.QUESTIONS)
+
+        assert db.is_blocked("seed-p") is True
+
+
+class TestMigration:
+    """Tests for migrate_to_relationships."""
+
+    def test_migration_converts_related_to(self, temp_dir):
+        """Verify migration creates relationships from related_to arrays."""
+        db_path = temp_dir / ".seeds" / "seeds.db"
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Create a v1 database with related_to
+        conn = sqlite3.connect(db_path)
+        conn.executescript(SCHEMA)
+        now = "2026-01-01T00:00:00+00:00"
+        conn.execute(
+            "INSERT INTO seeds (id, title, status, seed_type, tags, related_to, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("seed-a", "Seed A", "captured", "idea", "[]", '["seed-b"]', now, now),
+        )
+        conn.execute(
+            "INSERT INTO seeds (id, title, status, seed_type, tags, related_to, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("seed-b", "Seed B", "captured", "idea", "[]", '["seed-a"]', now, now),
+        )
+        conn.commit()
+        conn.close()
+
+        db = Database(path=db_path)
+        counts = db.migrate_to_relationships()
+
+        assert counts["related_to"] == 2  # One from each seed
+        rels = db.get_relationships("seed-a", rel_type=RelationType.RELATES_TO)
+        assert len(rels) == 2  # Bidirectional (from migration + the stored reverse)
+        db.close()
+
+    def test_migration_converts_questions(self, temp_dir):
+        """Verify migration creates question-seeds from questions table."""
+        db_path = temp_dir / ".seeds" / "seeds.db"
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        conn = sqlite3.connect(db_path)
+        conn.executescript(SCHEMA)
+        now = "2026-01-01T00:00:00+00:00"
+
+        # Create a seed with questions
+        conn.execute(
+            "INSERT INTO seeds (id, title, status, seed_type, tags, related_to, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("seed-parent", "Parent", "exploring", "idea", "[]", "[]", now, now),
+        )
+        conn.execute(
+            "INSERT INTO questions (id, seed_id, text, answer, status, created_at, answered_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("q-1", "seed-parent", "Open question?", None, "open", now, None),
+        )
+        conn.execute(
+            "INSERT INTO questions (id, seed_id, text, answer, status, created_at, answered_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("q-2", "seed-parent", "Answered?", "Yes", "answered", now, now),
+        )
+        conn.execute(
+            "INSERT INTO questions (id, seed_id, text, answer, status, created_at, answered_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("q-3", "seed-parent", "Deferred?", None, "deferred", now, None),
+        )
+        conn.commit()
+        conn.close()
+
+        db = Database(path=db_path)
+        counts = db.migrate_to_relationships()
+
+        assert counts["questions"] == 3
+
+        # Question-seeds should exist
+        question_seeds = db.get_questions_for_seed("seed-parent")
+        assert len(question_seeds) == 3
+
+        # Check status mapping
+        statuses = {qs.title: qs.status for qs in question_seeds}
+        assert statuses["Open question?"] == SeedStatus.CAPTURED
+        assert statuses["Answered?"] == SeedStatus.RESOLVED
+        assert statuses["Deferred?"] == SeedStatus.DEFERRED
+
+        # Check answered question has content
+        for qs in question_seeds:
+            if qs.title == "Answered?":
+                assert qs.content == "Yes"
+                assert qs.seed_type == SeedType.QUESTION
+
+        db.close()
+
+    def test_migration_idempotent(self, temp_dir):
+        """Verify running migration twice doesn't duplicate data."""
+        db_path = temp_dir / ".seeds" / "seeds.db"
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        conn = sqlite3.connect(db_path)
+        conn.executescript(SCHEMA)
+        now = "2026-01-01T00:00:00+00:00"
+        conn.execute(
+            "INSERT INTO seeds (id, title, status, seed_type, tags, related_to, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("seed-a", "A", "captured", "idea", "[]", '["seed-b"]', now, now),
+        )
+        conn.execute(
+            "INSERT INTO seeds (id, title, status, seed_type, tags, related_to, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("seed-b", "B", "captured", "idea", "[]", "[]", now, now),
+        )
+        conn.commit()
+        conn.close()
+
+        db = Database(path=db_path)
+        db.migrate_to_relationships()
+        db.migrate_to_relationships()  # Second time
+
+        # Should still be just the expected relationships
+        rels = db.get_relationships("seed-a", rel_type=RelationType.RELATES_TO)
+        assert len(rels) == 2  # Bidirectional, not duplicated
+        db.close()

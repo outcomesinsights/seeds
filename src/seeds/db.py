@@ -11,9 +11,12 @@ from pathlib import Path
 from seeds.models import (
     Question,
     QuestionStatus,
+    Relationship,
+    RelationType,
     Seed,
     SeedStatus,
     SeedType,
+    generate_id,
     now_utc,
 )
 
@@ -75,10 +78,24 @@ CREATE TABLE IF NOT EXISTS questions (
     FOREIGN KEY (seed_id) REFERENCES seeds(id)
 );
 
+CREATE TABLE IF NOT EXISTS relationships (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_id TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    rel_type TEXT NOT NULL DEFAULT 'relates-to',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (source_id) REFERENCES seeds(id),
+    FOREIGN KEY (target_id) REFERENCES seeds(id),
+    UNIQUE(source_id, target_id, rel_type)
+);
+
 CREATE INDEX IF NOT EXISTS idx_seeds_status ON seeds(status);
 CREATE INDEX IF NOT EXISTS idx_seeds_type ON seeds(seed_type);
 CREATE INDEX IF NOT EXISTS idx_questions_seed ON questions(seed_id);
 CREATE INDEX IF NOT EXISTS idx_questions_status ON questions(status);
+CREATE INDEX IF NOT EXISTS idx_relationships_source ON relationships(source_id);
+CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(target_id);
+CREATE INDEX IF NOT EXISTS idx_relationships_type ON relationships(rel_type);
 """
 
 # FTS5 virtual table for full-text search across seeds and questions.
@@ -286,10 +303,18 @@ class Database:
         return seed
 
     def delete_seed(self, seed_id: str) -> bool:
-        """Delete a seed by ID. Returns True if deleted."""
+        """Delete a seed by ID. Returns True if deleted.
+
+        Also deletes associated questions (legacy) and relationships.
+        """
         conn = self._get_conn()
-        # Also delete associated questions
+        # Delete associated questions (legacy, until Phase 2)
         conn.execute("DELETE FROM questions WHERE seed_id = ?", (seed_id,))
+        # Cascade-delete relationships where this seed is source or target
+        conn.execute(
+            "DELETE FROM relationships WHERE source_id = ? OR target_id = ?",
+            (seed_id, seed_id),
+        )
         result = conn.execute("DELETE FROM seeds WHERE id = ?", (seed_id,))
         conn.commit()
         return result.rowcount > 0
@@ -362,9 +387,18 @@ class Database:
         return f"{parent_id}.{max_num + 1}"
 
     def is_blocked(self, seed_id: str) -> bool:
-        """Check if a seed is blocked (has unresolved children)."""
+        """Check if a seed is blocked.
+
+        A seed is blocked if it has unresolved children OR unresolved
+        question-seeds (seeds linked via a 'questions' relationship).
+        """
         children = self.get_children(seed_id)
-        return any(not child.is_terminal() for child in children)
+        if any(not child.is_terminal() for child in children):
+            return True
+
+        # Check for unresolved question-seeds via relationships
+        question_seeds = self.get_questions_for_seed(seed_id)
+        return any(not qs.is_terminal() for qs in question_seeds)
 
     def get_blocked_seeds(self) -> list[Seed]:
         """Get all seeds that are blocked by unresolved children."""
@@ -476,6 +510,265 @@ class Database:
     def get_open_questions(self) -> list[Question]:
         """Get all open questions across all seeds."""
         return self.list_questions(status=QuestionStatus.OPEN)
+
+    # --- Relationship operations ---
+
+    def create_relationship(
+        self,
+        source_id: str,
+        target_id: str,
+        rel_type: RelationType = RelationType.RELATES_TO,
+        created_at: datetime | None = None,
+    ) -> Relationship:
+        """Create a relationship between two seeds.
+
+        For RELATES_TO (bidirectional), creates two rows (A→B and B→A).
+        For directed types (QUESTIONS, ANSWERS), creates one row.
+
+        Returns the relationship (source→target direction).
+        """
+        if created_at is None:
+            created_at = now_utc()
+        conn = self._get_conn()
+
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO relationships (source_id, target_id, rel_type, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (source_id, target_id, rel_type.value, _datetime_to_str(created_at)),
+        )
+
+        if rel_type == RelationType.RELATES_TO:
+            # Bidirectional: also create reverse edge
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO relationships (source_id, target_id, rel_type, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (target_id, source_id, rel_type.value, _datetime_to_str(created_at)),
+            )
+
+        conn.commit()
+        return Relationship(
+            source_id=source_id,
+            target_id=target_id,
+            rel_type=rel_type,
+            created_at=created_at,
+        )
+
+    def get_relationships(
+        self,
+        seed_id: str,
+        rel_type: RelationType | None = None,
+        direction: str = "both",
+    ) -> list[Relationship]:
+        """Get relationships for a seed.
+
+        Args:
+            seed_id: The seed to query relationships for.
+            rel_type: Filter by relationship type (None = all types).
+            direction: 'outbound' (source=seed), 'inbound' (target=seed), or 'both'.
+
+        Returns:
+            List of Relationship objects.
+        """
+        conn = self._get_conn()
+        conditions = []
+        params: list[str] = []
+
+        if direction == "outbound":
+            conditions.append("source_id = ?")
+            params.append(seed_id)
+        elif direction == "inbound":
+            conditions.append("target_id = ?")
+            params.append(seed_id)
+        else:  # both
+            conditions.append("(source_id = ? OR target_id = ?)")
+            params.extend([seed_id, seed_id])
+
+        if rel_type is not None:
+            conditions.append("rel_type = ?")
+            params.append(rel_type.value)
+
+        query = f"SELECT * FROM relationships WHERE {' AND '.join(conditions)} ORDER BY created_at"
+        rows = conn.execute(query, params).fetchall()
+
+        return [
+            Relationship(
+                source_id=row["source_id"],
+                target_id=row["target_id"],
+                rel_type=RelationType(row["rel_type"]),
+                created_at=_str_to_datetime(row["created_at"]) or now_utc(),
+            )
+            for row in rows
+        ]
+
+    def delete_relationship(
+        self,
+        source_id: str,
+        target_id: str,
+        rel_type: RelationType = RelationType.RELATES_TO,
+    ) -> bool:
+        """Delete a relationship between two seeds.
+
+        For RELATES_TO (bidirectional), deletes both directions.
+        Returns True if any rows were deleted.
+        """
+        conn = self._get_conn()
+        result = conn.execute(
+            "DELETE FROM relationships WHERE source_id = ? AND target_id = ? AND rel_type = ?",
+            (source_id, target_id, rel_type.value),
+        )
+        deleted = result.rowcount > 0
+
+        if rel_type == RelationType.RELATES_TO:
+            result2 = conn.execute(
+                "DELETE FROM relationships WHERE source_id = ? AND target_id = ? AND rel_type = ?",
+                (target_id, source_id, rel_type.value),
+            )
+            deleted = deleted or result2.rowcount > 0
+
+        conn.commit()
+        return deleted
+
+    def get_questions_for_seed(self, seed_id: str) -> list[Seed]:
+        """Get question-seeds linked to a seed via 'questions' relationships.
+
+        Returns Seed objects (of type=question) that question the given seed.
+        """
+        conn = self._get_conn()
+        rows = conn.execute(
+            """
+            SELECT s.* FROM seeds s
+            JOIN relationships r ON s.id = r.source_id
+            WHERE r.target_id = ? AND r.rel_type = ?
+            ORDER BY s.created_at
+            """,
+            (seed_id, RelationType.QUESTIONS.value),
+        ).fetchall()
+        return [self._row_to_seed(row) for row in rows]
+
+    # --- Migration ---
+
+    def migrate_to_relationships(self) -> dict[str, int]:
+        """Migrate from legacy questions table and related_to to relationships.
+
+        This migration:
+        1. Creates relationships table if needed
+        2. Converts related_to JSON arrays to bidirectional relates-to relationships
+        3. Converts questions to question-type seeds with 'questions' relationships
+        4. Does NOT drop old tables (that happens when CLI/export are updated in Phase 2)
+
+        Returns dict with counts: {'related_to': N, 'questions': N}
+        """
+        conn = self._get_conn()
+        counts = {"related_to": 0, "questions": 0}
+
+        # Ensure relationships table exists
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS relationships (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_id TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                rel_type TEXT NOT NULL DEFAULT 'relates-to',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (source_id) REFERENCES seeds(id),
+                FOREIGN KEY (target_id) REFERENCES seeds(id),
+                UNIQUE(source_id, target_id, rel_type)
+            )
+            """
+        )
+
+        # Step 1: Migrate related_to arrays to relationships
+        # Check if related_to column exists
+        columns = [
+            row[1] for row in conn.execute("PRAGMA table_info(seeds)").fetchall()
+        ]
+        if "related_to" in columns:
+            rows = conn.execute(
+                "SELECT id, related_to, created_at FROM seeds WHERE related_to != '[]' AND related_to IS NOT NULL"
+            ).fetchall()
+            for row in rows:
+                related_ids = json.loads(row["related_to"]) if row["related_to"] else []
+                for related_id in related_ids:
+                    # Create bidirectional relates-to edges
+                    conn.execute(
+                        """
+                        INSERT OR IGNORE INTO relationships (source_id, target_id, rel_type, created_at)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (row["id"], related_id, RelationType.RELATES_TO.value, row["created_at"]),
+                    )
+                    conn.execute(
+                        """
+                        INSERT OR IGNORE INTO relationships (source_id, target_id, rel_type, created_at)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (related_id, row["id"], RelationType.RELATES_TO.value, row["created_at"]),
+                    )
+                    counts["related_to"] += 1
+
+        # Step 2: Migrate questions to seeds + relationships
+        # Check if questions table exists
+        table_exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='questions'"
+        ).fetchone()
+        if table_exists:
+            q_rows = conn.execute("SELECT * FROM questions").fetchall()
+            for q in q_rows:
+                # Map question status to seed status
+                q_status = q["status"]
+                if q_status == "open":
+                    seed_status = SeedStatus.CAPTURED.value
+                elif q_status == "answered":
+                    seed_status = SeedStatus.RESOLVED.value
+                elif q_status == "deferred":
+                    seed_status = SeedStatus.DEFERRED.value
+                else:
+                    seed_status = SeedStatus.CAPTURED.value
+
+                # Generate a new seed-prefixed ID for the migrated question
+                new_id = generate_id("seeds")
+
+                resolved_at = q["answered_at"] if q_status == "answered" else None
+
+                # Create question as a seed
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO seeds (
+                        id, title, content, status, seed_type,
+                        tags, related_to, created_at, updated_at, resolved_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        new_id,
+                        q["text"],
+                        q["answer"] or "",
+                        seed_status,
+                        SeedType.QUESTION.value,
+                        "[]",
+                        "[]",
+                        q["created_at"],
+                        q["created_at"],
+                        resolved_at,
+                    ),
+                )
+
+                # Create 'questions' relationship: question-seed → parent seed
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO relationships (source_id, target_id, rel_type, created_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (new_id, q["seed_id"], RelationType.QUESTIONS.value, q["created_at"]),
+                )
+                counts["questions"] += 1
+
+        conn.commit()
+        return counts
 
     # --- Search operations ---
 
