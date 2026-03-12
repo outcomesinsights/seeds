@@ -65,18 +65,18 @@
     </section>
     {% endif %}
 
-    {% if questions %}
+    {% if question_seeds %}
     <section>
         <h3>Questions</h3>
-        {% for question in questions %}
+        {% for qs in question_seeds %}
         <article>
             <header>
-                <strong>{{ question.id }}</strong>
-                <span class="question-status-{{ question.status.value }}">{{ question.status.value }}</span>
+                <a href="/seed/{{ qs.id }}"><strong>{{ qs.id }}</strong></a>
+                <span class="seed-status status-{{ qs.status.value }}">{{ qs.status.value }}</span>
             </header>
-            <p><strong>Q:</strong> {{ question.text }}</p>
-            {% if question.answer %}
-            <p><strong>A:</strong> {{ question.answer }}</p>
+            <p><strong>Q:</strong> {{ qs.title }}</p>
+            {% if qs.content %}
+            <p><strong>A:</strong> {{ qs.content }}</p>
             {% endif %}
         </article>
         {% endfor %}

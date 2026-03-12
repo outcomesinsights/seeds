@@ -16,8 +16,8 @@ PRIME_OUTPUT = """# seeds Workflow Context
 - Use seeds to capture ideas, questions, and deliberation
 - `seeds jot "..."` for quick capture during mind-racing
 - Mark seeds as `deferred` when not ready to explore
-- Questions are first-class - use `seeds ask` to track them
-- A seed is "blocked" if it has unresolved children
+- Questions are seeds — `seeds ask` creates a question-type seed with a relationship
+- A seed is "blocked" if it has unresolved children or unanswered question-seeds
 
 ## What to Capture (IMPORTANT)
 
@@ -62,7 +62,7 @@ Seeds should capture the **journey**, not just conclusions. When investigating:
 - `seeds defer <id>` - Move to backlog
 - `seeds abandon <id> --reason="..."` - Abandon with reason
 - `seeds update <id> --append="..."` - Add to content
-- `seeds answer <q-id> "..."` - Answer a question
+- `seeds answer <seed-id> "..."` - Answer a question-seed
 
 ### Viewing
 - `seeds list` - All non-terminal seeds
@@ -79,7 +79,8 @@ Claude Code CLI truncates bash output, so users can't see full seed content from
 **How**: Run `seeds show <id>`, then paste the output in your response. The bash output comes to you fully even if truncated on user's screen.
 
 ### Relationships
-- `seeds link <id> --relates-to <other-id>` - Link seeds
+- `seeds link <id> --relates-to <other-id>` - Link seeds (default: relates-to)
+- `seeds link <id> --relates-to <other-id> --type=questions` - Typed relationship
 
 ### Session End
 - `seeds sync --flush-only` - Export to JSONL

@@ -8,7 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from seeds.db import SEEDS_DIR, Database
-from seeds.models import Question, QuestionStatus, Seed, SeedStatus, SeedType
+from seeds.models import (
+    RelationType,
+    Seed,
+    SeedStatus,
+    SeedType,
+    generate_id,
+)
 
 JSONL_FILE = "seeds.jsonl"
 
@@ -20,35 +26,35 @@ def _datetime_to_str(dt: datetime | None) -> str | None:
     return dt.isoformat()
 
 
-def seed_to_dict(seed: Seed, questions: list[Question]) -> dict[str, Any]:
-    """Convert a seed and its questions to a dictionary for export."""
+def seed_to_dict(seed: Seed, db: Database) -> dict[str, Any]:
+    """Convert a seed and its outbound relationships to a dictionary for export."""
+    # Get outbound relationships for this seed
+    rels = db.get_relationships(seed.id, direction="outbound")
+
     return {
+        "format_version": 2,
         "id": seed.id,
         "title": seed.title,
         "content": seed.content,
         "status": seed.status.value,
         "seed_type": seed.seed_type.value,
         "tags": seed.tags,
-        "related_to": seed.related_to,
         "created_at": _datetime_to_str(seed.created_at),
         "updated_at": _datetime_to_str(seed.updated_at),
         "resolved_at": _datetime_to_str(seed.resolved_at),
-        "questions": [
+        "relationships": [
             {
-                "id": q.id,
-                "text": q.text,
-                "answer": q.answer,
-                "status": q.status.value,
-                "created_at": _datetime_to_str(q.created_at),
-                "answered_at": _datetime_to_str(q.answered_at),
+                "target_id": r.target_id,
+                "rel_type": r.rel_type.value,
+                "created_at": _datetime_to_str(r.created_at),
             }
-            for q in questions
+            for r in rels
         ],
     }
 
 
 def export_to_jsonl(db: Database, output_path: Path | None = None) -> Path:
-    """Export all seeds to JSONL format.
+    """Export all seeds to JSONL format (v2 with relationships).
 
     Args:
         db: Database instance
@@ -69,15 +75,124 @@ def export_to_jsonl(db: Database, output_path: Path | None = None) -> Path:
     # Write JSONL
     with open(output_path, "w") as f:
         for seed in seeds:
-            questions = db.list_questions(seed_id=seed.id)
-            data = seed_to_dict(seed, questions)
+            data = seed_to_dict(seed, db)
             f.write(json.dumps(data, ensure_ascii=False) + "\n")
 
     return output_path
 
 
+def _import_v1_record(db: Database, data: dict[str, Any]) -> bool:
+    """Import a v1 format record (embedded questions, related_to array).
+
+    Returns True if a seed was imported.
+    """
+    # Check if seed exists
+    if db.get_seed(data["id"]):
+        return False
+
+    # Create seed (v1 has related_to on the seed object)
+    seed = Seed(
+        id=data["id"],
+        title=data["title"],
+        content=data.get("content", ""),
+        status=SeedStatus(data["status"]),
+        seed_type=SeedType(data["seed_type"]),
+        tags=data.get("tags", []),
+        related_to=data.get("related_to", []),
+        created_at=datetime.fromisoformat(data["created_at"]),
+        updated_at=datetime.fromisoformat(data["updated_at"]),
+        resolved_at=(
+            datetime.fromisoformat(data["resolved_at"])
+            if data.get("resolved_at")
+            else None
+        ),
+    )
+    db.create_seed(seed)
+
+    # Convert related_to to relationships
+    for related_id in data.get("related_to", []):
+        db.create_relationship(data["id"], related_id, RelationType.RELATES_TO)
+
+    # Convert embedded questions to question-seeds + relationships
+    for q_data in data.get("questions", []):
+        q_status = q_data.get("status", "open")
+        if q_status == "open":
+            seed_status = SeedStatus.CAPTURED
+        elif q_status == "answered":
+            seed_status = SeedStatus.RESOLVED
+        elif q_status == "deferred":
+            seed_status = SeedStatus.DEFERRED
+        else:
+            seed_status = SeedStatus.CAPTURED
+
+        q_seed_id = generate_id("seeds")
+        resolved_at = (
+            datetime.fromisoformat(q_data["answered_at"])
+            if q_data.get("answered_at")
+            else None
+        )
+        q_seed = Seed(
+            id=q_seed_id,
+            title=q_data["text"],
+            content=q_data.get("answer") or "",
+            status=seed_status,
+            seed_type=SeedType.QUESTION,
+            created_at=datetime.fromisoformat(q_data["created_at"]),
+            updated_at=datetime.fromisoformat(q_data["created_at"]),
+            resolved_at=resolved_at,
+        )
+        db.create_seed(q_seed)
+        db.create_relationship(q_seed_id, data["id"], RelationType.QUESTIONS)
+
+    return True
+
+
+def _import_v2_record(db: Database, data: dict[str, Any]) -> bool:
+    """Import a v2 format record (relationships as outbound edges).
+
+    Returns True if a seed was imported.
+    """
+    if db.get_seed(data["id"]):
+        return False
+
+    seed = Seed(
+        id=data["id"],
+        title=data["title"],
+        content=data.get("content", ""),
+        status=SeedStatus(data["status"]),
+        seed_type=SeedType(data["seed_type"]),
+        tags=data.get("tags", []),
+        created_at=datetime.fromisoformat(data["created_at"]),
+        updated_at=datetime.fromisoformat(data["updated_at"]),
+        resolved_at=(
+            datetime.fromisoformat(data["resolved_at"])
+            if data.get("resolved_at")
+            else None
+        ),
+    )
+    db.create_seed(seed)
+
+    # Create relationships from outbound edges
+    for rel_data in data.get("relationships", []):
+        rel_type = RelationType(rel_data["rel_type"])
+        created_at = (
+            datetime.fromisoformat(rel_data["created_at"])
+            if rel_data.get("created_at")
+            else None
+        )
+        db.create_relationship(
+            data["id"], rel_data["target_id"], rel_type, created_at
+        )
+
+    return True
+
+
 def import_from_jsonl(db: Database, input_path: Path | None = None) -> int:
     """Import seeds from JSONL format.
+
+    Detects format version automatically:
+    - v1: has 'related_to' array and embedded 'questions'
+    - v2: has 'format_version: 2' and 'relationships' array
 
     Args:
         db: Database instance
@@ -101,47 +216,13 @@ def import_from_jsonl(db: Database, input_path: Path | None = None) -> int:
 
             data = json.loads(line)
 
-            # Check if seed exists
-            existing = db.get_seed(data["id"])
-            if existing:
-                # Skip existing seeds (could add merge logic later)
-                continue
+            # Detect format version
+            if data.get("format_version") == 2:
+                imported = _import_v2_record(db, data)
+            else:
+                imported = _import_v1_record(db, data)
 
-            # Create seed
-            seed = Seed(
-                id=data["id"],
-                title=data["title"],
-                content=data.get("content", ""),
-                status=SeedStatus(data["status"]),
-                seed_type=SeedType(data["seed_type"]),
-                tags=data.get("tags", []),
-                related_to=data.get("related_to", []),
-                created_at=datetime.fromisoformat(data["created_at"]),
-                updated_at=datetime.fromisoformat(data["updated_at"]),
-                resolved_at=(
-                    datetime.fromisoformat(data["resolved_at"])
-                    if data.get("resolved_at")
-                    else None
-                ),
-            )
-            db.create_seed(seed)
-            count += 1
-
-            # Create questions
-            for q_data in data.get("questions", []):
-                question = Question(
-                    id=q_data["id"],
-                    seed_id=data["id"],
-                    text=q_data["text"],
-                    answer=q_data.get("answer"),
-                    status=QuestionStatus(q_data["status"]),
-                    created_at=datetime.fromisoformat(q_data["created_at"]),
-                    answered_at=(
-                        datetime.fromisoformat(q_data["answered_at"])
-                        if q_data.get("answered_at")
-                        else None
-                    ),
-                )
-                db.create_question(question)
+            if imported:
+                count += 1
 
     return count

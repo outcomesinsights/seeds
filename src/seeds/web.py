@@ -8,7 +8,7 @@ from typing import Any
 from flask import Flask, abort, render_template
 
 from seeds.db import DB_FILE, Database, find_seeds_dir
-from seeds.models import Seed, get_parent_id
+from seeds.models import RelationType, Seed, SeedType, get_parent_id
 
 
 def build_seed_tree(seeds: list[Seed]) -> list[dict[str, Any]]:
@@ -112,13 +112,16 @@ def create_app(seeds_dir: Path | None = None) -> Flask:
             db.close()
             abort(404)
 
-        questions = db.list_questions(seed_id=seed_id)
+        question_seeds = db.get_questions_for_seed(seed_id)
         children = db.get_children(seed_id)
 
-        # Get related seeds (resolve IDs to actual seeds for display)
+        # Get related seeds via relationships
         related_seeds = []
-        for related_id in seed.related_to:
-            related = db.get_seed(related_id)
+        relates_to = db.get_relationships(
+            seed_id, rel_type=RelationType.RELATES_TO, direction="outbound"
+        )
+        for rel in relates_to:
+            related = db.get_seed(rel.target_id)
             if related:
                 related_seeds.append(related)
 
@@ -131,7 +134,7 @@ def create_app(seeds_dir: Path | None = None) -> Flask:
         return render_template(
             "detail.html",
             seed=seed,
-            questions=questions,
+            question_seeds=question_seeds,
             children=children,
             related_seeds=related_seeds,
             parent=parent,
@@ -139,15 +142,22 @@ def create_app(seeds_dir: Path | None = None) -> Flask:
 
     @app.route("/questions")
     def questions_list() -> str:
-        """List all open questions."""
+        """List all open questions (question-type seeds)."""
         db = get_db()
-        questions = db.get_open_questions()
+        open_questions = db.list_seeds(
+            seed_type=SeedType.QUESTION, include_terminal=False
+        )
 
-        # Get parent seed for each question
+        # Get parent seed for each question via relationship
         questions_with_seeds = []
-        for q in questions:
-            seed = db.get_seed(q.seed_id)
-            questions_with_seeds.append((q, seed))
+        for q in open_questions:
+            rels = db.get_relationships(
+                q.id, rel_type=RelationType.QUESTIONS, direction="outbound"
+            )
+            parent_seed = None
+            if rels:
+                parent_seed = db.get_seed(rels[0].target_id)
+            questions_with_seeds.append((q, parent_seed))
 
         db.close()
         return render_template("questions.html", questions=questions_with_seeds)

@@ -9,8 +9,7 @@ from click.testing import CliRunner
 from seeds.cli import main
 from seeds.db import SEEDS_DIR, Database
 from seeds.models import (
-    Question,
-    QuestionStatus,
+    RelationType,
     Seed,
     SeedStatus,
     SeedType,
@@ -316,23 +315,24 @@ class TestUpdateCommand:
 
 
 class TestQuestionCommands:
-    """Tests for question-related commands."""
+    """Tests for question-related commands (question-seeds + relationships)."""
 
-    def test_ask_creates_question(self, cli_runner, env_with_seeds):
-        """Verify ask creates a question attached to seed."""
+    def test_ask_creates_question_seed(self, cli_runner, env_with_seeds):
+        """Verify ask creates a question-type seed with relationship."""
         result = cli_runner.invoke(
             main,
             ["ask", "What is the answer?", "--seed", "seed-test1"],
         )
         assert result.exit_code == 0
-        assert "q-" in result.output
+        assert "seeds-" in result.output
         assert "What is the answer?" in result.output
         assert "Attached to: seed-test1" in result.output
 
         db = Database()
-        questions = db.list_questions(seed_id="seed-test1")
-        assert len(questions) == 1
-        assert questions[0].text == "What is the answer?"
+        question_seeds = db.get_questions_for_seed("seed-test1")
+        assert len(question_seeds) == 1
+        assert question_seeds[0].title == "What is the answer?"
+        assert question_seeds[0].seed_type == SeedType.QUESTION
         db.close()
 
     def test_ask_invalid_seed(self, cli_runner, initialized_env):
@@ -344,42 +344,38 @@ class TestQuestionCommands:
         assert result.exit_code != 0
         assert "not found" in result.output
 
-    def test_answer_updates_question(self, cli_runner, env_with_seeds):
-        """Verify answer updates question."""
-        # First create a question
-        db = Database()
-        question = Question(
-            id="q-test",
-            seed_id="seed-test1",
-            text="What is the answer?",
+    def test_answer_resolves_question_seed(self, cli_runner, env_with_seeds):
+        """Verify answer sets content and resolves question-seed."""
+        # Create a question-seed via ask
+        result = cli_runner.invoke(
+            main,
+            ["ask", "What is the answer?", "--seed", "seed-test1"],
         )
-        db.create_question(question)
-        db.close()
+        assert result.exit_code == 0
+        # Extract question-seed ID from output
+        q_id = result.output.split(":")[0].split()[-1]
 
-        result = cli_runner.invoke(main, ["answer", "q-test", "42"])
+        result = cli_runner.invoke(main, ["answer", q_id, "42"])
         assert result.exit_code == 0
         assert "42" in result.output
 
         db = Database()
-        q = db.get_question("q-test")
-        assert q.answer == "42"
-        assert q.status == QuestionStatus.ANSWERED
+        q_seed = db.get_seed(q_id)
+        assert q_seed.content == "42"
+        assert q_seed.status == SeedStatus.RESOLVED
         db.close()
 
     def test_questions_lists_open(self, cli_runner, env_with_seeds):
-        """Verify questions shows open questions."""
-        db = Database()
-        question = Question(
-            id="q-test",
-            seed_id="seed-test1",
-            text="Open question?",
+        """Verify questions shows open question-seeds."""
+        # Create a question via ask
+        result = cli_runner.invoke(
+            main,
+            ["ask", "Open question?", "--seed", "seed-test1"],
         )
-        db.create_question(question)
-        db.close()
+        assert result.exit_code == 0
 
         result = cli_runner.invoke(main, ["questions"])
         assert result.exit_code == 0
-        assert "q-test" in result.output
         assert "Open question?" in result.output
 
 
@@ -387,7 +383,7 @@ class TestLinkCommand:
     """Tests for 'seeds link' command."""
 
     def test_link_creates_bidirectional_relationship(self, cli_runner, env_with_seeds):
-        """Verify link creates bidirectional relationship."""
+        """Verify link creates bidirectional relates-to relationship."""
         result = cli_runner.invoke(
             main,
             ["link", "seed-test1", "--relates-to", "seed-test2"],
@@ -396,10 +392,17 @@ class TestLinkCommand:
         assert "Linked" in result.output
 
         db = Database()
-        seed1 = db.get_seed("seed-test1")
-        seed2 = db.get_seed("seed-test2")
-        assert "seed-test2" in seed1.related_to
-        assert "seed-test1" in seed2.related_to
+        rels = db.get_relationships(
+            "seed-test1", rel_type=RelationType.RELATES_TO, direction="outbound"
+        )
+        assert len(rels) == 1
+        assert rels[0].target_id == "seed-test2"
+        # Reverse direction too
+        rels2 = db.get_relationships(
+            "seed-test2", rel_type=RelationType.RELATES_TO, direction="outbound"
+        )
+        assert len(rels2) == 1
+        assert rels2[0].target_id == "seed-test1"
         db.close()
 
     def test_link_already_linked(self, cli_runner, env_with_seeds):
@@ -417,6 +420,22 @@ class TestLinkCommand:
         )
         assert result.exit_code == 0
         assert "Already linked" in result.output
+
+    def test_link_with_type(self, cli_runner, env_with_seeds):
+        """Verify link with --type creates typed relationship."""
+        result = cli_runner.invoke(
+            main,
+            ["link", "seed-test1", "--relates-to", "seed-test2", "--type", "questions"],
+        )
+        assert result.exit_code == 0
+        assert "questions" in result.output
+
+        db = Database()
+        rels = db.get_relationships(
+            "seed-test1", rel_type=RelationType.QUESTIONS, direction="outbound"
+        )
+        assert len(rels) == 1
+        db.close()
 
 
 class TestReadyDeferredBlocked:
@@ -544,12 +563,13 @@ class TestShowDetailFormatting:
         assert "Detailed content here" in result.output
 
     def test_show_with_related(self, cli_runner, initialized_env):
-        """Verify show displays related seeds."""
+        """Verify show displays related seeds via relationships."""
         db = Database()
-        seed1 = Seed(id="seed-r1", title="Seed 1", related_to=["seed-r2"])
-        seed2 = Seed(id="seed-r2", title="Seed 2", related_to=["seed-r1"])
+        seed1 = Seed(id="seed-r1", title="Seed 1")
+        seed2 = Seed(id="seed-r2", title="Seed 2")
         db.create_seed(seed1)
         db.create_seed(seed2)
+        db.create_relationship("seed-r1", "seed-r2", RelationType.RELATES_TO)
         db.close()
 
         result = cli_runner.invoke(main, ["show", "seed-r1"])
@@ -564,29 +584,31 @@ class TestShowDetailFormatting:
         assert "Parent: seed-test1" in result.output
 
     def test_show_with_questions_flag(self, cli_runner, env_with_seeds):
-        """Verify show --questions displays attached questions."""
+        """Verify show --questions displays question-seeds via relationships."""
         db = Database()
-        question = Question(id="q-show", seed_id="seed-test1", text="Show this?")
-        db.create_question(question)
+        q_seed = Seed(id="seeds-qshow", title="Show this?", seed_type=SeedType.QUESTION)
+        db.create_seed(q_seed)
+        db.create_relationship("seeds-qshow", "seed-test1", RelationType.QUESTIONS)
         db.close()
 
         result = cli_runner.invoke(main, ["show", "seed-test1", "--questions"])
         assert result.exit_code == 0
         assert "Questions:" in result.output
-        assert "q-show" in result.output
+        assert "seeds-qshow" in result.output
         assert "Show this?" in result.output
 
     def test_show_with_answered_question(self, cli_runner, env_with_seeds):
-        """Verify show displays answered questions with answers."""
+        """Verify show displays answered question-seeds with content."""
         db = Database()
-        question = Question(
-            id="q-answered",
-            seed_id="seed-test1",
-            text="Answered?",
-            answer="Yes it is",
-            status=QuestionStatus.ANSWERED,
+        q_seed = Seed(
+            id="seeds-qanswered",
+            title="Answered?",
+            content="Yes it is",
+            seed_type=SeedType.QUESTION,
+            status=SeedStatus.RESOLVED,
         )
-        db.create_question(question)
+        db.create_seed(q_seed)
+        db.create_relationship("seeds-qanswered", "seed-test1", RelationType.QUESTIONS)
         db.close()
 
         result = cli_runner.invoke(main, ["show", "seed-test1", "--questions"])
@@ -671,11 +693,11 @@ class TestUpdateContentAndTags:
 
 
 class TestAnswerNotFound:
-    """Test for answering nonexistent question."""
+    """Test for answering nonexistent question-seed."""
 
     def test_answer_nonexistent_question(self, cli_runner, initialized_env):
-        """Verify answer fails for nonexistent question."""
-        result = cli_runner.invoke(main, ["answer", "q-nonexistent", "The answer"])
+        """Verify answer fails for nonexistent question-seed."""
+        result = cli_runner.invoke(main, ["answer", "seeds-nonexistent", "The answer"])
         assert result.exit_code != 0
         assert "not found" in result.output
 
@@ -692,16 +714,18 @@ class TestQuestionsFiltering:
     def test_questions_filter_by_seed(self, cli_runner, env_with_seeds):
         """Verify questions --seed filters by seed."""
         db = Database()
-        q1 = Question(id="q-s1", seed_id="seed-test1", text="Q for seed1?")
-        q2 = Question(id="q-s2", seed_id="seed-test2", text="Q for seed2?")
-        db.create_question(q1)
-        db.create_question(q2)
+        q1 = Seed(id="seeds-qs1", title="Q for seed1?", seed_type=SeedType.QUESTION)
+        q2 = Seed(id="seeds-qs2", title="Q for seed2?", seed_type=SeedType.QUESTION)
+        db.create_seed(q1)
+        db.create_seed(q2)
+        db.create_relationship("seeds-qs1", "seed-test1", RelationType.QUESTIONS)
+        db.create_relationship("seeds-qs2", "seed-test2", RelationType.QUESTIONS)
         db.close()
 
         result = cli_runner.invoke(main, ["questions", "--seed", "seed-test1"])
         assert result.exit_code == 0
-        assert "q-s1" in result.output
-        assert "q-s2" not in result.output
+        assert "seeds-qs1" in result.output
+        assert "seeds-qs2" not in result.output
 
 
 class TestLinkNotFound:
@@ -712,6 +736,15 @@ class TestLinkNotFound:
         result = cli_runner.invoke(
             main,
             ["link", "seed-test1", "--relates-to", "nonexistent"],
+        )
+        assert result.exit_code != 0
+        assert "not found" in result.output
+
+    def test_link_nonexistent_source(self, cli_runner, initialized_env):
+        """Verify link fails when source seed doesn't exist."""
+        result = cli_runner.invoke(
+            main,
+            ["link", "nonexistent", "--relates-to", "also-nonexistent"],
         )
         assert result.exit_code != 0
         assert "not found" in result.output
@@ -742,10 +775,11 @@ class TestTreeAdvanced:
         assert "seed-p.1.1" in result.output
 
     def test_tree_shows_related(self, cli_runner, initialized_env):
-        """Verify tree shows related seeds."""
+        """Verify tree shows related seeds via relationships."""
         db = Database()
-        db.create_seed(Seed(id="seed-x", title="Main", related_to=["seed-y"]))
+        db.create_seed(Seed(id="seed-x", title="Main"))
         db.create_seed(Seed(id="seed-y", title="Related"))
+        db.create_relationship("seed-x", "seed-y", RelationType.RELATES_TO)
         db.close()
 
         result = cli_runner.invoke(main, ["tree", "seed-x"])
@@ -756,7 +790,13 @@ class TestTreeAdvanced:
     def test_tree_shows_missing_related(self, cli_runner, initialized_env):
         """Verify tree handles missing related seeds gracefully."""
         db = Database()
-        db.create_seed(Seed(id="seed-x", title="Main", related_to=["seed-gone"]))
+        db.create_seed(Seed(id="seed-x", title="Main"))
+        db.create_seed(Seed(id="seed-gone", title="Will be deleted"))
+        db.create_relationship("seed-x", "seed-gone", RelationType.RELATES_TO)
+        # Delete the target but leave the relationship orphaned
+        conn = db._get_conn()
+        conn.execute("DELETE FROM seeds WHERE id = 'seed-gone'")
+        conn.commit()
         db.close()
 
         result = cli_runner.invoke(main, ["tree", "seed-x"])
@@ -792,10 +832,13 @@ class TestDoctorCommand:
         assert "warning" in result.output
 
     def test_doctor_shows_open_questions(self, cli_runner, env_with_seeds):
-        """Verify doctor reports open questions."""
+        """Verify doctor reports open question-seeds."""
         db = Database()
-        question = Question(id="q-doc", seed_id="seed-test1", text="Doctor question?")
-        db.create_question(question)
+        q_seed = Seed(
+            id="seeds-qdoc", title="Doctor question?", seed_type=SeedType.QUESTION
+        )
+        db.create_seed(q_seed)
+        db.create_relationship("seeds-qdoc", "seed-test1", RelationType.QUESTIONS)
         db.close()
 
         # Create JSONL to avoid stale warning noise

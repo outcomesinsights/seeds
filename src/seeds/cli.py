@@ -11,7 +11,7 @@ import click
 
 from seeds import __version__
 from seeds.db import SEEDS_DIR, Database
-from seeds.models import QuestionStatus, Seed, SeedStatus, SeedType, generate_id
+from seeds.models import RelationType, Seed, SeedStatus, SeedType, generate_id
 
 
 class Context:
@@ -241,9 +241,13 @@ def format_seed_detail(
             status_mark = "●" if child.is_terminal() else "○"
             lines.append(f"    {status_mark} {child.id}: {child.title}")
 
-    # Show related
-    if seed.related_to:
-        lines.append(f"  Related to: {', '.join(seed.related_to)}")
+    # Show related (via relationships table)
+    relates_to = db.get_relationships(
+        seed.id, rel_type=RelationType.RELATES_TO, direction="outbound"
+    )
+    if relates_to:
+        related_ids = [r.target_id for r in relates_to]
+        lines.append(f"  Related to: {', '.join(related_ids)}")
 
     # Content
     if seed.content:
@@ -251,17 +255,17 @@ def format_seed_detail(
         lines.append("Content:")
         lines.append(seed.content)
 
-    # Questions
+    # Questions (question-seeds linked via 'questions' relationship)
     if include_questions:
-        qs = db.list_questions(seed_id=seed.id)
-        if qs:
+        question_seeds = db.get_questions_for_seed(seed.id)
+        if question_seeds:
             lines.append("")
             lines.append("Questions:")
-            for q in qs:
-                status_mark = "●" if q.status == QuestionStatus.ANSWERED else "○"
-                lines.append(f"  {status_mark} {q.id}: {q.text}")
-                if q.answer:
-                    lines.append(f"    → {q.answer}")
+            for qs in question_seeds:
+                status_mark = "●" if qs.is_terminal() else "○"
+                lines.append(f"  {status_mark} {qs.id}: {qs.title}")
+                if qs.content:
+                    lines.append(f"    → {qs.content}")
 
     return "\n".join(lines)
 
@@ -366,7 +370,7 @@ def deferred(ctx: Context) -> None:
 @main.command()
 @pass_context
 def blocked(ctx: Context) -> None:
-    """Show seeds blocked by unresolved children."""
+    """Show seeds blocked by unresolved children or questions."""
     db = ctx.get_db()
 
     seeds = db.get_blocked_seeds()
@@ -375,13 +379,19 @@ def blocked(ctx: Context) -> None:
         click.echo("No blocked seeds.")
         return
 
-    click.echo("Blocked by unresolved children:")
+    click.echo("Blocked seeds:")
     for seed in seeds:
-        children = db.get_children(seed.id)
-        unresolved = [c for c in children if not c.is_terminal()]
         click.echo(f"  {seed.id}: {seed.title}")
-        for child in unresolved:
-            click.echo(f"    ○ {child.id}: {child.title}")
+        # Show unresolved children
+        children = db.get_children(seed.id)
+        for child in children:
+            if not child.is_terminal():
+                click.echo(f"    ○ {child.id}: {child.title}")
+        # Show unresolved question-seeds
+        question_seeds = db.get_questions_for_seed(seed.id)
+        for qs in question_seeds:
+            if not qs.is_terminal():
+                click.echo(f"    ? {qs.id}: {qs.title}")
 
 
 # --- Status change commands ---
@@ -517,6 +527,7 @@ def update(
 def ask(ctx: Context, question_text: str, seed_id: str) -> None:
     """Ask a question and attach it to a seed.
 
+    Creates a question-type seed and links it via a 'questions' relationship.
     QUESTION_TEXT is the question to ask.
     """
     db = ctx.get_db()
@@ -527,12 +538,15 @@ def ask(ctx: Context, question_text: str, seed_id: str) -> None:
         click.echo(f"Error: Seed '{seed_id}' not found.", err=True)
         sys.exit(1)
 
-    from seeds.models import Question
+    question_id = generate_id("seeds")
+    question_seed = Seed(
+        id=question_id,
+        title=question_text,
+        seed_type=SeedType.QUESTION,
+    )
 
-    question_id = generate_id("q")
-    question = Question(id=question_id, seed_id=seed_id, text=question_text)
-
-    db.create_question(question)
+    db.create_seed(question_seed)
+    db.create_relationship(question_id, seed_id, RelationType.QUESTIONS)
     click.echo(f"○ {question_id}: {question_text}")
     click.echo(f"  Attached to: {seed_id}")
 
@@ -542,26 +556,25 @@ def ask(ctx: Context, question_text: str, seed_id: str) -> None:
 @click.argument("answer_text")
 @pass_context
 def answer(ctx: Context, question_id: str, answer_text: str) -> None:
-    """Answer a question.
+    """Answer a question-seed.
 
-    QUESTION_ID is the ID of the question to answer.
-    ANSWER_TEXT is the answer.
+    QUESTION_ID is the ID of the question-seed to answer.
+    ANSWER_TEXT is the answer (stored as seed content).
     """
     db = ctx.get_db()
 
-    question = db.get_question(question_id)
-    if question is None:
+    from seeds.models import now_utc
+
+    question_seed = db.get_seed(question_id)
+    if question_seed is None:
         click.echo(f"Error: Question '{question_id}' not found.", err=True)
         sys.exit(1)
 
-    from seeds.models import now_utc
-
-    question.answer = answer_text
-    question.status = QuestionStatus.ANSWERED
-    question.answered_at = now_utc()
-
-    db.update_question(question)
-    click.echo(f"● {question_id}: {question.text}")
+    question_seed.content = answer_text
+    question_seed.status = SeedStatus.RESOLVED
+    question_seed.resolved_at = now_utc()
+    db.update_seed(question_seed)
+    click.echo(f"● {question_id}: {question_seed.title}")
     click.echo(f"  → {answer_text}")
 
 
@@ -569,13 +582,17 @@ def answer(ctx: Context, question_id: str, answer_text: str) -> None:
 @click.option("--seed", "seed_id", help="Filter by seed ID")
 @pass_context
 def questions(ctx: Context, seed_id: str | None) -> None:
-    """List open questions."""
+    """List open questions (question-type seeds that are unresolved)."""
     db = ctx.get_db()
 
     if seed_id:
-        qs = db.list_questions(seed_id=seed_id, status=QuestionStatus.OPEN)
+        # Get question-seeds for a specific seed
+        qs = [
+            q for q in db.get_questions_for_seed(seed_id) if not q.is_terminal()
+        ]
     else:
-        qs = db.get_open_questions()
+        # Get all unresolved question-type seeds
+        qs = db.list_seeds(seed_type=SeedType.QUESTION, include_terminal=False)
 
     if not qs:
         click.echo("No open questions.")
@@ -583,42 +600,60 @@ def questions(ctx: Context, seed_id: str | None) -> None:
 
     click.echo("Open questions:")
     for q in qs:
-        seed = db.get_seed(q.seed_id)
-        seed_title = seed.title if seed else "?"
-        click.echo(f"  ○ {q.id}: {q.text}")
-        click.echo(f"    └─ {q.seed_id}: {seed_title}")
+        # Find which seed this question is about
+        rels = db.get_relationships(
+            q.id, rel_type=RelationType.QUESTIONS, direction="outbound"
+        )
+        if rels:
+            target_seed = db.get_seed(rels[0].target_id)
+            target_title = target_seed.title if target_seed else "?"
+            click.echo(f"  ○ {q.id}: {q.title}")
+            click.echo(f"    └─ {rels[0].target_id}: {target_title}")
+        else:
+            click.echo(f"  ○ {q.id}: {q.title}")
 
 
 # --- Relationship commands ---
 
 
+RELATIONSHIP_TYPES = [t.value for t in RelationType]
+
+
 @main.command()
 @click.argument("seed_id")
 @click.option("--relates-to", "related_id", required=True, help="ID of related seed")
+@click.option(
+    "--type",
+    "rel_type",
+    type=click.Choice(RELATIONSHIP_TYPES),
+    default="relates-to",
+    help="Relationship type",
+)
 @pass_context
-def link(ctx: Context, seed_id: str, related_id: str) -> None:
-    """Link a seed to another seed (loose coupling)."""
+def link(ctx: Context, seed_id: str, related_id: str, rel_type: str) -> None:
+    """Link a seed to another seed via typed relationship."""
     db = ctx.get_db()
 
-    seed = get_seed_or_exit(db, seed_id)
+    get_seed_or_exit(db, seed_id)
     related = db.get_seed(related_id)
     if related is None:
         click.echo(f"Error: Seed '{related_id}' not found.", err=True)
         sys.exit(1)
 
-    if related_id in seed.related_to:
+    rel_type_enum = RelationType(rel_type)
+
+    # Check if already linked
+    existing = db.get_relationships(seed_id, rel_type=rel_type_enum, direction="outbound")
+    if any(r.target_id == related_id for r in existing):
         click.echo(f"Already linked: {seed_id} ↔ {related_id}")
         return
 
-    # Add bidirectional link
-    seed.related_to.append(related_id)
-    db.update_seed(seed)
+    db.create_relationship(seed_id, related_id, rel_type_enum)
 
-    if seed_id not in related.related_to:
-        related.related_to.append(seed_id)
-        db.update_seed(related)
-
-    click.echo(f"Linked: {seed_id} ↔ {related_id}")
+    if rel_type_enum == RelationType.RELATES_TO:
+        click.echo(f"Linked: {seed_id} ↔ {related_id}")
+    else:
+        click.echo(f"Linked: {seed_id} —[{rel_type}]→ {related_id}")
 
 
 @main.command()
@@ -674,16 +709,19 @@ def tree(ctx: Context, seed_id: str) -> None:
             for gc in grandchildren:
                 print_seed(gc, 2)
 
-    # Show related
-    if seed.related_to:
+    # Show related (via relationships)
+    relates_to = db.get_relationships(
+        seed_id, rel_type=RelationType.RELATES_TO, direction="outbound"
+    )
+    if relates_to:
         click.echo()
         click.echo("Related:")
-        for related_id in seed.related_to:
-            related = db.get_seed(related_id)
+        for rel in relates_to:
+            related = db.get_seed(rel.target_id)
             if related:
                 click.echo(f"  ↔ {related.id}: {related.title}")
             else:
-                click.echo(f"  ↔ {related_id}: (not found)")
+                click.echo(f"  ↔ {rel.target_id}: (not found)")
 
 
 # --- Sync and export commands ---
@@ -775,21 +813,23 @@ def doctor(ctx: Context) -> None:
     else:
         check_warn("Seeds", "No open seeds")
 
-    # Check for orphaned questions
+    # Check for orphaned relationships
     click.echo()
-    click.echo("Questions:")
-    all_questions = db.list_questions()
-    orphaned = []
-    for q in all_questions:
-        if db.get_seed(q.seed_id) is None:
-            orphaned.append(q)
+    click.echo("Relationships:")
+    conn = db._get_conn()
+    all_rels = conn.execute("SELECT * FROM relationships").fetchall()
+    orphaned_rels = []
+    for rel in all_rels:
+        if db.get_seed(rel["source_id"]) is None or db.get_seed(rel["target_id"]) is None:
+            orphaned_rels.append(rel)
 
-    if not orphaned:
-        check_pass(f"{len(all_questions)} questions, no orphans")
+    if not orphaned_rels:
+        check_pass(f"{len(all_rels)} relationships, no orphans")
     else:
-        check_warn("Questions", f"{len(orphaned)} orphaned questions")
+        check_warn("Relationships", f"{len(orphaned_rels)} orphaned relationships")
 
-    open_questions = db.get_open_questions()
+    # Check for open question-seeds
+    open_questions = db.list_seeds(seed_type=SeedType.QUESTION, include_terminal=False)
     if open_questions:
         check_pass(f"{len(open_questions)} open questions")
 

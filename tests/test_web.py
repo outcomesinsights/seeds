@@ -1,7 +1,7 @@
 """Tests for the seeds web UI."""
 
 import pytest
-from seeds.models import Question, QuestionStatus, Seed, SeedStatus, SeedType
+from seeds.models import RelationType, Seed, SeedStatus, SeedType
 from seeds.web import build_seed_tree, create_app, flatten_tree
 
 
@@ -336,11 +336,12 @@ class TestWebDetailWithRelations:
     """Tests for seed detail page with related seeds and parent."""
 
     def test_detail_page_shows_related_seeds(self, client, db):
-        """Verify detail page resolves and shows related seeds."""
-        seed1 = Seed(id="seed-main", title="Main Seed", related_to=["seed-rel"])
+        """Verify detail page resolves and shows related seeds via relationships."""
+        seed1 = Seed(id="seed-main", title="Main Seed")
         seed2 = Seed(id="seed-rel", title="Related Seed")
         db.create_seed(seed1)
         db.create_seed(seed2)
+        db.create_relationship("seed-main", "seed-rel", RelationType.RELATES_TO)
 
         response = client.get("/seed/seed-main")
         assert response.status_code == 200
@@ -360,16 +361,16 @@ class TestWebDetailWithRelations:
         assert "seed-parent" in html
 
     def test_questions_page_shows_parent_seed(self, client, db):
-        """Verify questions page resolves parent seed for each question."""
+        """Verify questions page resolves parent seed for each question-seed."""
         seed = Seed(id="seed-qp", title="Question Parent")
         db.create_seed(seed)
-        question = Question(
-            id="q-web",
-            seed_id="seed-qp",
-            text="Web question?",
-            status=QuestionStatus.OPEN,
+        q_seed = Seed(
+            id="seeds-qweb",
+            title="Web question?",
+            seed_type=SeedType.QUESTION,
         )
-        db.create_question(question)
+        db.create_seed(q_seed)
+        db.create_relationship("seeds-qweb", "seed-qp", RelationType.QUESTIONS)
 
         response = client.get("/questions")
         assert response.status_code == 200

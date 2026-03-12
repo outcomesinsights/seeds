@@ -14,19 +14,19 @@
             <tr>
                 <th>ID</th>
                 <th>Question</th>
-                <th>Parent Seed</th>
+                <th>About Seed</th>
             </tr>
         </thead>
         <tbody>
             {% for question, seed in questions %}
             <tr>
-                <td>{{ question.id }}</td>
-                <td>{{ question.text }}</td>
+                <td><a href="/seed/{{ question.id }}">{{ question.id }}</a></td>
+                <td>{{ question.title }}</td>
                 <td>
                     {% if seed %}
                     <a href="/seed/{{ seed.id }}">{{ seed.id }}</a>: {{ seed.title }}
                     {% else %}
-                    <em>Unknown seed</em>
+                    <em>Unlinked</em>
                     {% endif %}
                 </td>
             </tr>
