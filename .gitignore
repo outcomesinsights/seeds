@@ -45,3 +45,7 @@ htmlcov/
 # Claude debug
 claude_stuff/
 .claude/
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
