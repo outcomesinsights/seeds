@@ -8,7 +8,8 @@
 {"key":"compact_tier2_days","value":"90"}
 {"key":"compact_tier2_dep_levels","value":"5"}
 {"key":"compaction_enabled","value":"false"}
+{"key":"doctor.suppress.shared-server","value":"true"}
 {"key":"issue_prefix","value":"seeds"}
-{"key":"schema_version","value":"6"}
+{"key":"schema_version","value":"7"}
 {"key":"sync.mode","value":"dolt-native"}
 {"key":"types.custom","value":"molecule,gate,convoy,merge-request,slot,agent,role,rig,message"}

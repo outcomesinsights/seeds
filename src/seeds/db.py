@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS seeds (
     tags TEXT DEFAULT '[]',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    resolved_at TEXT
+    resolved_at TEXT,
+    resolution TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS relationships (
@@ -89,6 +90,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS seeds_fts USING fts5(
     title,
     content,
     tags,
+    resolution,
     tokenize='porter unicode61'
 );
 """
@@ -97,15 +99,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS seeds_fts USING fts5(
 FTS_TRIGGERS = """
 CREATE TRIGGER IF NOT EXISTS seeds_fts_insert AFTER INSERT ON seeds
 BEGIN
-    INSERT INTO seeds_fts(id, title, content, tags)
-    VALUES (NEW.id, NEW.title, COALESCE(NEW.content, ''), COALESCE(NEW.tags, ''));
+    INSERT INTO seeds_fts(id, title, content, tags, resolution)
+    VALUES (NEW.id, NEW.title, COALESCE(NEW.content, ''), COALESCE(NEW.tags, ''), COALESCE(NEW.resolution, ''));
 END;
 
 CREATE TRIGGER IF NOT EXISTS seeds_fts_update AFTER UPDATE ON seeds
 BEGIN
     DELETE FROM seeds_fts WHERE id = OLD.id;
-    INSERT INTO seeds_fts(id, title, content, tags)
-    VALUES (NEW.id, NEW.title, COALESCE(NEW.content, ''), COALESCE(NEW.tags, ''));
+    INSERT INTO seeds_fts(id, title, content, tags, resolution)
+    VALUES (NEW.id, NEW.title, COALESCE(NEW.content, ''), COALESCE(NEW.tags, ''), COALESCE(NEW.resolution, ''));
 END;
 
 CREATE TRIGGER IF NOT EXISTS seeds_fts_delete AFTER DELETE ON seeds
@@ -148,6 +150,7 @@ class Database:
         if self._conn is None:
             self._conn = sqlite3.connect(self.path)
             self._conn.row_factory = sqlite3.Row
+            self._migrate_add_resolution()
         return self._conn
 
     def init(self) -> None:
@@ -158,6 +161,7 @@ class Database:
         conn.executescript(FTS_SCHEMA)
         conn.executescript(FTS_TRIGGERS)
         conn.commit()
+        self._migrate_add_resolution()
 
         # Create .gitignore inside .seeds/ (like beads' .beads/.gitignore)
         # Ignores SQLite DB and runtime files; JSONL is tracked by default.
@@ -170,6 +174,22 @@ class Database:
         if self._conn is not None:
             self._conn.close()
             self._conn = None
+
+    def _migrate_add_resolution(self) -> None:
+        """Add resolution column if missing (migration for existing DBs)."""
+        conn = self._conn
+        # Check if seeds table exists (won't on fresh init before schema creation)
+        table_exists = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='seeds'"
+        ).fetchone()
+        if table_exists is None:
+            return
+        columns = [
+            row[1] for row in conn.execute("PRAGMA table_info(seeds)").fetchall()
+        ]
+        if "resolution" not in columns:
+            conn.execute("ALTER TABLE seeds ADD COLUMN resolution TEXT DEFAULT ''")
+            conn.commit()
 
     def is_initialized(self) -> bool:
         """Check if database exists and is initialized."""
@@ -189,6 +209,7 @@ class Database:
             created_at=_str_to_datetime(row["created_at"]) or now_utc(),
             updated_at=_str_to_datetime(row["updated_at"]) or now_utc(),
             resolved_at=_str_to_datetime(row["resolved_at"]),
+            resolution=row["resolution"] if "resolution" in row.keys() else "",
         )
 
     def create_seed(self, seed: Seed) -> Seed:
@@ -198,9 +219,9 @@ class Database:
             """
             INSERT INTO seeds (
                 id, title, content, status, seed_type,
-                tags, created_at, updated_at, resolved_at
+                tags, created_at, updated_at, resolved_at, resolution
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 seed.id,
@@ -212,6 +233,7 @@ class Database:
                 _datetime_to_str(seed.created_at),
                 _datetime_to_str(seed.updated_at),
                 _datetime_to_str(seed.resolved_at),
+                seed.resolution,
             ),
         )
         conn.commit()
@@ -233,7 +255,7 @@ class Database:
             """
             UPDATE seeds SET
                 title = ?, content = ?, status = ?, seed_type = ?,
-                tags = ?, updated_at = ?, resolved_at = ?
+                tags = ?, updated_at = ?, resolved_at = ?, resolution = ?
             WHERE id = ?
             """,
             (
@@ -244,6 +266,7 @@ class Database:
                 json.dumps(seed.tags),
                 _datetime_to_str(seed.updated_at),
                 _datetime_to_str(seed.resolved_at),
+                seed.resolution,
                 seed.id,
             ),
         )
@@ -618,6 +641,7 @@ class Database:
         """Ensure FTS tables and triggers exist, creating and populating if needed.
 
         Safe to call on existing databases — migrates them to FTS support.
+        Rebuilds FTS if schema has changed (e.g., new columns added).
         """
         conn = self._get_conn()
         # Check if FTS table exists
@@ -628,6 +652,20 @@ class Database:
             conn.executescript(FTS_SCHEMA)
             conn.executescript(FTS_TRIGGERS)
             self.rebuild_fts()
+        else:
+            # Check if FTS schema has the resolution column; rebuild if not
+            fts_sql = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='seeds_fts'"
+            ).fetchone()
+            if fts_sql and "resolution" not in fts_sql["sql"]:
+                # Drop old FTS table and triggers, recreate with new schema
+                conn.executescript("DROP TABLE IF EXISTS seeds_fts;")
+                conn.executescript("DROP TRIGGER IF EXISTS seeds_fts_insert;")
+                conn.executescript("DROP TRIGGER IF EXISTS seeds_fts_update;")
+                conn.executescript("DROP TRIGGER IF EXISTS seeds_fts_delete;")
+                conn.executescript(FTS_SCHEMA)
+                conn.executescript(FTS_TRIGGERS)
+                self.rebuild_fts()
 
     def rebuild_fts(self) -> None:
         """Rebuild FTS index from current seed data."""
@@ -635,8 +673,8 @@ class Database:
         conn.execute("DELETE FROM seeds_fts")
         conn.execute(
             """
-            INSERT INTO seeds_fts(id, title, content, tags)
-            SELECT s.id, s.title, COALESCE(s.content, ''), COALESCE(s.tags, '')
+            INSERT INTO seeds_fts(id, title, content, tags, resolution)
+            SELECT s.id, s.title, COALESCE(s.content, ''), COALESCE(s.tags, ''), COALESCE(s.resolution, '')
             FROM seeds s
             """
         )

@@ -42,6 +42,7 @@ def seed_to_dict(seed: Seed, db: Database) -> dict[str, Any]:
         "created_at": _datetime_to_str(seed.created_at),
         "updated_at": _datetime_to_str(seed.updated_at),
         "resolved_at": _datetime_to_str(seed.resolved_at),
+        "resolution": seed.resolution,
         "relationships": [
             {
                 "target_id": r.target_id,
@@ -105,6 +106,7 @@ def _import_v1_record(db: Database, data: dict[str, Any]) -> bool:
             if data.get("resolved_at")
             else None
         ),
+        resolution=data.get("resolution", ""),
     )
     db.create_seed(seed)
 
@@ -168,6 +170,7 @@ def _import_v2_record(db: Database, data: dict[str, Any]) -> bool:
             if data.get("resolved_at")
             else None
         ),
+        resolution=data.get("resolution", ""),
     )
     db.create_seed(seed)
 

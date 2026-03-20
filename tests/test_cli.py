@@ -206,6 +206,18 @@ class TestShowCommand:
         assert result.exit_code != 0
         assert "not found" in result.output
 
+    def test_show_displays_resolution(self, cli_runner, env_with_seeds):
+        """Verify show displays resolution for resolved seeds."""
+        # Resolve with resolution text
+        cli_runner.invoke(
+            main,
+            ["resolve", "seed-test2", "--resolution", "Decided to use approach B"],
+        )
+
+        result = cli_runner.invoke(main, ["show", "seed-test2"])
+        assert result.exit_code == 0
+        assert "Resolution: Decided to use approach B" in result.output
+
     def test_show_with_children(self, cli_runner, env_with_seeds):
         """Verify show displays children."""
         result = cli_runner.invoke(main, ["show", "seed-test1"])
@@ -249,6 +261,23 @@ class TestStatusCommands:
         seed = db.get_seed("seed-test2")
         assert seed.status == SeedStatus.RESOLVED
         assert seed.resolved_at is not None
+        assert seed.resolution == ""
+        db.close()
+
+    def test_resolve_with_resolution(self, cli_runner, env_with_seeds):
+        """Verify resolve captures resolution text."""
+        result = cli_runner.invoke(
+            main,
+            ["resolve", "seed-test2", "--resolution", "Shipped in PR #42"],
+        )
+        assert result.exit_code == 0
+        assert "Resolved" in result.output
+        assert "Shipped in PR #42" in result.output
+
+        db = Database()
+        seed = db.get_seed("seed-test2")
+        assert seed.status == SeedStatus.RESOLVED
+        assert seed.resolution == "Shipped in PR #42"
         db.close()
 
     def test_abandon_changes_status(self, cli_runner, env_with_seeds):
@@ -263,7 +292,7 @@ class TestStatusCommands:
         db.close()
 
     def test_abandon_with_reason(self, cli_runner, env_with_seeds):
-        """Verify abandon captures reason."""
+        """Verify abandon captures reason in resolution field."""
         result = cli_runner.invoke(
             main,
             ["abandon", "seed-test2", "--reason", "Not feasible"],
@@ -273,7 +302,7 @@ class TestStatusCommands:
 
         db = Database()
         seed = db.get_seed("seed-test2")
-        assert "Not feasible" in seed.content
+        assert seed.resolution == "Not feasible"
         db.close()
 
 

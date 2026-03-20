@@ -23,6 +23,13 @@
         </p>
     </header>
 
+    {% if seed.resolution %}
+    <section>
+        <h3>Resolution</h3>
+        <div class="seed-resolution">{{ seed.resolution }}</div>
+    </section>
+    {% endif %}
+
     {% if seed.content %}
     <section>
         <h3>Content</h3>

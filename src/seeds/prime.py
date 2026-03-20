@@ -58,7 +58,7 @@ Seeds should capture the **journey**, not just conclusions. When investigating:
 
 ### Updating
 - `seeds explore <id>` - Start working on a seed
-- `seeds resolve <id>` - Mark as resolved
+- `seeds resolve <id> --resolution="what happened"` - Mark as resolved with outcome
 - `seeds defer <id>` - Move to backlog
 - `seeds abandon <id> --reason="..."` - Abandon with reason
 - `seeds update <id> --append="..."` - Add to content

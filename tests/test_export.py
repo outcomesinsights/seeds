@@ -42,7 +42,26 @@ class TestSeedToDict:
         assert result["tags"] == ["tag1", "tag2"]
         assert result["created_at"] == "2025-01-15T12:00:00+00:00"
         assert result["resolved_at"] is None
+        assert result["resolution"] == ""
         assert result["relationships"] == []
+
+    def test_seed_with_resolution(self, db):
+        """Verify resolved seed with resolution exports correctly."""
+        now = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        seed = Seed(
+            id="seed-resolved",
+            title="Resolved Seed",
+            status=SeedStatus.RESOLVED,
+            resolved_at=now,
+            resolution="Shipped in PR #42",
+            created_at=now,
+            updated_at=now,
+        )
+        db.create_seed(seed)
+
+        result = seed_to_dict(seed, db)
+        assert result["resolution"] == "Shipped in PR #42"
+        assert result["status"] == "resolved"
 
     def test_seed_with_relationships(self, db):
         """Verify relationships are included as outbound edges."""
@@ -524,4 +543,34 @@ class TestRoundTrip:
         assert q_seeds[0].title == "Does this work?"
         assert q_seeds[0].content == "Yes"
 
+        db2.close()
+
+    def test_roundtrip_preserves_resolution(self, temp_dir):
+        """Verify export -> import preserves resolution field."""
+        db1_path = temp_dir / "db1" / ".seeds" / "seeds.db"
+        db1 = Database(path=db1_path)
+        db1.init()
+
+        seed = Seed(
+            id="seed-res",
+            title="Resolved Seed",
+            status=SeedStatus.RESOLVED,
+            resolution="Shipped in PR #42",
+        )
+        db1.create_seed(seed)
+
+        export_path = temp_dir / "roundtrip-res.jsonl"
+        export_to_jsonl(db1, export_path)
+        db1.close()
+
+        db2_path = temp_dir / "db2" / ".seeds" / "seeds.db"
+        db2 = Database(path=db2_path)
+        db2.init()
+
+        count = import_from_jsonl(db2, export_path)
+        assert count == 1
+
+        imported = db2.get_seed("seed-res")
+        assert imported.resolution == "Shipped in PR #42"
+        assert imported.status == SeedStatus.RESOLVED
         db2.close()

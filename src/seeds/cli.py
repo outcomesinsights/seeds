@@ -223,6 +223,9 @@ def format_seed_detail(
     lines.append(f"  Status: {seed.status.value}")
     lines.append(f"  Type: {seed.seed_type.value}")
 
+    if seed.resolution:
+        lines.append(f"  Resolution: {seed.resolution}")
+
     if seed.tags:
         lines.append(f"  Tags: {', '.join(seed.tags)}")
 
@@ -437,8 +440,9 @@ def defer(ctx: Context, seed_id: str) -> None:
 
 @main.command()
 @click.argument("seed_id")
+@click.option("--resolution", "-r", help="What was decided or what happened")
 @pass_context
-def resolve(ctx: Context, seed_id: str) -> None:
+def resolve(ctx: Context, seed_id: str, resolution: str | None) -> None:
     """Mark a seed as resolved."""
     db = ctx.get_db()
     seed = get_seed_or_exit(db, seed_id)
@@ -447,8 +451,12 @@ def resolve(ctx: Context, seed_id: str) -> None:
 
     seed.status = SeedStatus.RESOLVED
     seed.resolved_at = now_utc()
+    if resolution:
+        seed.resolution = resolution
     db.update_seed(seed)
     click.echo(f"● {seed_id}: Resolved")
+    if resolution:
+        click.echo(f"  Resolution: {resolution}")
 
 
 @main.command()
@@ -465,7 +473,7 @@ def abandon(ctx: Context, seed_id: str, reason: str | None) -> None:
     seed.status = SeedStatus.ABANDONED
     seed.resolved_at = now_utc()
     if reason:
-        seed.content = f"{seed.content}\n\nAbandoned: {reason}".strip()
+        seed.resolution = reason
     db.update_seed(seed)
     click.echo(f"✗ {seed_id}: Abandoned")
     if reason:

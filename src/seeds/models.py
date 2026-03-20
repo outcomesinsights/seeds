@@ -90,6 +90,7 @@ class Seed:
     created_at: datetime = field(default_factory=now_utc)
     updated_at: datetime = field(default_factory=now_utc)
     resolved_at: datetime | None = None
+    resolution: str = ""
 
     @property
     def parent_id(self) -> str | None:
