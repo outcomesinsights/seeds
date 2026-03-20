@@ -121,5 +121,3 @@ class Relationship:
     target_id: str
     rel_type: RelationType = RelationType.RELATES_TO
     created_at: datetime = field(default_factory=now_utc)
-
-

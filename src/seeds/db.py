@@ -101,14 +101,20 @@ FTS_TRIGGERS = """
 CREATE TRIGGER IF NOT EXISTS seeds_fts_insert AFTER INSERT ON seeds
 BEGIN
     INSERT INTO seeds_fts(id, title, content, tags, resolution)
-    VALUES (NEW.id, NEW.title, COALESCE(NEW.content, ''), COALESCE(NEW.tags, ''), COALESCE(NEW.resolution, ''));
+    VALUES (
+        NEW.id, NEW.title,
+        COALESCE(NEW.content, ''), COALESCE(NEW.tags, ''), COALESCE(NEW.resolution, '')
+    );
 END;
 
 CREATE TRIGGER IF NOT EXISTS seeds_fts_update AFTER UPDATE ON seeds
 BEGIN
     DELETE FROM seeds_fts WHERE id = OLD.id;
     INSERT INTO seeds_fts(id, title, content, tags, resolution)
-    VALUES (NEW.id, NEW.title, COALESCE(NEW.content, ''), COALESCE(NEW.tags, ''), COALESCE(NEW.resolution, ''));
+    VALUES (
+        NEW.id, NEW.title,
+        COALESCE(NEW.content, ''), COALESCE(NEW.tags, ''), COALESCE(NEW.resolution, '')
+    );
 END;
 
 CREATE TRIGGER IF NOT EXISTS seeds_fts_delete AFTER DELETE ON seeds
@@ -226,7 +232,7 @@ class Database:
             created_at=_str_to_datetime(row["created_at"]) or now_utc(),
             updated_at=_str_to_datetime(row["updated_at"]) or now_utc(),
             resolved_at=_str_to_datetime(row["resolved_at"]),
-            resolution=row["resolution"] if "resolution" in row.keys() else "",
+            resolution=row["resolution"] if "resolution" in row.keys() else "",  # noqa: SIM118
         )
 
     def create_seed(self, seed: Seed) -> Seed:
@@ -417,7 +423,8 @@ class Database:
 
         conn.execute(
             """
-            INSERT OR IGNORE INTO relationships (source_id, target_id, rel_type, created_at)
+            INSERT OR IGNORE INTO relationships
+                (source_id, target_id, rel_type, created_at)
             VALUES (?, ?, ?, ?)
             """,
             (source_id, target_id, rel_type.value, _datetime_to_str(created_at)),
@@ -427,7 +434,8 @@ class Database:
             # Bidirectional: also create reverse edge
             conn.execute(
                 """
-                INSERT OR IGNORE INTO relationships (source_id, target_id, rel_type, created_at)
+                INSERT OR IGNORE INTO relationships
+                    (source_id, target_id, rel_type, created_at)
                 VALUES (?, ?, ?, ?)
                 """,
                 (target_id, source_id, rel_type.value, _datetime_to_str(created_at)),
@@ -475,7 +483,8 @@ class Database:
             conditions.append("rel_type = ?")
             params.append(rel_type.value)
 
-        query = f"SELECT * FROM relationships WHERE {' AND '.join(conditions)} ORDER BY created_at"
+        where_clause = " AND ".join(conditions)
+        query = f"SELECT * FROM relationships WHERE {where_clause} ORDER BY created_at"
         rows = conn.execute(query, params).fetchall()
 
         return [
@@ -500,15 +509,19 @@ class Database:
         Returns True if any rows were deleted.
         """
         conn = self._get_conn()
+        delete_sql = (
+            "DELETE FROM relationships"
+            " WHERE source_id = ? AND target_id = ? AND rel_type = ?"
+        )
         result = conn.execute(
-            "DELETE FROM relationships WHERE source_id = ? AND target_id = ? AND rel_type = ?",
+            delete_sql,
             (source_id, target_id, rel_type.value),
         )
         deleted = result.rowcount > 0
 
         if rel_type == RelationType.RELATES_TO:
             result2 = conn.execute(
-                "DELETE FROM relationships WHERE source_id = ? AND target_id = ? AND rel_type = ?",
+                delete_sql,
                 (target_id, source_id, rel_type.value),
             )
             deleted = deleted or result2.rowcount > 0
@@ -571,7 +584,8 @@ class Database:
         ]
         if "related_to" in columns:
             rows = conn.execute(
-                "SELECT id, related_to, created_at FROM seeds WHERE related_to != '[]' AND related_to IS NOT NULL"
+                "SELECT id, related_to, created_at FROM seeds"
+                " WHERE related_to != '[]' AND related_to IS NOT NULL"
             ).fetchall()
             for row in rows:
                 related_ids = json.loads(row["related_to"]) if row["related_to"] else []
@@ -579,17 +593,29 @@ class Database:
                     # Create bidirectional relates-to edges
                     conn.execute(
                         """
-                        INSERT OR IGNORE INTO relationships (source_id, target_id, rel_type, created_at)
+                        INSERT OR IGNORE INTO relationships
+                            (source_id, target_id, rel_type, created_at)
                         VALUES (?, ?, ?, ?)
                         """,
-                        (row["id"], related_id, RelationType.RELATES_TO.value, row["created_at"]),
+                        (
+                            row["id"],
+                            related_id,
+                            RelationType.RELATES_TO.value,
+                            row["created_at"],
+                        ),
                     )
                     conn.execute(
                         """
-                        INSERT OR IGNORE INTO relationships (source_id, target_id, rel_type, created_at)
+                        INSERT OR IGNORE INTO relationships
+                            (source_id, target_id, rel_type, created_at)
                         VALUES (?, ?, ?, ?)
                         """,
-                        (related_id, row["id"], RelationType.RELATES_TO.value, row["created_at"]),
+                        (
+                            related_id,
+                            row["id"],
+                            RelationType.RELATES_TO.value,
+                            row["created_at"],
+                        ),
                     )
                     counts["related_to"] += 1
 
@@ -642,10 +668,16 @@ class Database:
                 # Create 'questions' relationship: question-seed → parent seed
                 conn.execute(
                     """
-                    INSERT OR IGNORE INTO relationships (source_id, target_id, rel_type, created_at)
+                    INSERT OR IGNORE INTO relationships
+                        (source_id, target_id, rel_type, created_at)
                     VALUES (?, ?, ?, ?)
                     """,
-                    (new_id, q["seed_id"], RelationType.QUESTIONS.value, q["created_at"]),
+                    (
+                        new_id,
+                        q["seed_id"],
+                        RelationType.QUESTIONS.value,
+                        q["created_at"],
+                    ),
                 )
                 counts["questions"] += 1
 
@@ -686,12 +718,9 @@ class Database:
         for row in all_seeds:
             sid = row["id"]
             if "." in sid:
-                # It's a child — extract parent and suffix
-                parent_old = sid.rsplit(".", 1)[0]
-                suffix = sid.split(".")[-1]  # Could be nested: a.b.c -> c
-                # Store full dotted suffix path after the top-level parent
+                # It's a child — store full dotted suffix path after top-level parent
                 top_parent = sid.split(".")[0]
-                dot_suffix = sid[len(top_parent):]  # e.g., ".1" or ".1.1"
+                dot_suffix = sid[len(top_parent) :]  # e.g., ".1" or ".1.1"
                 children.append((sid, top_parent, dot_suffix))
             else:
                 top_level.append(sid)
@@ -787,7 +816,10 @@ class Database:
         conn.execute(
             """
             INSERT INTO seeds_fts(id, title, content, tags, resolution)
-            SELECT s.id, s.title, COALESCE(s.content, ''), COALESCE(s.tags, ''), COALESCE(s.resolution, '')
+            SELECT
+                s.id, s.title,
+                COALESCE(s.content, ''), COALESCE(s.tags, ''),
+                COALESCE(s.resolution, '')
             FROM seeds s
             """
         )

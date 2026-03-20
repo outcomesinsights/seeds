@@ -76,6 +76,7 @@ class TestGenerateId:
         ids = [generate_id() for _ in range(100)]
         assert len(set(ids)) == 100  # All unique
 
+
 class TestParseSequentialId:
     """Tests for parse_sequential_id."""
 

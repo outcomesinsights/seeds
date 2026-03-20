@@ -83,7 +83,7 @@ class TestSeedToDict:
 
         result = seed_to_dict(seed, db)
 
-        # seed-test has outbound: relates-to seed-other, and inbound relates-to from other
+        # seed-test has outbound: relates-to seed-other, and inbound from other
         # Only outbound edges are exported per seed
         rels = result["relationships"]
         assert len(rels) == 1

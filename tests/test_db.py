@@ -6,7 +6,6 @@ import tempfile
 
 from seeds.db import SCHEMA, Database, find_seeds_dir
 from seeds.models import (
-    Relationship,
     RelationType,
     Seed,
     SeedStatus,
@@ -356,8 +355,9 @@ class TestMigrateToSequentialIds:
         db.migrate_to_sequential_ids()
 
         # Relationship should reference new IDs
-        rels = db.get_relationships("seeds-1", direction="outbound",
-                                     rel_type=RelationType.RELATES_TO)
+        rels = db.get_relationships(
+            "seeds-1", direction="outbound", rel_type=RelationType.RELATES_TO
+        )
         assert len(rels) == 1
         assert rels[0].target_id == "seeds-2"
 
@@ -370,15 +370,17 @@ class TestMigrateToSequentialIds:
 
     def test_migrate_preserves_data(self, db):
         """Verify migration preserves all seed fields."""
-        db.create_seed(Seed(
-            id="seed-aaaa",
-            title="Important Decision",
-            content="Detailed content",
-            status=SeedStatus.EXPLORING,
-            seed_type=SeedType.DECISION,
-            tags=["important", "architecture"],
-            resolution="",
-        ))
+        db.create_seed(
+            Seed(
+                id="seed-aaaa",
+                title="Important Decision",
+                content="Detailed content",
+                status=SeedStatus.EXPLORING,
+                seed_type=SeedType.DECISION,
+                tags=["important", "architecture"],
+                resolution="",
+            )
+        )
 
         db.migrate_to_sequential_ids()
 
@@ -540,7 +542,11 @@ class TestSearch:
     def test_search_by_content(self, db):
         """Verify search matches seed content."""
         db.create_seed(
-            Seed(id="seed-1", title="Some idea", content="We need better prototyping tools")
+            Seed(
+                id="seed-1",
+                title="Some idea",
+                content="We need better prototyping tools",
+            )
         )
         db.create_seed(
             Seed(id="seed-2", title="Other idea", content="The database layer is solid")
@@ -552,7 +558,9 @@ class TestSearch:
 
     def test_search_by_tags(self, db):
         """Verify search matches tags stored as JSON."""
-        db.create_seed(Seed(id="seed-1", title="Tagged seed", tags=["architecture", "mcp"]))
+        db.create_seed(
+            Seed(id="seed-1", title="Tagged seed", tags=["architecture", "mcp"])
+        )
         db.create_seed(Seed(id="seed-2", title="Other seed", tags=["workflow"]))
 
         results = db.search("architecture")
@@ -640,9 +648,11 @@ class TestSearch:
         conn = sqlite3.connect(db_path)
         conn.executescript(SCHEMA)
         conn.execute(
-            "INSERT INTO seeds (id, title, content, status, seed_type, tags, created_at, updated_at) "
-            "VALUES ('seed-old', 'Legacy seed about prototyping', 'Old content', 'captured', 'idea', '[]', "
-            "'2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')"
+            "INSERT INTO seeds"
+            " (id, title, content, status, seed_type, tags, created_at, updated_at)"
+            " VALUES ('seed-old', 'Legacy seed about prototyping', 'Old content',"
+            " 'captured', 'idea', '[]',"
+            " '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')"
         )
         conn.commit()
         conn.close()
@@ -876,9 +886,7 @@ class TestBlockedWithQuestionSeeds:
         """Verify blocked considers both children and question-seeds."""
         db.create_seed(Seed(id="seed-p", title="Parent"))
         # Resolved child — not blocking
-        db.create_seed(
-            Seed(id="seed-p.1", title="Child", status=SeedStatus.RESOLVED)
-        )
+        db.create_seed(Seed(id="seed-p.1", title="Child", status=SeedStatus.RESOLVED))
         # Unresolved question — blocking
         db.create_seed(
             Seed(
@@ -906,13 +914,15 @@ class TestMigration:
         conn.executescript(V1_SCHEMA)
         now = "2026-01-01T00:00:00+00:00"
         conn.execute(
-            "INSERT INTO seeds (id, title, status, seed_type, tags, related_to, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO seeds"
+            " (id, title, status, seed_type, tags, related_to, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             ("seed-a", "Seed A", "captured", "idea", "[]", '["seed-b"]', now, now),
         )
         conn.execute(
-            "INSERT INTO seeds (id, title, status, seed_type, tags, related_to, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO seeds"
+            " (id, title, status, seed_type, tags, related_to, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             ("seed-b", "Seed B", "captured", "idea", "[]", '["seed-a"]', now, now),
         )
         conn.commit()
@@ -937,23 +947,27 @@ class TestMigration:
 
         # Create a seed with questions
         conn.execute(
-            "INSERT INTO seeds (id, title, status, seed_type, tags, related_to, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO seeds"
+            " (id, title, status, seed_type, tags, related_to, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             ("seed-parent", "Parent", "exploring", "idea", "[]", "[]", now, now),
         )
         conn.execute(
-            "INSERT INTO questions (id, seed_id, text, answer, status, created_at, answered_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO questions"
+            " (id, seed_id, text, answer, status, created_at, answered_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
             ("q-1", "seed-parent", "Open question?", None, "open", now, None),
         )
         conn.execute(
-            "INSERT INTO questions (id, seed_id, text, answer, status, created_at, answered_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO questions"
+            " (id, seed_id, text, answer, status, created_at, answered_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
             ("q-2", "seed-parent", "Answered?", "Yes", "answered", now, now),
         )
         conn.execute(
-            "INSERT INTO questions (id, seed_id, text, answer, status, created_at, answered_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO questions"
+            " (id, seed_id, text, answer, status, created_at, answered_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
             ("q-3", "seed-parent", "Deferred?", None, "deferred", now, None),
         )
         conn.commit()
@@ -991,13 +1005,15 @@ class TestMigration:
         conn.executescript(V1_SCHEMA)
         now = "2026-01-01T00:00:00+00:00"
         conn.execute(
-            "INSERT INTO seeds (id, title, status, seed_type, tags, related_to, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO seeds"
+            " (id, title, status, seed_type, tags, related_to, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             ("seed-a", "A", "captured", "idea", "[]", '["seed-b"]', now, now),
         )
         conn.execute(
-            "INSERT INTO seeds (id, title, status, seed_type, tags, related_to, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO seeds"
+            " (id, title, status, seed_type, tags, related_to, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             ("seed-b", "B", "captured", "idea", "[]", "[]", now, now),
         )
         conn.commit()

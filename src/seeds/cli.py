@@ -595,9 +595,7 @@ def questions(ctx: Context, seed_id: str | None) -> None:
 
     if seed_id:
         # Get question-seeds for a specific seed
-        qs = [
-            q for q in db.get_questions_for_seed(seed_id) if not q.is_terminal()
-        ]
+        qs = [q for q in db.get_questions_for_seed(seed_id) if not q.is_terminal()]
     else:
         # Get all unresolved question-type seeds
         qs = db.list_seeds(seed_type=SeedType.QUESTION, include_terminal=False)
@@ -651,7 +649,9 @@ def link(ctx: Context, seed_id: str, related_id: str, rel_type: str) -> None:
     rel_type_enum = RelationType(rel_type)
 
     # Check if already linked
-    existing = db.get_relationships(seed_id, rel_type=rel_type_enum, direction="outbound")
+    existing = db.get_relationships(
+        seed_id, rel_type=rel_type_enum, direction="outbound"
+    )
     if any(r.target_id == related_id for r in existing):
         click.echo(f"Already linked: {seed_id} ↔ {related_id}")
         return
@@ -828,7 +828,10 @@ def doctor(ctx: Context) -> None:
     all_rels = conn.execute("SELECT * FROM relationships").fetchall()
     orphaned_rels = []
     for rel in all_rels:
-        if db.get_seed(rel["source_id"]) is None or db.get_seed(rel["target_id"]) is None:
+        if (
+            db.get_seed(rel["source_id"]) is None
+            or db.get_seed(rel["target_id"]) is None
+        ):
             orphaned_rels.append(rel)
 
     if not orphaned_rels:

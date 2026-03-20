@@ -181,9 +181,7 @@ def _import_v2_record(db: Database, data: dict[str, Any]) -> bool:
             if rel_data.get("created_at")
             else None
         )
-        db.create_relationship(
-            data["id"], rel_data["target_id"], rel_type, created_at
-        )
+        db.create_relationship(data["id"], rel_data["target_id"], rel_type, created_at)
 
     return True
 
