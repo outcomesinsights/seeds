@@ -41,22 +41,33 @@ class RelationType(Enum):
 def generate_id(prefix: str = "seed") -> str:
     """Generate a short hash-based ID like 'seed-a1b2c3d4'.
 
-    Uses current time and random bytes to ensure uniqueness.
+    DEPRECATED: Use Database.next_id() for sequential IDs instead.
+    Kept for legacy migration code.
     """
     data = f"{time.time_ns()}{os.urandom(8).hex()}"
     hash_val = hashlib.sha256(data.encode()).hexdigest()[:8]
     return f"{prefix}-{hash_val}"
 
 
-def generate_child_id(parent_id: str) -> str:
-    """Generate a child ID from a parent ID.
+# Default project prefix for sequential IDs
+DEFAULT_PREFIX = "seeds"
 
-    For example, if parent is 'seed-a1b2', this might return 'seed-a1b2.1'.
-    The actual number is determined by the database layer based on existing children.
+
+def parse_sequential_id(seed_id: str) -> int | None:
+    """Extract the sequential number from a seed ID like 'seeds-42'.
+
+    Returns None if the ID is not a sequential format (e.g., hex hash IDs).
+    Only parses top-level IDs, not children (seeds-42.1 returns None).
     """
-    # This is a placeholder - actual implementation needs DB context
-    # to determine the next child number
-    return f"{parent_id}.1"
+    if "." in seed_id:
+        return None
+    parts = seed_id.rsplit("-", 1)
+    if len(parts) != 2:
+        return None
+    try:
+        return int(parts[1])
+    except ValueError:
+        return None
 
 
 def get_parent_id(seed_id: str) -> str | None:

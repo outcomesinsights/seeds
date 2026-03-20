@@ -87,7 +87,7 @@ class TestJotCommand:
         """Verify jot creates a captured seed."""
         result = cli_runner.invoke(main, ["jot", "My quick thought"])
         assert result.exit_code == 0
-        assert "seed-" in result.output
+        assert "seeds-" in result.output
         assert "My quick thought" in result.output
 
         # Verify seed was created
@@ -876,3 +876,34 @@ class TestDoctorCommand:
         result = cli_runner.invoke(main, ["doctor"])
         assert result.exit_code == 0
         assert "open question" in result.output
+
+
+class TestMigrateIdsCommand:
+    """Tests for 'seeds migrate-ids' command."""
+
+    def test_migrate_ids_converts_hex_to_sequential(self, cli_runner, env_with_seeds):
+        """Verify migrate-ids converts hex IDs to sequential."""
+        result = cli_runner.invoke(main, ["migrate-ids"])
+        assert result.exit_code == 0
+        assert "Migrated" in result.output
+        assert "seeds-" in result.output
+
+        # Verify new IDs exist
+        db = Database()
+        seeds = db.list_seeds(include_terminal=True)
+        for seed in seeds:
+            # All IDs should now be sequential or children of sequential
+            parts = seed.id.split(".")[0]
+            assert parts.startswith("seeds-"), f"Expected sequential ID, got {seed.id}"
+        db.close()
+
+    def test_migrate_ids_already_migrated(self, cli_runner, initialized_env):
+        """Verify migrate-ids is idempotent."""
+        # Create seeds with sequential IDs
+        db = Database()
+        db.create_seed(Seed(id="seeds-1", title="Already sequential"))
+        db.close()
+
+        result = cli_runner.invoke(main, ["migrate-ids"])
+        assert result.exit_code == 0
+        assert "No migration needed" in result.output

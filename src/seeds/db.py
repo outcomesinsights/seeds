@@ -9,13 +9,14 @@ from datetime import datetime
 from pathlib import Path
 
 from seeds.models import (
+    DEFAULT_PREFIX,
     Relationship,
     RelationType,
     Seed,
     SeedStatus,
     SeedType,
-    generate_id,
     now_utc,
+    parse_sequential_id,
 )
 
 # Allow override via environment variable for testing/development
@@ -194,6 +195,22 @@ class Database:
     def is_initialized(self) -> bool:
         """Check if database exists and is initialized."""
         return self.path.exists()
+
+    def next_id(self, prefix: str = DEFAULT_PREFIX) -> str:
+        """Generate the next sequential ID like 'seeds-1', 'seeds-2', etc.
+
+        Scans all existing IDs to find the current max sequential number.
+        """
+        conn = self._get_conn()
+        rows = conn.execute("SELECT id FROM seeds").fetchall()
+
+        max_num = 0
+        for row in rows:
+            num = parse_sequential_id(row["id"])
+            if num is not None and num > max_num:
+                max_num = num
+
+        return f"{prefix}-{max_num + 1}"
 
     # --- Seed operations ---
 
@@ -596,7 +613,7 @@ class Database:
                     seed_status = SeedStatus.CAPTURED.value
 
                 # Generate a new seed-prefixed ID for the migrated question
-                new_id = generate_id("seeds")
+                new_id = self.next_id()
 
                 resolved_at = q["answered_at"] if q_status == "answered" else None
 
@@ -634,6 +651,102 @@ class Database:
 
         conn.commit()
         return counts
+
+    def migrate_to_sequential_ids(self, prefix: str = DEFAULT_PREFIX) -> dict[str, str]:
+        """Migrate all hex-hash IDs to sequential IDs.
+
+        Assigns sequential IDs in creation order. Children keep their
+        parent relationship (seed-81a4.1 becomes seeds-N.M).
+
+        Returns the old-to-new ID mapping.
+        """
+        conn = self._get_conn()
+
+        # Check if already migrated: if there are no hex-style top-level IDs, skip
+        rows = conn.execute("SELECT id FROM seeds").fetchall()
+        has_hex_ids = False
+        for row in rows:
+            sid = row["id"]
+            if "." in sid:
+                continue  # Skip children
+            if parse_sequential_id(sid) is None:
+                has_hex_ids = True
+                break
+        if not has_hex_ids and len(rows) > 0:
+            return {}  # All top-level IDs are already sequential
+
+        # Get all seeds ordered by created_at
+        all_seeds = conn.execute(
+            "SELECT id, created_at FROM seeds ORDER BY created_at"
+        ).fetchall()
+
+        # Separate top-level seeds from children
+        top_level = []
+        children = []  # (id, parent_old_id, child_suffix)
+        for row in all_seeds:
+            sid = row["id"]
+            if "." in sid:
+                # It's a child — extract parent and suffix
+                parent_old = sid.rsplit(".", 1)[0]
+                suffix = sid.split(".")[-1]  # Could be nested: a.b.c -> c
+                # Store full dotted suffix path after the top-level parent
+                top_parent = sid.split(".")[0]
+                dot_suffix = sid[len(top_parent):]  # e.g., ".1" or ".1.1"
+                children.append((sid, top_parent, dot_suffix))
+            else:
+                top_level.append(sid)
+
+        # Build old -> new mapping for top-level seeds
+        id_map: dict[str, str] = {}
+        for i, old_id in enumerate(top_level, start=1):
+            new_id = f"{prefix}-{i}"
+            id_map[old_id] = new_id
+
+        # Map children based on their parent's new ID
+        for old_id, top_parent, dot_suffix in children:
+            if top_parent in id_map:
+                new_id = f"{id_map[top_parent]}{dot_suffix}"
+                id_map[old_id] = new_id
+
+        # Apply the mapping in a transaction
+        # Disable foreign keys temporarily to allow ID updates
+        conn.execute("PRAGMA foreign_keys = OFF")
+
+        # Use a temp suffix to avoid primary key collisions during rename
+        temp_map = {}
+        for old_id, new_id in id_map.items():
+            temp_id = f"__temp__{new_id}"
+            temp_map[temp_id] = new_id
+            conn.execute("UPDATE seeds SET id = ? WHERE id = ?", (temp_id, old_id))
+            conn.execute(
+                "UPDATE relationships SET source_id = ? WHERE source_id = ?",
+                (temp_id, old_id),
+            )
+            conn.execute(
+                "UPDATE relationships SET target_id = ? WHERE target_id = ?",
+                (temp_id, old_id),
+            )
+
+        # Now rename from temp to final
+        for temp_id, new_id in temp_map.items():
+            conn.execute("UPDATE seeds SET id = ? WHERE id = ?", (new_id, temp_id))
+            conn.execute(
+                "UPDATE relationships SET source_id = ? WHERE source_id = ?",
+                (new_id, temp_id),
+            )
+            conn.execute(
+                "UPDATE relationships SET target_id = ? WHERE target_id = ?",
+                (new_id, temp_id),
+            )
+
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.commit()
+
+        # Rebuild FTS index with new IDs
+        self.ensure_fts()
+        self.rebuild_fts()
+
+        return id_map
 
     # --- Search operations ---
 

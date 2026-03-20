@@ -283,6 +283,113 @@ class TestSeedHierarchy:
         assert next_id == "seed-a1b2.3"  # Should skip non-numeric, use max(2) + 1
 
 
+class TestNextId:
+    """Tests for sequential ID generation."""
+
+    def test_next_id_empty_db(self, db):
+        """Verify next_id returns 1 for empty database."""
+        assert db.next_id() == "seeds-1"
+
+    def test_next_id_increments(self, db):
+        """Verify next_id increments from existing sequential IDs."""
+        db.create_seed(Seed(id="seeds-1", title="First"))
+        db.create_seed(Seed(id="seeds-2", title="Second"))
+        assert db.next_id() == "seeds-3"
+
+    def test_next_id_ignores_hex_ids(self, db):
+        """Verify next_id ignores hex-hash IDs when computing max."""
+        db.create_seed(Seed(id="seed-a1b2c3d4", title="Old hex"))
+        db.create_seed(Seed(id="seeds-5", title="Sequential"))
+        assert db.next_id() == "seeds-6"
+
+    def test_next_id_ignores_children(self, db):
+        """Verify next_id ignores child IDs (e.g., seeds-1.1)."""
+        db.create_seed(Seed(id="seeds-1", title="Parent"))
+        db.create_seed(Seed(id="seeds-1.1", title="Child"))
+        assert db.next_id() == "seeds-2"
+
+    def test_next_id_custom_prefix(self, db):
+        """Verify next_id works with custom prefix."""
+        db.create_seed(Seed(id="myproject-1", title="First"))
+        assert db.next_id("myproject") == "myproject-2"
+
+
+class TestMigrateToSequentialIds:
+    """Tests for migrate_to_sequential_ids."""
+
+    def test_migrate_basic(self, db):
+        """Verify basic hex-to-sequential migration."""
+        db.create_seed(Seed(id="seed-aaaa", title="First"))
+        db.create_seed(Seed(id="seed-bbbb", title="Second"))
+
+        id_map = db.migrate_to_sequential_ids()
+
+        assert len(id_map) == 2
+        # Both should now have sequential IDs
+        assert db.get_seed("seeds-1") is not None
+        assert db.get_seed("seeds-2") is not None
+        # Old IDs should be gone
+        assert db.get_seed("seed-aaaa") is None
+        assert db.get_seed("seed-bbbb") is None
+
+    def test_migrate_preserves_children(self, db):
+        """Verify children keep parent relationship after migration."""
+        db.create_seed(Seed(id="seed-aaaa", title="Parent"))
+        db.create_seed(Seed(id="seed-aaaa.1", title="Child"))
+        db.create_seed(Seed(id="seed-aaaa.2", title="Child 2"))
+
+        id_map = db.migrate_to_sequential_ids()
+
+        # Parent becomes seeds-1, children become seeds-1.1 and seeds-1.2
+        assert db.get_seed("seeds-1") is not None
+        assert db.get_seed("seeds-1.1") is not None
+        assert db.get_seed("seeds-1.2") is not None
+        assert id_map["seed-aaaa"] == "seeds-1"
+        assert id_map["seed-aaaa.1"] == "seeds-1.1"
+
+    def test_migrate_updates_relationships(self, db):
+        """Verify relationships are updated with new IDs."""
+        db.create_seed(Seed(id="seed-aaaa", title="A"))
+        db.create_seed(Seed(id="seed-bbbb", title="B"))
+        db.create_relationship("seed-aaaa", "seed-bbbb", RelationType.RELATES_TO)
+
+        db.migrate_to_sequential_ids()
+
+        # Relationship should reference new IDs
+        rels = db.get_relationships("seeds-1", direction="outbound",
+                                     rel_type=RelationType.RELATES_TO)
+        assert len(rels) == 1
+        assert rels[0].target_id == "seeds-2"
+
+    def test_migrate_idempotent(self, db):
+        """Verify migration is idempotent — skips if sequential IDs exist."""
+        db.create_seed(Seed(id="seeds-1", title="Already sequential"))
+
+        id_map = db.migrate_to_sequential_ids()
+        assert id_map == {}  # No migration needed
+
+    def test_migrate_preserves_data(self, db):
+        """Verify migration preserves all seed fields."""
+        db.create_seed(Seed(
+            id="seed-aaaa",
+            title="Important Decision",
+            content="Detailed content",
+            status=SeedStatus.EXPLORING,
+            seed_type=SeedType.DECISION,
+            tags=["important", "architecture"],
+            resolution="",
+        ))
+
+        db.migrate_to_sequential_ids()
+
+        seed = db.get_seed("seeds-1")
+        assert seed.title == "Important Decision"
+        assert seed.content == "Detailed content"
+        assert seed.status == SeedStatus.EXPLORING
+        assert seed.seed_type == SeedType.DECISION
+        assert seed.tags == ["important", "architecture"]
+
+
 class TestBlockedState:
     """Tests for blocked state derivation."""
 

@@ -13,7 +13,6 @@ from seeds.models import (
     Seed,
     SeedStatus,
     SeedType,
-    generate_id,
 )
 
 JSONL_FILE = "seeds.jsonl"
@@ -126,7 +125,7 @@ def _import_v1_record(db: Database, data: dict[str, Any]) -> bool:
         else:
             seed_status = SeedStatus.CAPTURED
 
-        q_seed_id = generate_id("seeds")
+        q_seed_id = db.next_id()
         resolved_at = (
             datetime.fromisoformat(q_data["answered_at"])
             if q_data.get("answered_at")

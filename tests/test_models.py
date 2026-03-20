@@ -7,9 +7,9 @@ from seeds.models import (
     Seed,
     SeedStatus,
     SeedType,
-    generate_child_id,
     generate_id,
     get_parent_id,
+    parse_sequential_id,
 )
 
 
@@ -76,10 +76,27 @@ class TestGenerateId:
         ids = [generate_id() for _ in range(100)]
         assert len(set(ids)) == 100  # All unique
 
-    def test_generate_child_id(self):
-        """Verify child ID generation."""
-        child_id = generate_child_id("seed-a1b2")
-        assert child_id == "seed-a1b2.1"
+class TestParseSequentialId:
+    """Tests for parse_sequential_id."""
+
+    def test_parse_simple_sequential(self):
+        """Verify parsing sequential IDs."""
+        assert parse_sequential_id("seeds-1") == 1
+        assert parse_sequential_id("seeds-42") == 42
+        assert parse_sequential_id("seeds-999") == 999
+
+    def test_parse_hex_returns_none(self):
+        """Verify hex IDs return None."""
+        assert parse_sequential_id("seed-a1b2c3d4") is None
+        assert parse_sequential_id("seeds-086a609d") is None
+
+    def test_parse_child_returns_none(self):
+        """Verify child IDs return None (not top-level)."""
+        assert parse_sequential_id("seeds-42.1") is None
+
+    def test_parse_no_dash(self):
+        """Verify IDs without dashes return None."""
+        assert parse_sequential_id("seeds") is None
 
 
 class TestGetParentId:

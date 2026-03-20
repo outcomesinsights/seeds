@@ -11,7 +11,7 @@ import click
 
 from seeds import __version__
 from seeds.db import SEEDS_DIR, Database
-from seeds.models import RelationType, Seed, SeedStatus, SeedType, generate_id
+from seeds.models import RelationType, Seed, SeedStatus, SeedType
 
 
 class Context:
@@ -112,7 +112,7 @@ def create(
             sys.exit(1)
         seed_id = db.get_next_child_id(parent_id)
     else:
-        seed_id = generate_id()
+        seed_id = db.next_id()
 
     # Parse tags
     tag_list = [t.strip() for t in tags.split(",")] if tags else []
@@ -142,7 +142,7 @@ def jot(ctx: Context, thought: str) -> None:
     """
     db = ctx.get_db()
 
-    seed_id = generate_id()
+    seed_id = db.next_id()
     seed = Seed(id=seed_id, title=thought)
 
     db.create_seed(seed)
@@ -546,7 +546,7 @@ def ask(ctx: Context, question_text: str, seed_id: str) -> None:
         click.echo(f"Error: Seed '{seed_id}' not found.", err=True)
         sys.exit(1)
 
-    question_id = generate_id("seeds")
+    question_id = db.next_id()
     question_seed = Seed(
         id=question_id,
         title=question_text,
@@ -895,6 +895,38 @@ def serve(host: str, port: int, debug: bool) -> None:
     click.echo(f"Starting seeds web UI at http://{host}:{port}")
     click.echo("Press Ctrl+C to stop.")
     run_server(host=host, port=port, debug=debug)
+
+
+@main.command("migrate-ids")
+@pass_context
+def migrate_ids(ctx: Context) -> None:
+    """Migrate hex-hash IDs to sequential IDs (one-time migration)."""
+    db = ctx.get_db()
+
+    import shutil
+
+    # Back up the database first
+    backup_path = db.path.with_suffix(".db.bak")
+    shutil.copy2(db.path, backup_path)
+    click.echo(f"Backed up database to {backup_path}")
+
+    id_map = db.migrate_to_sequential_ids()
+
+    if not id_map:
+        click.echo("No migration needed (already using sequential IDs).")
+        # Remove backup since we didn't change anything
+        backup_path.unlink(missing_ok=True)
+        return
+
+    click.echo(f"Migrated {len(id_map)} seeds to sequential IDs:")
+    for old_id, new_id in sorted(id_map.items(), key=lambda x: x[1]):
+        click.echo(f"  {old_id} → {new_id}")
+
+    # Re-export JSONL
+    from seeds.export import export_to_jsonl
+
+    output_path = export_to_jsonl(db)
+    click.echo(f"\nRe-exported to {output_path}")
 
 
 if __name__ == "__main__":
