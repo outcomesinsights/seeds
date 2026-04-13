@@ -30,7 +30,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "click>=8.1.0",
+    "click>=8.1.8",
     "flask>=3.0.0",
 ]
 
