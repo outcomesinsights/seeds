@@ -1,5 +1,6 @@
 # SQLite databases
 *.db
+*.db.bak
 *.db-journal
 *.db-wal
 *.db-shm
