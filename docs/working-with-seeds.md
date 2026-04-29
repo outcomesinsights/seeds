@@ -1,12 +1,12 @@
 # Working with seeds (mostly via your AI)
 
 > **Status:** Draft. Companion to the introducing-seeds blog post.
-> Where the blog post is the *why*, this doc is the *how*. Read this once
+> Where the blog post is the _why_, this doc is the _how_. Read this once
 > when you start using seeds. Skim it again a month later when you've
 > formed habits and want to refine them.
 
 This is not a CLI reference — that's the README. This is a guide to the
-*workflow* of using seeds with an AI agent driving most of the keystrokes.
+_workflow_ of using seeds with an AI agent driving most of the keystrokes.
 
 ## What seeds is, in one paragraph
 
@@ -24,8 +24,8 @@ conversation.
 - **Not a todo list.** A seed has no deadline, no assignee, no priority. If
   you find yourself wanting those things, you have a task. Open it in beads
   or your issue tracker.
-- **Not a notes app.** Notes are for content. Seeds are for content *plus
-  a lifecycle*. If you don't care about whether a thought eventually
+- **Not a notes app.** Notes are for content. Seeds are for content _plus
+  a lifecycle_. If you don't care about whether a thought eventually
   reaches a conclusion, write a note.
 - **Not a knowledge base.** Seeds capture deliberation as it happens.
   After-the-fact write-ups belong in your wiki / ADR repo / blog. Seeds
@@ -35,12 +35,18 @@ conversation.
 
 ## How I actually use it (one worked example)
 
-I cannot tell you the right way to use seeds. The tool was written by an AI,
-for me, on my behalf, to fit the way I already think. It is not especially
-prescriptive — though maybe it is, by accident, since the way I happen to
-think might overlap with how you think.
+The way I use seeds may not be the way you'd use it. This workflow fits
+the way *my* brain works — disorganized, divergent, allergic to ceremony,
+prone to losing the thread if I don't externalize it. Hopefully it works
+well enough for your brain too. If it doesn't, the design is loose enough
+to bend.
 
-Here is the workflow I have settled into. Borrow what fits.
+What I'm really doing — under the workflow detail — is exploring the
+deliberation space (the half-formed, half-rejected, half-revisited tangle
+of thoughts that goes into designing anything nontrivial) while at the
+same time **securing my thinking to the level of detail and permanence I
+require in order to feel comfortable**. That sentence is the whole project.
+Everything below is one person's working method. Borrow what fits.
 
 ### Step 0: dump the brain
 
@@ -60,7 +66,7 @@ partial and exactly what I wanted.
 ### Step 1: the agent interviews me
 
 After the initial pass, I invite the agent to ask me questions. About
-things I said in the dump but didn't elaborate on. About things I *didn't*
+things I said in the dump but didn't elaborate on. About things I _didn't_
 say that the agent thinks need to be considered. About contradictions
 between two different stray thoughts.
 
@@ -97,7 +103,7 @@ it knows. The seed graph evidently encodes enough structure that
 shape. I expected this to be hard. It isn't.
 
 This is the seeds equivalent of `bd ready` — but instead of "what work
-is unblocked?" the question is "what *understanding* is blocking the
+is unblocked?" the question is "what _understanding_ is blocking the
 rest of the deliberation?" Different domain, same load-bearing role.
 
 ### Step 4: answer the foundational stuff (or chase it)
@@ -111,7 +117,7 @@ docs, look at the code, run a small experiment, search the web — and
 The investigation getting incorporated back into seeds is the part I
 love most. The agent doesn't just answer my question in chat (where
 the answer evaporates at compaction time); it captures what it learned
-*as part of the seed body*. Months later, when I or another agent revisit
+_as part of the seed body_. Months later, when I or another agent revisit
 that seed, **we have the same information that was on the table when the
 decision was made.** Not a summary of it. Not a paraphrase. The actual
 findings.
@@ -162,15 +168,15 @@ seeds jot "Reconsider whether we want optimistic concurrency on the audit table"
 ```
 
 That seed sits in `captured` until somebody (you or a future agent session)
-picks it up. The point is *not losing the thought*, not organizing it.
+picks it up. The point is _not losing the thought_, not organizing it.
 Capture is liberal. You can prune later.
 
 When you're ready, you triage:
 
 - Promote to `exploring` if it's worth thinking through now
 - `defer` it if it's not now-work
-- `abandon` it if you've decided it isn't worth pursuing — *with a reason
-  in the body*. Abandoned seeds are valuable! They prevent you from
+- `abandon` it if you've decided it isn't worth pursuing — _with a reason
+  in the body_. Abandoned seeds are valuable! They prevent you from
   re-considering the same dead end next year.
 - `resolve` it if it turns out the answer is obvious
 
@@ -193,14 +199,14 @@ parent has a status, and the body fields tell the story.
 
 This is the shape that pays off years later. When somebody asks "why did we
 go with append-only?" the agent runs `seeds show seeds-a1b2` and the answer
-is *right there*, with the alternatives that were considered and the
+is _right there_, with the alternatives that were considered and the
 reasons they lost.
 
 ### The audit log
 
 You're working through a long, fiddly process — an ETL, a data audit, a
 migration. Every decision, discrepancy, and deferred question becomes a
-seed. By the end of the work, the seed database is *the* record of what
+seed. By the end of the work, the seed database is _the_ record of what
 happened and why.
 
 This shape works best when most seeds end up `resolved` or `abandoned`. A
@@ -359,7 +365,7 @@ A few small habits keep the seed database healthy.
   agent to walk the captured list and either promote, defer, or abandon
   each one. Things shouldn't sit in captured for months.
 - **Resolve loudly.** When a seed reaches a conclusion, the body should
-  capture the *why*. A resolved seed with a one-word body is no better
+  capture the _why_. A resolved seed with a one-word body is no better
   than no seed at all.
 - **Tag deliberately, not exhaustively.** Tags are for filtering, not
   for taxonomy completeness. Don't try to build a full ontology.
@@ -388,7 +394,7 @@ equivalent:
 > alternatives. Use beads/issues only for concrete actionable work.
 > Most things start as seeds.
 >
-> When abandoning a seed, *always* include the reason in the body. When
+> When abandoning a seed, _always_ include the reason in the body. When
 > resolving a decision, include `Decision / Why / Considered / Revisit if`
 > in the body. Abandoned seeds and rejected alternatives are valuable —
 > they prevent re-litigation later.
