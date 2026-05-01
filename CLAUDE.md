@@ -2,22 +2,34 @@
 
 > Git-backed deliberation capture for ideas that need time to grow.
 
-## CRITICAL: Do Not Pollute the Design Database
+## Critical: Don't Pollute the Design Database
 
 The `.seeds/` directory in this project contains **real design data** used to develop and iterate on seeds. It is NOT a test database.
 
-### Forbidden Commands (in this project)
+### What "polluting" means
 
-**NEVER run these commands directly in this project:**
-- `seeds create` / `seeds jot` / `seeds ask` - Creates new seeds/questions
-- `seeds update` / `seeds explore` / `seeds resolve` / `seeds defer` / `seeds abandon` - Modifies seed state
-- `seeds answer` - Modifies questions
-- `seeds link` - Creates relationships
-- `seeds init` - Initializes database
+Running mutating seeds commands as **smoke tests, experimentation, or self-validation against this project's database** is forbidden — that's what `SEEDS_DIR=/tmp/test-seeds` is for. Any seed, question, link, or state change you create against this project's `.seeds/` should be a real, intentional part of seeds' planning and design work.
 
-### Safe Commands (read-only)
+### Forbidden: smoke testing or experimenting against this database
 
-These are safe to run:
+Don't run any of these against this project's `.seeds/` to "see what happens" or to test the CLI itself:
+
+- `seeds create` / `seeds jot` / `seeds ask` - Creating throwaway seeds/questions
+- `seeds update` / `seeds explore` / `seeds resolve` / `seeds defer` / `seeds abandon` - Pretend state changes
+- `seeds answer` - Throwaway answers
+- `seeds link` - Junk relationships
+- `seeds init` - Re-initialization (would clobber)
+
+Use a temp directory for any of that — see "How to Test seeds Commands" below.
+
+### Allowed: genuine planning and design work
+
+If you and the user are actually doing planning, design, or deliberation work on the seeds project itself, mutating the database is exactly what it's for. The user (or another collaborating agent) will be driving this work intentionally — you should follow their lead and use the mutating commands normally. When in doubt about whether a given mutation is "real work" vs "experimentation," ask.
+
+### Always-safe commands (read-only)
+
+These are safe to run regardless of context:
+
 - `seeds list` / `seeds show` / `seeds tree` - View data
 - `seeds ready` / `seeds questions` / `seeds deferred` / `seeds blocked` - Query status
 - `seeds --help` / `seeds --version` - Help and version
@@ -38,6 +50,7 @@ SEEDS_DIR=/tmp/test-seeds seeds list
 ### Running the Test Suite
 
 The test suite uses its own isolated database and is safe to run:
+
 ```bash
 uv run pytest
 ```
