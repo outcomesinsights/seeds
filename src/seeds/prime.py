@@ -84,6 +84,19 @@ Claude Code CLI truncates bash output, so users can't see full seed content from
 
 ### Session End
 - `seeds sync --flush-only` - Export to JSONL
+
+### Project Prefix
+Every seed ID carries a project prefix (e.g., `myproj-7`). `seeds init`
+defaults the prefix to the project directory name; `seeds rename-prefix`
+changes it later.
+
+- `seeds prefix` - Show the current project prefix
+- `seeds rename-prefix <new>` - Rewrite all IDs (including children +
+  relationships) and ID references inside seed bodies to use a new prefix
+- `seeds rename-prefix <new> --dry-run` - Preview the rename without
+  writing; lists ID renames and snippet pairs for each body reference
+- `seeds rename-prefix <new> --no-rewrite-bodies` - Skip rewriting ID
+  references inside title/content/resolution
 """
 
 

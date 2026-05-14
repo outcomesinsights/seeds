@@ -849,6 +849,27 @@ def doctor(ctx: Context) -> None:
         check_fail("Database", "Not initialized")
         return
 
+    # Report project prefix and nudge the user when the default doesn't
+    # match the project directory name.
+    click.echo()
+    click.echo("Project:")
+    current_prefix = db.get_prefix()
+    if db.has_prefix_configured():
+        check_pass(f"Prefix configured: {current_prefix!r}")
+    else:
+        check_warn(
+            "Prefix",
+            f"Using fallback {current_prefix!r}; run 'seeds rename-prefix "
+            "<name>' to set one explicitly",
+        )
+    derived = sanitize_prefix(db.path.parent.parent.name)
+    if current_prefix == DEFAULT_PREFIX and derived and derived != DEFAULT_PREFIX:
+        check_warn(
+            "Prefix",
+            f"Default prefix {DEFAULT_PREFIX!r} doesn't match project dir; "
+            f"run 'seeds rename-prefix {derived}' to customize",
+        )
+
     # Check seeds
     click.echo()
     click.echo("Seeds:")
@@ -1044,21 +1065,16 @@ def rename_prefix(
     if id_map:
         verb = "Would rename" if dry_run else "Renamed"
         click.echo(
-            f"{verb} {len(id_map)} IDs from prefix {old_prefix!r} "
-            f"to {sanitized!r}:"
+            f"{verb} {len(id_map)} IDs from prefix {old_prefix!r} " f"to {sanitized!r}:"
         )
         for old_id, new_id in sorted(id_map.items(), key=lambda x: x[1]):
             click.echo(f"  {old_id} → {new_id}")
     elif not body_changes:
-        click.echo(
-            f"Updated prefix to {sanitized!r} (no IDs matched {old_prefix!r})."
-        )
+        click.echo(f"Updated prefix to {sanitized!r} (no IDs matched {old_prefix!r}).")
 
     if body_changes:
         verb = "Would rewrite" if dry_run else "Rewrote"
-        click.echo(
-            f"\n{verb} {len(body_changes)} ID reference(s) inside seed bodies:"
-        )
+        click.echo(f"\n{verb} {len(body_changes)} ID reference(s) inside seed bodies:")
         for change in body_changes:
             click.echo(f"  {change.seed_id} ({change.field}):")
             click.echo(f"    - {change.old_snippet}")

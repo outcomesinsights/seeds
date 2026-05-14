@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
-
 from seeds.cli import main
 from seeds.db import SEEDS_DIR, Database
 from seeds.models import (
@@ -250,9 +249,7 @@ class TestRenamePrefixCommand:
             main, ["create", "--title", "hub", "--content", "see seeds-1"]
         )
 
-        result = cli_runner.invoke(
-            main, ["rename-prefix", "demo", "--dry-run"]
-        )
+        result = cli_runner.invoke(main, ["rename-prefix", "demo", "--dry-run"])
         assert result.exit_code == 0
         assert "DRY RUN" in result.output
         assert "Would rename 2 IDs" in result.output
@@ -719,6 +716,14 @@ class TestPrimeCommand:
         assert "seeds Workflow Context" in result.output
         assert "seeds jot" in result.output
 
+    def test_prime_documents_prefix_commands(self, cli_runner, initialized_env):
+        """Verify prime mentions the new prefix-related commands."""
+        result = cli_runner.invoke(main, ["prime"])
+        assert result.exit_code == 0
+        assert "seeds rename-prefix" in result.output
+        assert "seeds prefix" in result.output
+        assert "--dry-run" in result.output
+
     def test_prime_silent_exit_outside_seeds_project(self, cli_runner):
         """Verify prime silently exits when not in a seeds project."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1066,6 +1071,50 @@ class TestDoctorCommand:
         result = cli_runner.invoke(main, ["doctor"])
         assert result.exit_code == 0
         assert "open question" in result.output
+
+    def test_doctor_reports_configured_prefix(self, cli_runner, initialized_env):
+        """Doctor surfaces the configured project prefix."""
+        result = cli_runner.invoke(main, ["doctor"])
+        assert result.exit_code == 0
+        assert "Project:" in result.output
+        assert "Prefix configured: 'seeds'" in result.output
+
+    def test_doctor_nudges_when_default_prefix_mismatches_dir(self, cli_runner):
+        """When prefix=default but dir name differs, doctor warns with a hint."""
+        with tempfile.TemporaryDirectory() as parent:
+            project = Path(parent) / "shiny-project"
+            project.mkdir()
+            original_cwd = os.getcwd()
+            os.chdir(project)
+            try:
+                db = Database()
+                db.init(prefix="seeds")  # explicit default
+                db.close()
+
+                result = cli_runner.invoke(main, ["doctor"])
+                assert result.exit_code == 0
+                assert "shiny-project" in result.output
+                assert "rename-prefix" in result.output
+            finally:
+                os.chdir(original_cwd)
+
+    def test_doctor_warns_when_prefix_unconfigured(self, cli_runner):
+        """Doctor warns when no prefix is stored in config (legacy DB)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                db = Database()
+                db.init()  # no prefix
+                db.close()
+
+                result = cli_runner.invoke(main, ["doctor"])
+                assert result.exit_code == 0
+                assert "fallback" in result.output.lower() or (
+                    "rename-prefix" in result.output
+                )
+            finally:
+                os.chdir(original_cwd)
 
 
 class TestMigrateIdsCommand:

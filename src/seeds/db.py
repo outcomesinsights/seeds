@@ -33,6 +33,7 @@ class BodyRefChange:
     old_snippet: str
     new_snippet: str
 
+
 # Allow override via environment variable for testing/development
 SEEDS_DIR = os.environ.get("SEEDS_DIR", ".seeds")
 DB_FILE = "seeds.db"
@@ -178,8 +179,8 @@ class Database:
         if self._conn is None:
             self._conn = sqlite3.connect(self.path)
             self._conn.row_factory = sqlite3.Row
-            self._migrate_add_resolution()
-            self._migrate_add_config()
+            self._migrate_add_resolution(self._conn)
+            self._migrate_add_config(self._conn)
         return self._conn
 
     def init(self, prefix: str | None = None) -> None:
@@ -196,8 +197,8 @@ class Database:
         conn.executescript(FTS_SCHEMA)
         conn.executescript(FTS_TRIGGERS)
         conn.commit()
-        self._migrate_add_resolution()
-        self._migrate_add_config()
+        self._migrate_add_resolution(conn)
+        self._migrate_add_config(conn)
 
         if prefix is not None:
             self.set_prefix(prefix)
@@ -214,9 +215,8 @@ class Database:
             self._conn.close()
             self._conn = None
 
-    def _migrate_add_resolution(self) -> None:
+    def _migrate_add_resolution(self, conn: sqlite3.Connection) -> None:
         """Add resolution column if missing (migration for existing DBs)."""
-        conn = self._conn
         # Check if seeds table exists (won't on fresh init before schema creation)
         table_exists = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='seeds'"
@@ -230,9 +230,8 @@ class Database:
             conn.execute("ALTER TABLE seeds ADD COLUMN resolution TEXT DEFAULT ''")
             conn.commit()
 
-    def _migrate_add_config(self) -> None:
+    def _migrate_add_config(self, conn: sqlite3.Connection) -> None:
         """Add the config key/value table if missing (migration for older DBs)."""
-        conn = self._conn
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS config (
@@ -248,12 +247,11 @@ class Database:
     def get_config(self, key: str, default: str | None = None) -> str | None:
         """Read a config value by key, returning ``default`` if not set."""
         conn = self._get_conn()
-        row = conn.execute(
-            "SELECT value FROM config WHERE key = ?", (key,)
-        ).fetchone()
+        row = conn.execute("SELECT value FROM config WHERE key = ?", (key,)).fetchone()
         if row is None:
             return default
-        return row["value"]
+        value: str = row["value"]
+        return value
 
     def set_config(self, key: str, value: str) -> None:
         """Set or replace a config value."""
@@ -777,9 +775,7 @@ class Database:
         conn.commit()
         return counts
 
-    def migrate_to_sequential_ids(
-        self, prefix: str | None = None
-    ) -> dict[str, str]:
+    def migrate_to_sequential_ids(self, prefix: str | None = None) -> dict[str, str]:
         """Migrate all hex-hash IDs to sequential IDs.
 
         Assigns sequential IDs in creation order. Children keep their
@@ -978,9 +974,7 @@ class Database:
             for old_id, new_id in id_map.items():
                 temp_id = f"__rename__{new_id}"
                 temp_map[temp_id] = new_id
-                conn.execute(
-                    "UPDATE seeds SET id = ? WHERE id = ?", (temp_id, old_id)
-                )
+                conn.execute("UPDATE seeds SET id = ? WHERE id = ?", (temp_id, old_id))
                 conn.execute(
                     "UPDATE relationships SET source_id = ? WHERE source_id = ?",
                     (temp_id, old_id),
@@ -991,9 +985,7 @@ class Database:
                 )
 
             for temp_id, new_id in temp_map.items():
-                conn.execute(
-                    "UPDATE seeds SET id = ? WHERE id = ?", (new_id, temp_id)
-                )
+                conn.execute("UPDATE seeds SET id = ? WHERE id = ?", (new_id, temp_id))
                 conn.execute(
                     "UPDATE relationships SET source_id = ? WHERE source_id = ?",
                     (new_id, temp_id),
@@ -1034,9 +1026,7 @@ class Database:
 
             new_title, c1 = rewrite_id_refs(title, old_prefix, new_prefix)
             new_content, c2 = rewrite_id_refs(content, old_prefix, new_prefix)
-            new_resolution, c3 = rewrite_id_refs(
-                resolution, old_prefix, new_prefix
-            )
+            new_resolution, c3 = rewrite_id_refs(resolution, old_prefix, new_prefix)
 
             if c1 == 0 and c2 == 0 and c3 == 0:
                 continue

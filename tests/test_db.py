@@ -1279,9 +1279,7 @@ class TestRenamePrefixBodyRewrites:
     def test_rewrite_is_idempotent(self, db):
         """Running rename twice doesn't double-rewrite."""
         db.set_prefix("seeds")
-        db.create_seed(
-            Seed(id="seeds-1", title="hub", content="cf. seeds-2")
-        )
+        db.create_seed(Seed(id="seeds-1", title="hub", content="cf. seeds-2"))
         db.create_seed(Seed(id="seeds-2", title="ref"))
 
         db.rename_prefix("myproj")
@@ -1294,9 +1292,7 @@ class TestRenamePrefixBodyRewrites:
     def test_no_rewrite_bodies_flag(self, db):
         """When rewrite_bodies=False, body text is left alone."""
         db.set_prefix("seeds")
-        db.create_seed(
-            Seed(id="seeds-1", title="hub", content="See seeds-2.")
-        )
+        db.create_seed(Seed(id="seeds-1", title="hub", content="See seeds-2."))
         db.create_seed(Seed(id="seeds-2", title="ref"))
 
         _, body_changes = db.rename_prefix("myproj", rewrite_bodies=False)
@@ -1308,9 +1304,7 @@ class TestRenamePrefixBodyRewrites:
     def test_dry_run_makes_no_writes(self, db):
         """dry_run=True returns the same data but doesn't commit."""
         db.set_prefix("seeds")
-        db.create_seed(
-            Seed(id="seeds-1", title="hub", content="See seeds-2.")
-        )
+        db.create_seed(Seed(id="seeds-1", title="hub", content="See seeds-2."))
         db.create_seed(Seed(id="seeds-2", title="ref"))
 
         id_map, body_changes = db.rename_prefix("myproj", dry_run=True)
@@ -1325,9 +1319,7 @@ class TestRenamePrefixBodyRewrites:
     def test_body_change_records_snippets(self, db):
         """BodyRefChange objects carry seed_id, field, and snippet pairs."""
         db.set_prefix("seeds")
-        db.create_seed(
-            Seed(id="seeds-1", title="hub", content="See seeds-2 next.")
-        )
+        db.create_seed(Seed(id="seeds-1", title="hub", content="See seeds-2 next."))
         db.create_seed(Seed(id="seeds-2", title="ref"))
 
         _, body_changes = db.rename_prefix("myproj", dry_run=True)

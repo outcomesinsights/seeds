@@ -1,7 +1,6 @@
 """Tests for seeds data models."""
 
 import pytest
-
 from seeds.models import (
     Relationship,
     RelationType,
@@ -287,31 +286,23 @@ class TestRewriteIdRefs:
         assert count == 1
 
     def test_markdown_link(self):
-        text, count = rewrite_id_refs(
-            "See [seeds-7](url)", "seeds", "myproj"
-        )
+        text, count = rewrite_id_refs("See [seeds-7](url)", "seeds", "myproj")
         assert text == "See [myproj-7](url)"
         assert count == 1
 
     def test_does_not_touch_compound_token(self):
-        text, count = rewrite_id_refs(
-            "the seeds-related code", "seeds", "myproj"
-        )
+        text, count = rewrite_id_refs("the seeds-related code", "seeds", "myproj")
         assert text == "the seeds-related code"
         assert count == 0
 
     def test_does_not_touch_inside_word(self):
-        text, count = rewrite_id_refs(
-            "see myseeds-7 here", "seeds", "myproj"
-        )
+        text, count = rewrite_id_refs("see myseeds-7 here", "seeds", "myproj")
         # Preceded by 's' (alphanumeric) → no match.
         assert text == "see myseeds-7 here"
         assert count == 0
 
     def test_does_not_touch_trailing_word(self):
-        text, count = rewrite_id_refs(
-            "see seeds-7-banana", "seeds", "myproj"
-        )
+        text, count = rewrite_id_refs("see seeds-7-banana", "seeds", "myproj")
         # Followed by '-' (in our exclusion class) → no match.
         assert text == "see seeds-7-banana"
         assert count == 0
@@ -327,9 +318,7 @@ class TestRewriteIdRefs:
         assert once == twice
 
     def test_hyphenated_prefix(self):
-        text, count = rewrite_id_refs(
-            "see my-proj-7 here", "my-proj", "different"
-        )
+        text, count = rewrite_id_refs("see my-proj-7 here", "my-proj", "different")
         assert text == "see different-7 here"
         assert count == 1
 
@@ -346,9 +335,7 @@ class TestIterIdRefSnippets:
         assert pairs == []
 
     def test_multiple_pairs(self):
-        pairs = iter_id_ref_snippets(
-            "first seeds-1 then seeds-2", "seeds", "myproj"
-        )
+        pairs = iter_id_ref_snippets("first seeds-1 then seeds-2", "seeds", "myproj")
         assert len(pairs) == 2
         assert "seeds-1" in pairs[0][0]
         assert "myproj-1" in pairs[0][1]

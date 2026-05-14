@@ -94,9 +94,7 @@ def _id_ref_pattern(old_prefix: str) -> re.Pattern[str]:
     )
 
 
-def rewrite_id_refs(
-    text: str, old_prefix: str, new_prefix: str
-) -> tuple[str, int]:
+def rewrite_id_refs(text: str, old_prefix: str, new_prefix: str) -> tuple[str, int]:
     """Rewrite seed-ID references inside a body of text.
 
     Matches occurrences of ``<old_prefix>-<digits>`` (with optional
