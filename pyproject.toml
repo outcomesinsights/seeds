@@ -1,6 +1,6 @@
 [project]
 name = "seeds"
-version = "0.2.0"
+version = "0.2.1"
 description = "Git-backed deliberation capture for ideas that need time to grow"
 readme = "README.md"
 license = "MIT"
