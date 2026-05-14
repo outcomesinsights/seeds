@@ -24,14 +24,16 @@ def cli_runner():
 
 @pytest.fixture
 def initialized_env():
-    """Create a temp directory with initialized seeds."""
+    """Create a temp directory with initialized seeds (prefix='seeds')."""
     with tempfile.TemporaryDirectory() as tmpdir:
         original_cwd = os.getcwd()
         os.chdir(tmpdir)
         try:
-            # Initialize seeds
+            # Initialize seeds with an explicit prefix so existing tests
+            # that assert on 'seeds-N' IDs stay deterministic regardless
+            # of the random tmpdir name.
             db = Database()
-            db.init()
+            db.init(prefix="seeds")
             db.close()
             yield Path(tmpdir)
         finally:
@@ -78,6 +80,216 @@ class TestInitCommand:
         result = cli_runner.invoke(main, ["init"])
         assert result.exit_code == 0
         assert "already initialized" in result.output
+
+    def test_init_derives_prefix_from_directory(self, cli_runner):
+        """Init without --prefix derives prefix from current dir name."""
+        with tempfile.TemporaryDirectory() as parent:
+            project = Path(parent) / "My_Cool Project"
+            project.mkdir()
+            original_cwd = os.getcwd()
+            os.chdir(project)
+            try:
+                result = cli_runner.invoke(main, ["init"])
+                assert result.exit_code == 0
+                assert "Project prefix: my-cool-project" in result.output
+                db = Database()
+                assert db.get_prefix() == "my-cool-project"
+                db.close()
+            finally:
+                os.chdir(original_cwd)
+
+    def test_init_with_explicit_prefix(self, cli_runner):
+        """Init with --prefix overrides the directory-derived default."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                result = cli_runner.invoke(main, ["init", "--prefix", "myproj"])
+                assert result.exit_code == 0
+                assert "Project prefix: myproj" in result.output
+                db = Database()
+                assert db.get_prefix() == "myproj"
+                db.close()
+            finally:
+                os.chdir(original_cwd)
+
+    def test_init_with_invalid_prefix_errors(self, cli_runner):
+        """Init rejects prefixes that can't be sanitized into validity."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                result = cli_runner.invoke(main, ["init", "--prefix", "!!!"])
+                assert result.exit_code != 0
+                assert "invalid prefix" in result.output.lower()
+            finally:
+                os.chdir(original_cwd)
+
+
+class TestRenamePrefixCommand:
+    """Tests for 'seeds rename-prefix' command."""
+
+    def test_rename_prefix_rewrites_ids(self, cli_runner, initialized_env):
+        """rename-prefix rewrites all seed IDs and updates config."""
+        # Create some seeds with the default 'seeds' prefix.
+        result = cli_runner.invoke(main, ["jot", "first"])
+        assert result.exit_code == 0
+        result = cli_runner.invoke(main, ["jot", "second"])
+        assert result.exit_code == 0
+
+        result = cli_runner.invoke(main, ["rename-prefix", "myproj"])
+        assert result.exit_code == 0
+        assert "Renamed 2 IDs" in result.output
+        assert "seeds-1 → myproj-1" in result.output
+
+        db = Database()
+        assert db.get_prefix() == "myproj"
+        assert db.get_seed("myproj-1") is not None
+        assert db.get_seed("seeds-1") is None
+        db.close()
+
+    def test_rename_prefix_sanitizes(self, cli_runner, initialized_env):
+        """rename-prefix sanitizes input before applying."""
+        cli_runner.invoke(main, ["jot", "first"])
+
+        result = cli_runner.invoke(main, ["rename-prefix", "My Project"])
+        assert result.exit_code == 0
+        assert "sanitized prefix to 'my-project'" in result.output
+
+        db = Database()
+        assert db.get_prefix() == "my-project"
+        db.close()
+
+    def test_rename_prefix_rejects_invalid(self, cli_runner, initialized_env):
+        """rename-prefix exits non-zero on irrecoverable input."""
+        result = cli_runner.invoke(main, ["rename-prefix", "!!!"])
+        assert result.exit_code != 0
+        assert "invalid prefix" in result.output.lower()
+
+    def test_rename_prefix_noop_when_same(self, cli_runner, initialized_env):
+        """rename-prefix to the current prefix is a no-op."""
+        result = cli_runner.invoke(main, ["rename-prefix", "seeds"])
+        assert result.exit_code == 0
+        assert "already set" in result.output
+
+    def test_prefix_command_shows_current(self, cli_runner, initialized_env):
+        """seeds prefix prints the configured prefix."""
+        result = cli_runner.invoke(main, ["prefix"])
+        assert result.exit_code == 0
+        assert result.output.strip() == "seeds"
+
+    def test_rename_prefix_rewrites_children(self, cli_runner, initialized_env):
+        """rename-prefix rewrites child IDs and updates parent references."""
+        cli_runner.invoke(main, ["create", "--title", "parent"])
+        result = cli_runner.invoke(
+            main, ["create", "--title", "child", "--parent", "seeds-1"]
+        )
+        assert result.exit_code == 0
+        assert "seeds-1.1" in result.output
+
+        result = cli_runner.invoke(main, ["rename-prefix", "demo"])
+        assert result.exit_code == 0
+        assert "seeds-1 → demo-1" in result.output
+        assert "seeds-1.1 → demo-1.1" in result.output
+
+        # The child should still be a child of the renamed parent.
+        result = cli_runner.invoke(main, ["show", "demo-1.1"])
+        assert result.exit_code == 0
+        assert "child" in result.output.lower()
+
+    def test_rename_prefix_reexports_jsonl(self, cli_runner, initialized_env):
+        """rename-prefix re-exports JSONL with the new IDs."""
+        cli_runner.invoke(main, ["jot", "alpha"])
+        cli_runner.invoke(main, ["jot", "beta"])
+
+        result = cli_runner.invoke(main, ["rename-prefix", "demo"])
+        assert result.exit_code == 0
+
+        jsonl_path = initialized_env / SEEDS_DIR / "seeds.jsonl"
+        text = jsonl_path.read_text()
+        assert '"id": "demo-1"' in text
+        assert '"id": "demo-2"' in text
+        assert '"id": "seeds-1"' not in text
+
+
+class TestAutoDerivePrefix:
+    """Tests for auto-derive on first command after upgrade."""
+
+    def test_auto_derive_renames_legacy_seeds_prefix(self, cli_runner):
+        """A DB initialized without prefix gets prefix on first CLI command."""
+        with tempfile.TemporaryDirectory() as parent:
+            project = Path(parent) / "demo-app"
+            project.mkdir()
+            original_cwd = os.getcwd()
+            os.chdir(project)
+            try:
+                # Simulate a pre-upgrade DB: init with no prefix, write seeds.
+                db = Database()
+                db.init()  # no prefix configured
+                db.create_seed(Seed(id="seeds-1", title="legacy"))
+                db.close()
+
+                # First CLI command should auto-derive and rename.
+                result = cli_runner.invoke(main, ["list"])
+                assert result.exit_code == 0
+                # The list output goes to stdout; the auto-derive notice to stderr.
+                # CliRunner mixes them by default, so it appears in result.output.
+                assert "derived prefix 'demo-app'" in result.output
+
+                db = Database()
+                assert db.get_prefix() == "demo-app"
+                assert db.get_seed("seeds-1") is None
+                assert db.get_seed("demo-app-1") is not None
+                db.close()
+            finally:
+                os.chdir(original_cwd)
+
+    def test_auto_derive_seeds_prefix_noop(self, cli_runner):
+        """When derived prefix matches default, no rename happens."""
+        with tempfile.TemporaryDirectory() as parent:
+            project = Path(parent) / "seeds"
+            project.mkdir()
+            original_cwd = os.getcwd()
+            os.chdir(project)
+            try:
+                db = Database()
+                db.init()  # no prefix configured
+                db.create_seed(Seed(id="seeds-1", title="kept"))
+                db.close()
+
+                result = cli_runner.invoke(main, ["list"])
+                assert result.exit_code == 0
+                # No "renamed N IDs" notice expected.
+                assert "renamed" not in result.output.lower()
+
+                db = Database()
+                assert db.get_prefix() == "seeds"
+                assert db.get_seed("seeds-1") is not None
+                db.close()
+            finally:
+                os.chdir(original_cwd)
+
+    def test_auto_derive_only_runs_once(self, cli_runner):
+        """Once configured, the auto-derive path stays silent."""
+        with tempfile.TemporaryDirectory() as parent:
+            project = Path(parent) / "demo-app"
+            project.mkdir()
+            original_cwd = os.getcwd()
+            os.chdir(project)
+            try:
+                db = Database()
+                db.init()
+                db.create_seed(Seed(id="seeds-1", title="legacy"))
+                db.close()
+
+                # First invocation triggers auto-derive.
+                cli_runner.invoke(main, ["list"])
+
+                # Second invocation should not print the derived-prefix notice.
+                result = cli_runner.invoke(main, ["list"])
+                assert "derived prefix" not in result.output
+            finally:
+                os.chdir(original_cwd)
 
 
 class TestJotCommand:

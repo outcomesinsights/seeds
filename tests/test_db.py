@@ -1027,3 +1027,148 @@ class TestMigration:
         rels = db.get_relationships("seed-a", rel_type=RelationType.RELATES_TO)
         assert len(rels) == 2  # Bidirectional, not duplicated
         db.close()
+
+
+class TestPrefixConfig:
+    """Tests for get/set_prefix and the config table."""
+
+    def test_default_prefix_when_unconfigured(self, db):
+        """get_prefix falls back to DEFAULT_PREFIX when nothing is set."""
+        assert db.has_prefix_configured() is False
+        assert db.get_prefix() == "seeds"
+
+    def test_set_and_get_prefix(self, db):
+        """set_prefix persists and is returned by get_prefix."""
+        db.set_prefix("myproj")
+        assert db.has_prefix_configured() is True
+        assert db.get_prefix() == "myproj"
+
+    def test_set_prefix_validates(self, db):
+        """set_prefix rejects invalid prefixes."""
+        import pytest
+
+        with pytest.raises(ValueError):
+            db.set_prefix("Bad Prefix")
+        with pytest.raises(ValueError):
+            db.set_prefix("123abc")
+
+    def test_init_with_prefix(self, temp_dir):
+        """Database.init(prefix=...) stores the prefix in config."""
+        db_path = temp_dir / ".seeds" / "seeds.db"
+        db = Database(path=db_path)
+        db.init(prefix="myproj")
+        assert db.get_prefix() == "myproj"
+        db.close()
+
+    def test_init_without_prefix_leaves_unset(self, temp_dir):
+        """Database.init() with no prefix leaves config empty."""
+        db_path = temp_dir / ".seeds" / "seeds.db"
+        db = Database(path=db_path)
+        db.init()
+        assert db.has_prefix_configured() is False
+        db.close()
+
+    def test_next_id_uses_configured_prefix(self, db):
+        """next_id() reads the configured prefix when no arg given."""
+        db.set_prefix("myproj")
+        assert db.next_id() == "myproj-1"
+        db.create_seed(Seed(id="myproj-1", title="First"))
+        assert db.next_id() == "myproj-2"
+
+
+class TestRenamePrefix:
+    """Tests for Database.rename_prefix."""
+
+    def test_rename_basic(self, db):
+        """Rename rewrites top-level seed IDs and stores new config."""
+        db.set_prefix("seeds")
+        db.create_seed(Seed(id="seeds-1", title="First"))
+        db.create_seed(Seed(id="seeds-2", title="Second"))
+
+        id_map = db.rename_prefix("myproj")
+
+        assert id_map == {"seeds-1": "myproj-1", "seeds-2": "myproj-2"}
+        assert db.get_seed("seeds-1") is None
+        assert db.get_seed("myproj-1") is not None
+        assert db.get_seed("myproj-2") is not None
+        assert db.get_prefix() == "myproj"
+
+    def test_rename_preserves_children(self, db):
+        """Children of renamed parents keep their dotted suffix."""
+        db.set_prefix("seeds")
+        db.create_seed(Seed(id="seeds-1", title="Parent"))
+        db.create_seed(Seed(id="seeds-1.1", title="Child"))
+        db.create_seed(Seed(id="seeds-1.2.3", title="Grandchild"))
+
+        id_map = db.rename_prefix("myproj")
+
+        assert "seeds-1.1" in id_map
+        assert id_map["seeds-1.1"] == "myproj-1.1"
+        assert id_map["seeds-1.2.3"] == "myproj-1.2.3"
+        assert db.get_seed("myproj-1.1") is not None
+        assert db.get_seed("myproj-1.2.3") is not None
+
+    def test_rename_rewrites_relationships(self, db):
+        """Relationships pointing at renamed IDs are rewritten."""
+        db.set_prefix("seeds")
+        db.create_seed(Seed(id="seeds-1", title="A"))
+        db.create_seed(Seed(id="seeds-2", title="B"))
+        db.create_relationship("seeds-1", "seeds-2", RelationType.RELATES_TO)
+
+        db.rename_prefix("myproj")
+
+        rels = db.get_relationships("myproj-1", direction="outbound")
+        assert len(rels) == 1
+        assert rels[0].target_id == "myproj-2"
+
+    def test_rename_skips_non_matching_prefix(self, db):
+        """IDs that don't match the old prefix are left alone."""
+        db.set_prefix("seeds")
+        db.create_seed(Seed(id="seeds-1", title="Match"))
+        db.create_seed(Seed(id="seed-a1b2c3d4", title="Legacy hex"))
+
+        id_map = db.rename_prefix("myproj")
+
+        assert id_map == {"seeds-1": "myproj-1"}
+        assert db.get_seed("seed-a1b2c3d4") is not None
+        assert db.get_seed("myproj-1") is not None
+
+    def test_rename_noop_when_same(self, db):
+        """Renaming to the current prefix is a no-op (but still sets config)."""
+        db.set_prefix("seeds")
+        db.create_seed(Seed(id="seeds-1", title="A"))
+        id_map = db.rename_prefix("seeds")
+        assert id_map == {}
+        assert db.get_seed("seeds-1") is not None
+        assert db.get_prefix() == "seeds"
+
+    def test_rename_invalid_raises(self, db):
+        """Invalid new prefix raises ValueError."""
+        import pytest
+
+        db.set_prefix("seeds")
+        with pytest.raises(ValueError):
+            db.rename_prefix("Bad Name")
+
+    def test_rename_collision_raises(self, db):
+        """Collision between renamed and existing ID raises ValueError."""
+        import pytest
+
+        # Manually plant mixed prefixes — the new prefix already has an entry.
+        db.set_prefix("seeds")
+        db.create_seed(Seed(id="seeds-1", title="A"))
+        db.create_seed(Seed(id="myproj-1", title="Existing"))
+
+        with pytest.raises(ValueError, match="collide"):
+            db.rename_prefix("myproj")
+
+    def test_rename_does_not_touch_seeds_text_id(self, db):
+        """IDs like 'seeds-experiment' (non-numeric tail) are not renamed."""
+        db.set_prefix("seeds")
+        db.create_seed(Seed(id="seeds-7", title="numeric"))
+        db.create_seed(Seed(id="seeds-experiment", title="text-suffix"))
+
+        id_map = db.rename_prefix("myproj")
+
+        assert id_map == {"seeds-7": "myproj-7"}
+        assert db.get_seed("seeds-experiment") is not None

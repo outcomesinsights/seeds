@@ -11,7 +11,50 @@ import click
 
 from seeds import __version__
 from seeds.db import SEEDS_DIR, Database
-from seeds.models import RelationType, Seed, SeedStatus, SeedType
+from seeds.models import (
+    DEFAULT_PREFIX,
+    RelationType,
+    Seed,
+    SeedStatus,
+    SeedType,
+    sanitize_prefix,
+)
+
+
+def _project_dir_name(db: Database) -> str:
+    """Return the project directory name that hosts ``db.path``'s .seeds dir."""
+    # db.path is .../<project>/.seeds/seeds.db, so .parent.parent is the project.
+    return db.path.parent.parent.name
+
+
+def _ensure_prefix_configured(db: Database) -> None:
+    """If the DB has no prefix in config, derive one and rewrite legacy IDs.
+
+    Runs at most once per database lifetime (subsequent calls no-op because
+    the config entry is set on first run). Silently keeps the default 'seeds'
+    prefix when the derived value matches it.
+    """
+    if db.has_prefix_configured():
+        return
+    derived = sanitize_prefix(_project_dir_name(db))
+    if not derived:
+        derived = DEFAULT_PREFIX
+    if derived == DEFAULT_PREFIX:
+        # No rewrite needed; just record the config so we don't keep checking.
+        db.set_prefix(derived)
+        return
+    id_map = db.rename_prefix(derived, old_prefix=DEFAULT_PREFIX)
+    if id_map:
+        click.echo(
+            f"seeds: derived prefix '{derived}' from project directory "
+            f"(renamed {len(id_map)} IDs)",
+            err=True,
+        )
+    else:
+        click.echo(
+            f"seeds: derived prefix '{derived}' from project directory",
+            err=True,
+        )
 
 
 class Context:
@@ -29,6 +72,7 @@ class Context:
                     "Error: seeds not initialized. Run 'seeds init' first.", err=True
                 )
                 sys.exit(1)
+            _ensure_prefix_configured(self.db)
         return self.db
 
     def ensure_init(self) -> Database:
@@ -61,16 +105,49 @@ def main(ctx: click.Context) -> None:
 
 
 @main.command()
-def init() -> None:
+@click.option(
+    "--prefix",
+    "prefix",
+    default=None,
+    help=(
+        "Project prefix for seed IDs (e.g., 'myproj' → myproj-1). "
+        "Defaults to the current directory name, lowercased and hyphenated."
+    ),
+)
+def init(prefix: str | None) -> None:
     """Initialize seeds in the current directory."""
     seeds_dir = Path.cwd() / SEEDS_DIR
     if seeds_dir.exists():
         click.echo(f"seeds already initialized in {seeds_dir}")
         return
 
+    if prefix is None:
+        derived = sanitize_prefix(Path.cwd().name)
+        if not derived:
+            click.echo(
+                f"Warning: could not derive a valid prefix from "
+                f"directory name {Path.cwd().name!r}; using {DEFAULT_PREFIX!r}. "
+                f"Use --prefix to set explicitly.",
+                err=True,
+            )
+            derived = DEFAULT_PREFIX
+        prefix = derived
+    else:
+        sanitized = sanitize_prefix(prefix)
+        if not sanitized:
+            click.echo(
+                f"Error: invalid prefix {prefix!r}. Must start with a "
+                "lowercase letter and contain only lowercase letters, digits, "
+                "and hyphens.",
+                err=True,
+            )
+            sys.exit(1)
+        prefix = sanitized
+
     db = Database()
-    db.init()
+    db.init(prefix=prefix)
     click.echo(f"Initialized seeds in {seeds_dir}")
+    click.echo(f"  Project prefix: {prefix}")
     click.echo("  .seeds/.gitignore created (SQLite ignored, JSONL tracked)")
     click.echo("Run 'seeds jot \"Your first idea\"' to capture a thought.")
 
@@ -930,6 +1007,74 @@ def migrate_ids(ctx: Context) -> None:
 
     output_path = export_to_jsonl(db)
     click.echo(f"\nRe-exported to {output_path}")
+
+
+@main.command("rename-prefix")
+@click.argument("new_prefix")
+@pass_context
+def rename_prefix(ctx: Context, new_prefix: str) -> None:
+    """Rename the project prefix and rewrite all seed IDs to use it.
+
+    NEW_PREFIX must start with a lowercase letter and contain only lowercase
+    letters, digits, and hyphens. The current prefix is read from the database
+    config; all top-level IDs (and their children/relationships) using the old
+    prefix are rewritten in place.
+    """
+    db = ctx.get_db()
+
+    sanitized = sanitize_prefix(new_prefix)
+    if not sanitized:
+        click.echo(
+            f"Error: invalid prefix {new_prefix!r}. Must start with a "
+            "lowercase letter and contain only lowercase letters, digits, "
+            "and hyphens.",
+            err=True,
+        )
+        sys.exit(1)
+    if sanitized != new_prefix:
+        click.echo(f"Note: sanitized prefix to {sanitized!r}")
+
+    old_prefix = db.get_prefix()
+    if old_prefix == sanitized:
+        click.echo(f"Prefix already set to {sanitized!r}; nothing to do.")
+        return
+
+    import shutil
+
+    backup_path = db.path.with_suffix(".db.bak")
+    shutil.copy2(db.path, backup_path)
+    click.echo(f"Backed up database to {backup_path}")
+
+    try:
+        id_map = db.rename_prefix(sanitized, old_prefix=old_prefix)
+    except ValueError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    if not id_map:
+        click.echo(
+            f"Updated prefix to {sanitized!r} (no IDs matched {old_prefix!r})."
+        )
+    else:
+        click.echo(
+            f"Renamed {len(id_map)} IDs from prefix {old_prefix!r} "
+            f"to {sanitized!r}:"
+        )
+        for old_id, new_id in sorted(id_map.items(), key=lambda x: x[1]):
+            click.echo(f"  {old_id} → {new_id}")
+
+    from seeds.export import export_to_jsonl
+
+    output_path = export_to_jsonl(db)
+    click.echo(f"\nRe-exported to {output_path}")
+
+
+@main.command("prefix")
+@pass_context
+def show_prefix(ctx: Context) -> None:
+    """Show the current project prefix."""
+    db = ctx.get_db()
+    click.echo(db.get_prefix())
 
 
 if __name__ == "__main__":

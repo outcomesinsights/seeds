@@ -9,7 +9,9 @@ from seeds.models import (
     SeedType,
     generate_id,
     get_parent_id,
+    is_valid_prefix,
     parse_sequential_id,
+    sanitize_prefix,
 )
 
 
@@ -195,6 +197,70 @@ class TestRelationType:
         """Verify invalid relationship type raises ValueError."""
         with pytest.raises(ValueError):
             RelationType("invalid")
+
+
+class TestSanitizePrefix:
+    """Tests for sanitize_prefix."""
+
+    def test_simple_lowercase(self):
+        assert sanitize_prefix("myproj") == "myproj"
+
+    def test_already_kebab(self):
+        assert sanitize_prefix("my-project") == "my-project"
+
+    def test_uppercase_lowered(self):
+        assert sanitize_prefix("MyProject") == "myproject"
+
+    def test_space_to_hyphen(self):
+        assert sanitize_prefix("My Project") == "my-project"
+
+    def test_underscore_to_hyphen(self):
+        assert sanitize_prefix("foo_bar") == "foo-bar"
+
+    def test_dots_to_hyphen(self):
+        assert sanitize_prefix("foo_bar.v2") == "foo-bar-v2"
+
+    def test_collapses_runs(self):
+        assert sanitize_prefix("foo  bar___baz") == "foo-bar-baz"
+
+    def test_strips_leading_trailing(self):
+        assert sanitize_prefix("-foo-") == "foo"
+        assert sanitize_prefix("__bar__") == "bar"
+
+    def test_empty_input(self):
+        assert sanitize_prefix("") == ""
+
+    def test_only_punctuation(self):
+        assert sanitize_prefix("!!!") == ""
+
+    def test_leading_digit_invalid(self):
+        assert sanitize_prefix("123proj") == ""
+
+    def test_seeds_unchanged(self):
+        assert sanitize_prefix("seeds") == "seeds"
+
+
+class TestIsValidPrefix:
+    """Tests for is_valid_prefix."""
+
+    def test_valid(self):
+        assert is_valid_prefix("seeds") is True
+        assert is_valid_prefix("my-project") is True
+        assert is_valid_prefix("p1") is True
+
+    def test_invalid_uppercase(self):
+        assert is_valid_prefix("Seeds") is False
+
+    def test_invalid_starts_with_digit(self):
+        assert is_valid_prefix("1abc") is False
+
+    def test_invalid_empty(self):
+        assert is_valid_prefix("") is False
+
+    def test_invalid_chars(self):
+        assert is_valid_prefix("foo_bar") is False
+        assert is_valid_prefix("foo.bar") is False
+        assert is_valid_prefix("foo bar") is False
 
 
 class TestRelationship:

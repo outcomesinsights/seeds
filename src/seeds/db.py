@@ -15,6 +15,7 @@ from seeds.models import (
     Seed,
     SeedStatus,
     SeedType,
+    is_valid_prefix,
     now_utc,
     parse_sequential_id,
 )
@@ -82,7 +83,14 @@ CREATE INDEX IF NOT EXISTS idx_seeds_type ON seeds(seed_type);
 CREATE INDEX IF NOT EXISTS idx_relationships_source ON relationships(source_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(target_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_type ON relationships(rel_type);
+
+CREATE TABLE IF NOT EXISTS config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
+
+PREFIX_CONFIG_KEY = "prefix"
 
 # FTS5 virtual table for full-text search across seeds.
 FTS_SCHEMA = """
@@ -158,10 +166,17 @@ class Database:
             self._conn = sqlite3.connect(self.path)
             self._conn.row_factory = sqlite3.Row
             self._migrate_add_resolution()
+            self._migrate_add_config()
         return self._conn
 
-    def init(self) -> None:
-        """Initialize database schema and .seeds/.gitignore."""
+    def init(self, prefix: str | None = None) -> None:
+        """Initialize database schema and .seeds/.gitignore.
+
+        Args:
+            prefix: Optional project prefix to store in the config table.
+                If None, the prefix stays unset and callers fall back to
+                DEFAULT_PREFIX until rename-prefix or auto-derive sets it.
+        """
         self.path.parent.mkdir(parents=True, exist_ok=True)
         conn = self._get_conn()
         conn.executescript(SCHEMA)
@@ -169,6 +184,10 @@ class Database:
         conn.executescript(FTS_TRIGGERS)
         conn.commit()
         self._migrate_add_resolution()
+        self._migrate_add_config()
+
+        if prefix is not None:
+            self.set_prefix(prefix)
 
         # Create .gitignore inside .seeds/ (like beads' .beads/.gitignore)
         # Ignores SQLite DB and runtime files; JSONL is tracked by default.
@@ -198,15 +217,76 @@ class Database:
             conn.execute("ALTER TABLE seeds ADD COLUMN resolution TEXT DEFAULT ''")
             conn.commit()
 
+    def _migrate_add_config(self) -> None:
+        """Add the config key/value table if missing (migration for older DBs)."""
+        conn = self._conn
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS config (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+
+    # --- Config / prefix ---
+
+    def get_config(self, key: str, default: str | None = None) -> str | None:
+        """Read a config value by key, returning ``default`` if not set."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT value FROM config WHERE key = ?", (key,)
+        ).fetchone()
+        if row is None:
+            return default
+        return row["value"]
+
+    def set_config(self, key: str, value: str) -> None:
+        """Set or replace a config value."""
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
+            (key, value),
+        )
+        conn.commit()
+
+    def get_prefix(self) -> str:
+        """Return the configured project prefix, or DEFAULT_PREFIX if unset."""
+        value = self.get_config(PREFIX_CONFIG_KEY)
+        if value and is_valid_prefix(value):
+            return value
+        return DEFAULT_PREFIX
+
+    def has_prefix_configured(self) -> bool:
+        """Return True if the prefix has been explicitly set in config."""
+        return self.get_config(PREFIX_CONFIG_KEY) is not None
+
+    def set_prefix(self, prefix: str) -> None:
+        """Validate and store the project prefix in config.
+
+        Does not rewrite existing IDs — use :meth:`rename_prefix` for that.
+        """
+        if not is_valid_prefix(prefix):
+            raise ValueError(
+                f"Invalid prefix {prefix!r}: must start with a lowercase letter "
+                "and contain only lowercase letters, digits, and hyphens."
+            )
+        self.set_config(PREFIX_CONFIG_KEY, prefix)
+
     def is_initialized(self) -> bool:
         """Check if database exists and is initialized."""
         return self.path.exists()
 
-    def next_id(self, prefix: str = DEFAULT_PREFIX) -> str:
-        """Generate the next sequential ID like 'seeds-1', 'seeds-2', etc.
+    def next_id(self, prefix: str | None = None) -> str:
+        """Generate the next sequential ID like 'myproj-1', 'myproj-2', etc.
 
         Scans all existing IDs to find the current max sequential number.
+        If ``prefix`` is None, the configured project prefix is used
+        (falling back to DEFAULT_PREFIX when no config entry exists).
         """
+        if prefix is None:
+            prefix = self.get_prefix()
         conn = self._get_conn()
         rows = conn.execute("SELECT id FROM seeds").fetchall()
 
@@ -684,14 +764,20 @@ class Database:
         conn.commit()
         return counts
 
-    def migrate_to_sequential_ids(self, prefix: str = DEFAULT_PREFIX) -> dict[str, str]:
+    def migrate_to_sequential_ids(
+        self, prefix: str | None = None
+    ) -> dict[str, str]:
         """Migrate all hex-hash IDs to sequential IDs.
 
         Assigns sequential IDs in creation order. Children keep their
-        parent relationship (seed-81a4.1 becomes seeds-N.M).
+        parent relationship (seed-81a4.1 becomes <prefix>-N.M).
+
+        If ``prefix`` is None, uses the configured project prefix.
 
         Returns the old-to-new ID mapping.
         """
+        if prefix is None:
+            prefix = self.get_prefix()
         conn = self._get_conn()
 
         # Check if already migrated: if there are no hex-style top-level IDs, skip
@@ -772,6 +858,113 @@ class Database:
         conn.commit()
 
         # Rebuild FTS index with new IDs
+        self.ensure_fts()
+        self.rebuild_fts()
+
+        return id_map
+
+    def rename_prefix(
+        self, new_prefix: str, old_prefix: str | None = None
+    ) -> dict[str, str]:
+        """Rewrite all IDs that use ``old_prefix`` to use ``new_prefix``.
+
+        Updates seeds.id, relationships.source_id, relationships.target_id,
+        and the FTS index. Stores ``new_prefix`` in config.
+
+        If ``old_prefix`` is None, uses the currently configured prefix
+        (falling back to DEFAULT_PREFIX). IDs whose top-level segment does
+        not match ``old_prefix`` are left untouched, so this is safe to run
+        on databases containing legacy hex IDs alongside prefixed ones.
+
+        Returns the old-to-new ID mapping (empty if nothing changed).
+        """
+        if not is_valid_prefix(new_prefix):
+            raise ValueError(
+                f"Invalid prefix {new_prefix!r}: must start with a lowercase "
+                "letter and contain only lowercase letters, digits, and hyphens."
+            )
+        if old_prefix is None:
+            old_prefix = self.get_prefix()
+
+        # Always sync config to the new prefix, even when no rewrite happens.
+        if old_prefix == new_prefix:
+            self.set_config(PREFIX_CONFIG_KEY, new_prefix)
+            return {}
+
+        conn = self._get_conn()
+        rows = conn.execute("SELECT id FROM seeds").fetchall()
+
+        old_lead = f"{old_prefix}-"
+        id_map: dict[str, str] = {}
+        for row in rows:
+            sid = row["id"]
+            # Top-level prefix segment is everything before the first '.'
+            top = sid.split(".", 1)[0]
+            if not top.startswith(old_lead):
+                continue
+            # Confirm the segment after the prefix is purely numeric so we
+            # don't accidentally rename something like 'seeds-experiment'.
+            try:
+                int(top[len(old_lead) :])
+            except ValueError:
+                continue
+            new_id = f"{new_prefix}{sid[len(old_prefix) :]}"
+            id_map[sid] = new_id
+
+        if not id_map:
+            # Nothing to rename, but config still updates.
+            self.set_config(PREFIX_CONFIG_KEY, new_prefix)
+            return {}
+
+        # Guard against collisions: if any new_id already exists in the DB and
+        # is NOT being renamed away, the rewrite would create a duplicate PK.
+        existing_ids = {row["id"] for row in rows}
+        renamed_sources = set(id_map.keys())
+        for new_id in id_map.values():
+            if new_id in existing_ids and new_id not in renamed_sources:
+                raise ValueError(
+                    f"Renaming '{old_prefix}' to '{new_prefix}' would collide "
+                    f"with existing ID {new_id!r}. Database has mixed prefixes; "
+                    "resolve manually before retrying."
+                )
+
+        # Two-phase rewrite via temp IDs to avoid PK collisions.
+        conn.execute("PRAGMA foreign_keys = OFF")
+        try:
+            temp_map: dict[str, str] = {}
+            for old_id, new_id in id_map.items():
+                temp_id = f"__rename__{new_id}"
+                temp_map[temp_id] = new_id
+                conn.execute(
+                    "UPDATE seeds SET id = ? WHERE id = ?", (temp_id, old_id)
+                )
+                conn.execute(
+                    "UPDATE relationships SET source_id = ? WHERE source_id = ?",
+                    (temp_id, old_id),
+                )
+                conn.execute(
+                    "UPDATE relationships SET target_id = ? WHERE target_id = ?",
+                    (temp_id, old_id),
+                )
+
+            for temp_id, new_id in temp_map.items():
+                conn.execute(
+                    "UPDATE seeds SET id = ? WHERE id = ?", (new_id, temp_id)
+                )
+                conn.execute(
+                    "UPDATE relationships SET source_id = ? WHERE source_id = ?",
+                    (new_id, temp_id),
+                )
+                conn.execute(
+                    "UPDATE relationships SET target_id = ? WHERE target_id = ?",
+                    (new_id, temp_id),
+                )
+        finally:
+            conn.execute("PRAGMA foreign_keys = ON")
+
+        self.set_config(PREFIX_CONFIG_KEY, new_prefix)
+        conn.commit()
+
         self.ensure_fts()
         self.rebuild_fts()
 

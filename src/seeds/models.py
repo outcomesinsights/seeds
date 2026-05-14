@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -49,8 +50,41 @@ def generate_id(prefix: str = "seed") -> str:
     return f"{prefix}-{hash_val}"
 
 
-# Default project prefix for sequential IDs
+# Default project prefix for sequential IDs (used as fallback when no config set)
 DEFAULT_PREFIX = "seeds"
+
+# Allowed prefix shape: lowercase letter, then lowercase letters/digits/hyphens.
+PREFIX_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+
+
+def sanitize_prefix(raw: str) -> str:
+    """Coerce a string (e.g., a directory name) into a valid ID prefix.
+
+    Rules:
+        - Lowercase.
+        - Replace runs of non-alphanumeric chars with a single hyphen.
+        - Strip leading/trailing hyphens.
+        - If the result is empty or starts with a digit, return "" (invalid).
+
+    Examples:
+        'My Project'   -> 'my-project'
+        'foo_bar.v2'   -> 'foo-bar-v2'
+        'seeds'        -> 'seeds'
+        '123proj'      -> '' (invalid: starts with digit)
+        '!!!'          -> '' (invalid: nothing to anchor on)
+    """
+    if not raw:
+        return ""
+    lowered = raw.lower()
+    collapsed = re.sub(r"[^a-z0-9]+", "-", lowered).strip("-")
+    if not collapsed or not PREFIX_RE.match(collapsed):
+        return ""
+    return collapsed
+
+
+def is_valid_prefix(value: str) -> bool:
+    """Return True if value is a valid ID prefix (matches PREFIX_RE)."""
+    return bool(PREFIX_RE.match(value))
 
 
 def parse_sequential_id(seed_id: str) -> int | None:
