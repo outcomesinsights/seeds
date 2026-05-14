@@ -1,6 +1,7 @@
 """Tests for the seeds web UI."""
 
 import pytest
+
 from seeds.models import RelationType, Seed, SeedStatus, SeedType
 from seeds.web import build_seed_tree, create_app, flatten_tree
 

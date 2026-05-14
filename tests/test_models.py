@@ -1,6 +1,7 @@
 """Tests for seeds data models."""
 
 import pytest
+
 from seeds.models import (
     Relationship,
     RelationType,
