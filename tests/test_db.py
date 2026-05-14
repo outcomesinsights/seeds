@@ -1085,9 +1085,10 @@ class TestRenamePrefix:
         db.create_seed(Seed(id="seeds-1", title="First"))
         db.create_seed(Seed(id="seeds-2", title="Second"))
 
-        id_map = db.rename_prefix("myproj")
+        id_map, body_changes = db.rename_prefix("myproj")
 
         assert id_map == {"seeds-1": "myproj-1", "seeds-2": "myproj-2"}
+        assert body_changes == []
         assert db.get_seed("seeds-1") is None
         assert db.get_seed("myproj-1") is not None
         assert db.get_seed("myproj-2") is not None
@@ -1100,7 +1101,7 @@ class TestRenamePrefix:
         db.create_seed(Seed(id="seeds-1.1", title="Child"))
         db.create_seed(Seed(id="seeds-1.2.3", title="Grandchild"))
 
-        id_map = db.rename_prefix("myproj")
+        id_map, _ = db.rename_prefix("myproj")
 
         assert "seeds-1.1" in id_map
         assert id_map["seeds-1.1"] == "myproj-1.1"
@@ -1127,7 +1128,7 @@ class TestRenamePrefix:
         db.create_seed(Seed(id="seeds-1", title="Match"))
         db.create_seed(Seed(id="seed-a1b2c3d4", title="Legacy hex"))
 
-        id_map = db.rename_prefix("myproj")
+        id_map, _ = db.rename_prefix("myproj")
 
         assert id_map == {"seeds-1": "myproj-1"}
         assert db.get_seed("seed-a1b2c3d4") is not None
@@ -1137,8 +1138,9 @@ class TestRenamePrefix:
         """Renaming to the current prefix is a no-op (but still sets config)."""
         db.set_prefix("seeds")
         db.create_seed(Seed(id="seeds-1", title="A"))
-        id_map = db.rename_prefix("seeds")
+        id_map, body_changes = db.rename_prefix("seeds")
         assert id_map == {}
+        assert body_changes == []
         assert db.get_seed("seeds-1") is not None
         assert db.get_prefix() == "seeds"
 
@@ -1168,7 +1170,171 @@ class TestRenamePrefix:
         db.create_seed(Seed(id="seeds-7", title="numeric"))
         db.create_seed(Seed(id="seeds-experiment", title="text-suffix"))
 
-        id_map = db.rename_prefix("myproj")
+        id_map, _ = db.rename_prefix("myproj")
 
         assert id_map == {"seeds-7": "myproj-7"}
         assert db.get_seed("seeds-experiment") is not None
+
+
+class TestRenamePrefixBodyRewrites:
+    """Tests for body-text rewriting inside rename_prefix."""
+
+    def test_rewrites_refs_in_content(self, db):
+        """ID references in content are rewritten to the new prefix."""
+        db.set_prefix("seeds")
+        db.create_seed(
+            Seed(id="seeds-1", title="hub", content="See seeds-2 and seeds-3.")
+        )
+        db.create_seed(Seed(id="seeds-2", title="ref"))
+        db.create_seed(Seed(id="seeds-3", title="ref"))
+
+        _, body_changes = db.rename_prefix("myproj")
+
+        assert len(body_changes) == 2
+        hub = db.get_seed("myproj-1")
+        assert hub.content == "See myproj-2 and myproj-3."
+
+    def test_rewrites_refs_in_title(self, db):
+        """ID references in title are rewritten."""
+        db.set_prefix("seeds")
+        db.create_seed(Seed(id="seeds-1", title="Builds on seeds-2"))
+        db.create_seed(Seed(id="seeds-2", title="dep"))
+
+        _, body_changes = db.rename_prefix("myproj")
+
+        renamed = db.get_seed("myproj-1")
+        assert renamed.title == "Builds on myproj-2"
+        assert any(c.field == "title" for c in body_changes)
+
+    def test_rewrites_refs_in_resolution(self, db):
+        """ID references in resolution are rewritten."""
+        db.set_prefix("seeds")
+        s = Seed(
+            id="seeds-1",
+            title="root",
+            resolution="Resolved by seeds-2 work.",
+            status=SeedStatus.RESOLVED,
+        )
+        db.create_seed(s)
+        db.create_seed(Seed(id="seeds-2", title="follow-up"))
+
+        _, body_changes = db.rename_prefix("myproj")
+
+        renamed = db.get_seed("myproj-1")
+        assert renamed.resolution == "Resolved by myproj-2 work."
+        assert any(c.field == "resolution" for c in body_changes)
+
+    def test_leaves_non_id_tokens_alone(self, db):
+        """Compound tokens like 'seeds-related' aren't touched."""
+        db.set_prefix("seeds")
+        db.create_seed(
+            Seed(
+                id="seeds-1",
+                title="hub",
+                content="The seeds-related code and seeds-experiment.",
+            )
+        )
+
+        _, body_changes = db.rename_prefix("myproj")
+
+        assert body_changes == []
+        seed = db.get_seed("myproj-1")
+        assert seed.content == "The seeds-related code and seeds-experiment."
+
+    def test_rewrites_child_id_refs(self, db):
+        """Child references like seeds-7.1 are rewritten with their suffix."""
+        db.set_prefix("seeds")
+        db.create_seed(Seed(id="seeds-1", title="parent"))
+        db.create_seed(Seed(id="seeds-1.1", title="child"))
+        db.create_seed(
+            Seed(id="seeds-2", title="other", content="depends on seeds-1.1")
+        )
+
+        _, body_changes = db.rename_prefix("myproj")
+
+        assert any("myproj-1.1" in c.new_snippet for c in body_changes)
+        other = db.get_seed("myproj-2")
+        assert other.content == "depends on myproj-1.1"
+
+    def test_rewrites_markdown_link(self, db):
+        """Markdown link form [seeds-7](url) rewrites."""
+        db.set_prefix("seeds")
+        db.create_seed(
+            Seed(
+                id="seeds-1",
+                title="hub",
+                content="See [seeds-2](/seeds/seeds-2).",
+            )
+        )
+        db.create_seed(Seed(id="seeds-2", title="ref"))
+
+        _, body_changes = db.rename_prefix("myproj")
+
+        seed = db.get_seed("myproj-1")
+        # Both the link text and the URL path component should rewrite —
+        # both are bounded by non-identifier characters.
+        assert seed.content == "See [myproj-2](/seeds/myproj-2)."
+        assert len(body_changes) == 2
+
+    def test_rewrite_is_idempotent(self, db):
+        """Running rename twice doesn't double-rewrite."""
+        db.set_prefix("seeds")
+        db.create_seed(
+            Seed(id="seeds-1", title="hub", content="cf. seeds-2")
+        )
+        db.create_seed(Seed(id="seeds-2", title="ref"))
+
+        db.rename_prefix("myproj")
+        _, body_changes = db.rename_prefix("anotherproj")
+
+        seed = db.get_seed("anotherproj-1")
+        assert seed.content == "cf. anotherproj-2"
+        assert len(body_changes) == 1
+
+    def test_no_rewrite_bodies_flag(self, db):
+        """When rewrite_bodies=False, body text is left alone."""
+        db.set_prefix("seeds")
+        db.create_seed(
+            Seed(id="seeds-1", title="hub", content="See seeds-2.")
+        )
+        db.create_seed(Seed(id="seeds-2", title="ref"))
+
+        _, body_changes = db.rename_prefix("myproj", rewrite_bodies=False)
+
+        assert body_changes == []
+        seed = db.get_seed("myproj-1")
+        assert seed.content == "See seeds-2."  # stale!
+
+    def test_dry_run_makes_no_writes(self, db):
+        """dry_run=True returns the same data but doesn't commit."""
+        db.set_prefix("seeds")
+        db.create_seed(
+            Seed(id="seeds-1", title="hub", content="See seeds-2.")
+        )
+        db.create_seed(Seed(id="seeds-2", title="ref"))
+
+        id_map, body_changes = db.rename_prefix("myproj", dry_run=True)
+
+        assert id_map == {"seeds-1": "myproj-1", "seeds-2": "myproj-2"}
+        assert len(body_changes) == 1
+        # Nothing actually changed.
+        assert db.get_seed("seeds-1") is not None
+        assert db.get_seed("seeds-1").content == "See seeds-2."
+        assert db.get_prefix() == "seeds"
+
+    def test_body_change_records_snippets(self, db):
+        """BodyRefChange objects carry seed_id, field, and snippet pairs."""
+        db.set_prefix("seeds")
+        db.create_seed(
+            Seed(id="seeds-1", title="hub", content="See seeds-2 next.")
+        )
+        db.create_seed(Seed(id="seeds-2", title="ref"))
+
+        _, body_changes = db.rename_prefix("myproj", dry_run=True)
+
+        assert len(body_changes) == 1
+        change = body_changes[0]
+        assert change.seed_id == "seeds-1"
+        assert change.field == "content"
+        assert "seeds-2" in change.old_snippet
+        assert "myproj-2" in change.new_snippet

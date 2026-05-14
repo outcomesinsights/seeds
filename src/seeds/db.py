@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -16,9 +17,21 @@ from seeds.models import (
     SeedStatus,
     SeedType,
     is_valid_prefix,
+    iter_id_ref_snippets,
     now_utc,
     parse_sequential_id,
+    rewrite_id_refs,
 )
+
+
+@dataclass(frozen=True)
+class BodyRefChange:
+    """A single ID reference change inside a seed's body field."""
+
+    seed_id: str
+    field: str  # "title" | "content" | "resolution"
+    old_snippet: str
+    new_snippet: str
 
 # Allow override via environment variable for testing/development
 SEEDS_DIR = os.environ.get("SEEDS_DIR", ".seeds")
@@ -864,19 +877,32 @@ class Database:
         return id_map
 
     def rename_prefix(
-        self, new_prefix: str, old_prefix: str | None = None
-    ) -> dict[str, str]:
+        self,
+        new_prefix: str,
+        old_prefix: str | None = None,
+        rewrite_bodies: bool = True,
+        dry_run: bool = False,
+    ) -> tuple[dict[str, str], list[BodyRefChange]]:
         """Rewrite all IDs that use ``old_prefix`` to use ``new_prefix``.
 
         Updates seeds.id, relationships.source_id, relationships.target_id,
-        and the FTS index. Stores ``new_prefix`` in config.
+        and (when ``rewrite_bodies`` is True) ID references inside each
+        seed's title/content/resolution. Stores ``new_prefix`` in config.
 
         If ``old_prefix`` is None, uses the currently configured prefix
         (falling back to DEFAULT_PREFIX). IDs whose top-level segment does
         not match ``old_prefix`` are left untouched, so this is safe to run
         on databases containing legacy hex IDs alongside prefixed ones.
 
-        Returns the old-to-new ID mapping (empty if nothing changed).
+        When ``dry_run`` is True, no writes happen — the return value
+        reports what *would* change, including snippet previews for every
+        body reference. Useful for ``seeds rename-prefix --dry-run``.
+
+        Returns ``(id_map, body_changes)``:
+            ``id_map``: dict mapping each old top-level/child ID to its new
+                form. Empty when no IDs matched.
+            ``body_changes``: list of :class:`BodyRefChange` rows, one per
+                in-text reference (always populated, even on dry-run).
         """
         if not is_valid_prefix(new_prefix):
             raise ValueError(
@@ -886,10 +912,11 @@ class Database:
         if old_prefix is None:
             old_prefix = self.get_prefix()
 
-        # Always sync config to the new prefix, even when no rewrite happens.
+        # Renaming to the current prefix is a no-op (config still gets touched).
         if old_prefix == new_prefix:
-            self.set_config(PREFIX_CONFIG_KEY, new_prefix)
-            return {}
+            if not dry_run:
+                self.set_config(PREFIX_CONFIG_KEY, new_prefix)
+            return {}, []
 
         conn = self._get_conn()
         rows = conn.execute("SELECT id FROM seeds").fetchall()
@@ -911,10 +938,23 @@ class Database:
             new_id = f"{new_prefix}{sid[len(old_prefix) :]}"
             id_map[sid] = new_id
 
+        # Body rewriting can fire even when no IDs match (text references to
+        # deleted seeds), and we always *compute* the changes so callers can
+        # preview on dry-run. ``_apply_body_id_rewrites`` does the writes
+        # itself unless ``dry_run`` is True.
+        body_changes: list[BodyRefChange] = []
+        if rewrite_bodies:
+            body_changes = self._apply_body_id_rewrites(
+                old_prefix, new_prefix, dry_run=dry_run
+            )
+
         if not id_map:
-            # Nothing to rename, but config still updates.
-            self.set_config(PREFIX_CONFIG_KEY, new_prefix)
-            return {}
+            if not dry_run:
+                self.set_config(PREFIX_CONFIG_KEY, new_prefix)
+                if body_changes:
+                    self.ensure_fts()
+                    self.rebuild_fts()
+            return {}, body_changes
 
         # Guard against collisions: if any new_id already exists in the DB and
         # is NOT being renamed away, the rewrite would create a duplicate PK.
@@ -927,6 +967,9 @@ class Database:
                     f"with existing ID {new_id!r}. Database has mixed prefixes; "
                     "resolve manually before retrying."
                 )
+
+        if dry_run:
+            return id_map, body_changes
 
         # Two-phase rewrite via temp IDs to avoid PK collisions.
         conn.execute("PRAGMA foreign_keys = OFF")
@@ -968,7 +1011,61 @@ class Database:
         self.ensure_fts()
         self.rebuild_fts()
 
-        return id_map
+        return id_map, body_changes
+
+    def _apply_body_id_rewrites(
+        self, old_prefix: str, new_prefix: str, dry_run: bool = False
+    ) -> list[BodyRefChange]:
+        """Rewrite ID references in seed text fields (title/content/resolution).
+
+        Always computes the list of changes (with snippet previews) so callers
+        can preview the result. Performs the writes unless ``dry_run`` is True.
+        """
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT id, title, content, resolution FROM seeds"
+        ).fetchall()
+
+        changes: list[BodyRefChange] = []
+        for row in rows:
+            title = row["title"] or ""
+            content = row["content"] or ""
+            resolution = row["resolution"] or ""
+
+            new_title, c1 = rewrite_id_refs(title, old_prefix, new_prefix)
+            new_content, c2 = rewrite_id_refs(content, old_prefix, new_prefix)
+            new_resolution, c3 = rewrite_id_refs(
+                resolution, old_prefix, new_prefix
+            )
+
+            if c1 == 0 and c2 == 0 and c3 == 0:
+                continue
+
+            for field_name, original in (
+                ("title", title),
+                ("content", content),
+                ("resolution", resolution),
+            ):
+                for old_snip, new_snip in iter_id_ref_snippets(
+                    original, old_prefix, new_prefix
+                ):
+                    changes.append(
+                        BodyRefChange(
+                            seed_id=row["id"],
+                            field=field_name,
+                            old_snippet=old_snip,
+                            new_snippet=new_snip,
+                        )
+                    )
+
+            if not dry_run:
+                conn.execute(
+                    "UPDATE seeds SET title = ?, content = ?, "
+                    "resolution = ? WHERE id = ?",
+                    (new_title, new_content, new_resolution, row["id"]),
+                )
+
+        return changes
 
     # --- Search operations ---
 

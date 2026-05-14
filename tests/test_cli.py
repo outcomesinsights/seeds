@@ -211,85 +211,62 @@ class TestRenamePrefixCommand:
         assert '"id": "demo-2"' in text
         assert '"id": "seeds-1"' not in text
 
+    def test_rename_prefix_rewrites_body_refs(self, cli_runner, initialized_env):
+        """rename-prefix rewrites ID refs inside seed content by default."""
+        cli_runner.invoke(main, ["jot", "target"])
+        cli_runner.invoke(
+            main, ["create", "--title", "hub", "--content", "see seeds-1"]
+        )
 
-class TestAutoDerivePrefix:
-    """Tests for auto-derive on first command after upgrade."""
+        result = cli_runner.invoke(main, ["rename-prefix", "demo"])
+        assert result.exit_code == 0
+        assert "Rewrote 1 ID reference" in result.output
 
-    def test_auto_derive_renames_legacy_seeds_prefix(self, cli_runner):
-        """A DB initialized without prefix gets prefix on first CLI command."""
-        with tempfile.TemporaryDirectory() as parent:
-            project = Path(parent) / "demo-app"
-            project.mkdir()
-            original_cwd = os.getcwd()
-            os.chdir(project)
-            try:
-                # Simulate a pre-upgrade DB: init with no prefix, write seeds.
-                db = Database()
-                db.init()  # no prefix configured
-                db.create_seed(Seed(id="seeds-1", title="legacy"))
-                db.close()
+        result = cli_runner.invoke(main, ["show", "demo-2"])
+        assert "see demo-1" in result.output
 
-                # First CLI command should auto-derive and rename.
-                result = cli_runner.invoke(main, ["list"])
-                assert result.exit_code == 0
-                # The list output goes to stdout; the auto-derive notice to stderr.
-                # CliRunner mixes them by default, so it appears in result.output.
-                assert "derived prefix 'demo-app'" in result.output
+    def test_rename_prefix_no_rewrite_bodies(self, cli_runner, initialized_env):
+        """--no-rewrite-bodies leaves seed content alone."""
+        cli_runner.invoke(main, ["jot", "target"])
+        cli_runner.invoke(
+            main, ["create", "--title", "hub", "--content", "see seeds-1"]
+        )
 
-                db = Database()
-                assert db.get_prefix() == "demo-app"
-                assert db.get_seed("seeds-1") is None
-                assert db.get_seed("demo-app-1") is not None
-                db.close()
-            finally:
-                os.chdir(original_cwd)
+        result = cli_runner.invoke(
+            main, ["rename-prefix", "demo", "--no-rewrite-bodies"]
+        )
+        assert result.exit_code == 0
+        assert "body" not in result.output.lower()
 
-    def test_auto_derive_seeds_prefix_noop(self, cli_runner):
-        """When derived prefix matches default, no rename happens."""
-        with tempfile.TemporaryDirectory() as parent:
-            project = Path(parent) / "seeds"
-            project.mkdir()
-            original_cwd = os.getcwd()
-            os.chdir(project)
-            try:
-                db = Database()
-                db.init()  # no prefix configured
-                db.create_seed(Seed(id="seeds-1", title="kept"))
-                db.close()
+        result = cli_runner.invoke(main, ["show", "demo-2"])
+        # Reference is now stale — the seeds-1 in body wasn't rewritten.
+        assert "see seeds-1" in result.output
 
-                result = cli_runner.invoke(main, ["list"])
-                assert result.exit_code == 0
-                # No "renamed N IDs" notice expected.
-                assert "renamed" not in result.output.lower()
+    def test_rename_prefix_dry_run(self, cli_runner, initialized_env):
+        """--dry-run reports what would change without writing."""
+        cli_runner.invoke(main, ["jot", "target"])
+        cli_runner.invoke(
+            main, ["create", "--title", "hub", "--content", "see seeds-1"]
+        )
 
-                db = Database()
-                assert db.get_prefix() == "seeds"
-                assert db.get_seed("seeds-1") is not None
-                db.close()
-            finally:
-                os.chdir(original_cwd)
+        result = cli_runner.invoke(
+            main, ["rename-prefix", "demo", "--dry-run"]
+        )
+        assert result.exit_code == 0
+        assert "DRY RUN" in result.output
+        assert "Would rename 2 IDs" in result.output
+        assert "Would rewrite 1 ID reference" in result.output
+        assert "seeds-1 → demo-1" in result.output
+        assert "see seeds-1" in result.output  # old snippet
+        assert "see demo-1" in result.output  # new snippet
+        assert "Run without --dry-run" in result.output
 
-    def test_auto_derive_only_runs_once(self, cli_runner):
-        """Once configured, the auto-derive path stays silent."""
-        with tempfile.TemporaryDirectory() as parent:
-            project = Path(parent) / "demo-app"
-            project.mkdir()
-            original_cwd = os.getcwd()
-            os.chdir(project)
-            try:
-                db = Database()
-                db.init()
-                db.create_seed(Seed(id="seeds-1", title="legacy"))
-                db.close()
-
-                # First invocation triggers auto-derive.
-                cli_runner.invoke(main, ["list"])
-
-                # Second invocation should not print the derived-prefix notice.
-                result = cli_runner.invoke(main, ["list"])
-                assert "derived prefix" not in result.output
-            finally:
-                os.chdir(original_cwd)
+        # Nothing was actually written.
+        db = Database()
+        assert db.get_prefix() == "seeds"
+        assert db.get_seed("seeds-1") is not None
+        assert db.get_seed("demo-1") is None
+        db.close()
 
 
 class TestJotCommand:

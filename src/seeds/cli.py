@@ -21,42 +21,6 @@ from seeds.models import (
 )
 
 
-def _project_dir_name(db: Database) -> str:
-    """Return the project directory name that hosts ``db.path``'s .seeds dir."""
-    # db.path is .../<project>/.seeds/seeds.db, so .parent.parent is the project.
-    return db.path.parent.parent.name
-
-
-def _ensure_prefix_configured(db: Database) -> None:
-    """If the DB has no prefix in config, derive one and rewrite legacy IDs.
-
-    Runs at most once per database lifetime (subsequent calls no-op because
-    the config entry is set on first run). Silently keeps the default 'seeds'
-    prefix when the derived value matches it.
-    """
-    if db.has_prefix_configured():
-        return
-    derived = sanitize_prefix(_project_dir_name(db))
-    if not derived:
-        derived = DEFAULT_PREFIX
-    if derived == DEFAULT_PREFIX:
-        # No rewrite needed; just record the config so we don't keep checking.
-        db.set_prefix(derived)
-        return
-    id_map = db.rename_prefix(derived, old_prefix=DEFAULT_PREFIX)
-    if id_map:
-        click.echo(
-            f"seeds: derived prefix '{derived}' from project directory "
-            f"(renamed {len(id_map)} IDs)",
-            err=True,
-        )
-    else:
-        click.echo(
-            f"seeds: derived prefix '{derived}' from project directory",
-            err=True,
-        )
-
-
 class Context:
     """CLI context object holding database connection."""
 
@@ -72,7 +36,6 @@ class Context:
                     "Error: seeds not initialized. Run 'seeds init' first.", err=True
                 )
                 sys.exit(1)
-            _ensure_prefix_configured(self.db)
         return self.db
 
     def ensure_init(self) -> Database:
@@ -1011,14 +974,33 @@ def migrate_ids(ctx: Context) -> None:
 
 @main.command("rename-prefix")
 @click.argument("new_prefix")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Show what would change without writing to the database.",
+)
+@click.option(
+    "--rewrite-bodies/--no-rewrite-bodies",
+    "rewrite_bodies",
+    default=True,
+    help=(
+        "Whether to rewrite ID references inside seed title/content/"
+        "resolution. Defaults to enabled; pass --no-rewrite-bodies to skip."
+    ),
+)
 @pass_context
-def rename_prefix(ctx: Context, new_prefix: str) -> None:
+def rename_prefix(
+    ctx: Context, new_prefix: str, dry_run: bool, rewrite_bodies: bool
+) -> None:
     """Rename the project prefix and rewrite all seed IDs to use it.
 
     NEW_PREFIX must start with a lowercase letter and contain only lowercase
     letters, digits, and hyphens. The current prefix is read from the database
     config; all top-level IDs (and their children/relationships) using the old
-    prefix are rewritten in place.
+    prefix are rewritten in place. ID references inside seed bodies
+    (``title``, ``content``, ``resolution``) are also rewritten unless
+    ``--no-rewrite-bodies`` is passed.
     """
     db = ctx.get_db()
 
@@ -1039,29 +1021,52 @@ def rename_prefix(ctx: Context, new_prefix: str) -> None:
         click.echo(f"Prefix already set to {sanitized!r}; nothing to do.")
         return
 
-    import shutil
-
-    backup_path = db.path.with_suffix(".db.bak")
-    shutil.copy2(db.path, backup_path)
-    click.echo(f"Backed up database to {backup_path}")
-
     try:
-        id_map = db.rename_prefix(sanitized, old_prefix=old_prefix)
+        id_map, body_changes = db.rename_prefix(
+            sanitized,
+            old_prefix=old_prefix,
+            rewrite_bodies=rewrite_bodies,
+            dry_run=dry_run,
+        )
     except ValueError as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
-    if not id_map:
+    if dry_run:
+        click.echo("DRY RUN — no changes will be written.")
+    elif id_map or body_changes:
+        import shutil
+
+        backup_path = db.path.with_suffix(".db.bak")
+        shutil.copy2(db.path, backup_path)
+        click.echo(f"Backed up database to {backup_path}")
+
+    if id_map:
+        verb = "Would rename" if dry_run else "Renamed"
         click.echo(
-            f"Updated prefix to {sanitized!r} (no IDs matched {old_prefix!r})."
-        )
-    else:
-        click.echo(
-            f"Renamed {len(id_map)} IDs from prefix {old_prefix!r} "
+            f"{verb} {len(id_map)} IDs from prefix {old_prefix!r} "
             f"to {sanitized!r}:"
         )
         for old_id, new_id in sorted(id_map.items(), key=lambda x: x[1]):
             click.echo(f"  {old_id} → {new_id}")
+    elif not body_changes:
+        click.echo(
+            f"Updated prefix to {sanitized!r} (no IDs matched {old_prefix!r})."
+        )
+
+    if body_changes:
+        verb = "Would rewrite" if dry_run else "Rewrote"
+        click.echo(
+            f"\n{verb} {len(body_changes)} ID reference(s) inside seed bodies:"
+        )
+        for change in body_changes:
+            click.echo(f"  {change.seed_id} ({change.field}):")
+            click.echo(f"    - {change.old_snippet}")
+            click.echo(f"    + {change.new_snippet}")
+
+    if dry_run:
+        click.echo("\nRun without --dry-run to apply.")
+        return
 
     from seeds.export import export_to_jsonl
 

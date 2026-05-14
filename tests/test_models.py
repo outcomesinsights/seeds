@@ -10,7 +10,9 @@ from seeds.models import (
     generate_id,
     get_parent_id,
     is_valid_prefix,
+    iter_id_ref_snippets,
     parse_sequential_id,
+    rewrite_id_refs,
     sanitize_prefix,
 )
 
@@ -261,6 +263,111 @@ class TestIsValidPrefix:
         assert is_valid_prefix("foo_bar") is False
         assert is_valid_prefix("foo.bar") is False
         assert is_valid_prefix("foo bar") is False
+
+
+class TestRewriteIdRefs:
+    """Tests for rewrite_id_refs."""
+
+    def test_simple_reference(self):
+        text, count = rewrite_id_refs("see seeds-7", "seeds", "myproj")
+        assert text == "see myproj-7"
+        assert count == 1
+
+    def test_multiple_references(self):
+        text, count = rewrite_id_refs(
+            "seeds-1 and seeds-2 and seeds-3", "seeds", "myproj"
+        )
+        assert text == "myproj-1 and myproj-2 and myproj-3"
+        assert count == 3
+
+    def test_child_id_reference(self):
+        text, count = rewrite_id_refs("see seeds-7.1.2", "seeds", "myproj")
+        assert text == "see myproj-7.1.2"
+        assert count == 1
+
+    def test_markdown_link(self):
+        text, count = rewrite_id_refs(
+            "See [seeds-7](url)", "seeds", "myproj"
+        )
+        assert text == "See [myproj-7](url)"
+        assert count == 1
+
+    def test_does_not_touch_compound_token(self):
+        text, count = rewrite_id_refs(
+            "the seeds-related code", "seeds", "myproj"
+        )
+        assert text == "the seeds-related code"
+        assert count == 0
+
+    def test_does_not_touch_inside_word(self):
+        text, count = rewrite_id_refs(
+            "see myseeds-7 here", "seeds", "myproj"
+        )
+        # Preceded by 's' (alphanumeric) → no match.
+        assert text == "see myseeds-7 here"
+        assert count == 0
+
+    def test_does_not_touch_trailing_word(self):
+        text, count = rewrite_id_refs(
+            "see seeds-7-banana", "seeds", "myproj"
+        )
+        # Followed by '-' (in our exclusion class) → no match.
+        assert text == "see seeds-7-banana"
+        assert count == 0
+
+    def test_empty_text(self):
+        text, count = rewrite_id_refs("", "seeds", "myproj")
+        assert text == ""
+        assert count == 0
+
+    def test_idempotent(self):
+        once, _ = rewrite_id_refs("see seeds-7", "seeds", "myproj")
+        twice, _ = rewrite_id_refs(once, "seeds", "myproj")
+        assert once == twice
+
+    def test_hyphenated_prefix(self):
+        text, count = rewrite_id_refs(
+            "see my-proj-7 here", "my-proj", "different"
+        )
+        assert text == "see different-7 here"
+        assert count == 1
+
+
+class TestIterIdRefSnippets:
+    """Tests for iter_id_ref_snippets."""
+
+    def test_basic_snippet(self):
+        pairs = iter_id_ref_snippets("see seeds-7 now", "seeds", "myproj")
+        assert pairs == [("see seeds-7 now", "see myproj-7 now")]
+
+    def test_no_matches_returns_empty(self):
+        pairs = iter_id_ref_snippets("no refs here", "seeds", "myproj")
+        assert pairs == []
+
+    def test_multiple_pairs(self):
+        pairs = iter_id_ref_snippets(
+            "first seeds-1 then seeds-2", "seeds", "myproj"
+        )
+        assert len(pairs) == 2
+        assert "seeds-1" in pairs[0][0]
+        assert "myproj-1" in pairs[0][1]
+        assert "seeds-2" in pairs[1][0]
+        assert "myproj-2" in pairs[1][1]
+
+    def test_ellipsis_marker_for_long_context(self):
+        text = "x" * 200 + " seeds-7 " + "y" * 200
+        pairs = iter_id_ref_snippets(text, "seeds", "myproj", ctx=10)
+        assert pairs[0][0].startswith("…")
+        assert pairs[0][0].endswith("…")
+
+    def test_collapses_newlines(self):
+        pairs = iter_id_ref_snippets(
+            "line one\nline two seeds-7 line three\nlast",
+            "seeds",
+            "myproj",
+        )
+        assert "\n" not in pairs[0][0]
+        assert "\n" not in pairs[0][1]
 
 
 class TestRelationship:

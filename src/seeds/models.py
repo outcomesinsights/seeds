@@ -87,6 +87,71 @@ def is_valid_prefix(value: str) -> bool:
     return bool(PREFIX_RE.match(value))
 
 
+def _id_ref_pattern(old_prefix: str) -> re.Pattern[str]:
+    """Compile the regex that matches whole-word seed-ID references."""
+    return re.compile(
+        rf"(?<![a-zA-Z0-9-]){re.escape(old_prefix)}-(\d+(?:\.\d+)*)(?![a-zA-Z0-9-])"
+    )
+
+
+def rewrite_id_refs(
+    text: str, old_prefix: str, new_prefix: str
+) -> tuple[str, int]:
+    """Rewrite seed-ID references inside a body of text.
+
+    Matches occurrences of ``<old_prefix>-<digits>`` (with optional
+    ``.digits`` children) that are NOT part of a longer identifier — i.e.,
+    the character before is not [a-zA-Z0-9-] (or start of string) and the
+    character after is not [a-zA-Z0-9-] (or end). This catches references
+    like ``see seeds-7`` and ``[seeds-7](url)`` while leaving compound
+    tokens like ``seeds-related`` or ``foo-seeds-7-bar`` untouched.
+
+    Returns the rewritten text and the number of substitutions made.
+    """
+    if not text:
+        return text, 0
+    count = 0
+
+    def replace(m: re.Match[str]) -> str:
+        nonlocal count
+        count += 1
+        return f"{new_prefix}-{m.group(1)}"
+
+    return _id_ref_pattern(old_prefix).sub(replace, text), count
+
+
+def iter_id_ref_snippets(
+    text: str, old_prefix: str, new_prefix: str, ctx: int = 30
+) -> list[tuple[str, str]]:
+    """List ``(old_snippet, new_snippet)`` pairs for each ID reference change.
+
+    Each snippet includes up to ``ctx`` characters of surrounding context.
+    Newlines in the context are collapsed to spaces so previews fit on one
+    line. Returns an empty list when the text contains no matches.
+    """
+    if not text:
+        return []
+    pattern = _id_ref_pattern(old_prefix)
+    pairs: list[tuple[str, str]] = []
+    for m in pattern.finditer(text):
+        start, end = m.span()
+        ctx_start = max(0, start - ctx)
+        ctx_end = min(len(text), end + ctx)
+        leading = "…" if ctx_start > 0 else ""
+        trailing = "…" if ctx_end < len(text) else ""
+        before = text[ctx_start:start].replace("\n", " ")
+        after = text[end:ctx_end].replace("\n", " ")
+        old_id = m.group(0)
+        new_id = f"{new_prefix}-{m.group(1)}"
+        pairs.append(
+            (
+                f"{leading}{before}{old_id}{after}{trailing}",
+                f"{leading}{before}{new_id}{after}{trailing}",
+            )
+        )
+    return pairs
+
+
 def parse_sequential_id(seed_id: str) -> int | None:
     """Extract the sequential number from a seed ID like 'seeds-42'.
 
