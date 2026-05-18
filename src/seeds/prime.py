@@ -63,18 +63,14 @@ Seeds should capture the **journey**, not just conclusions. When investigating:
 - `seeds questions` - Open questions needing answers
 - `seeds deferred` - Review backlog
 - `seeds blocked` - Seeds with unresolved children
-
-### Before Creating (avoid duplicates)
-- `seeds suggest "<candidate text>"` - Rank existing seeds by relevance to a candidate item
-  (the dedup primitive for incorporating transcripts/notes — includes resolved/abandoned by
-  default so you see prior deliberation history; pass `--open-only` to restrict)
-- `seeds search '<fts5-query>'` - Full-text search when you have a specific keyword
+- `seeds recent [--since=7d]` - Recently touched (any status)
+- `seeds suggest "<text>"` - Rank existing seeds by relevance to a candidate item
+- `seeds search '<fts5-query>'` - FTS5 keyword search
 
 ### Creating
 - `seeds create --title="..." --type=idea --tags=foo,bar` - Full creation
 - `seeds create --title="..." --parent=<id>` - Create child seed
-- Validation: bodies referencing unknown `<prefix>-N` IDs will be rejected;
-  pass `--allow-unknown-refs` to override
+- Bodies referencing unknown `<prefix>-N` IDs are rejected; pass `--allow-unknown-refs` to override
 
 ### Updating
 - `seeds explore <id>` - Start working on a seed
