@@ -1260,7 +1260,7 @@ def rename_prefix(
     if id_map:
         verb = "Would rename" if dry_run else "Renamed"
         click.echo(
-            f"{verb} {len(id_map)} IDs from prefix {old_prefix!r} " f"to {sanitized!r}:"
+            f"{verb} {len(id_map)} IDs from prefix {old_prefix!r} to {sanitized!r}:"
         )
         for old_id, new_id in sorted(id_map.items(), key=lambda x: x[1]):
             click.echo(f"  {old_id} → {new_id}")

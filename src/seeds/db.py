@@ -13,6 +13,7 @@ from seeds.models import (
     DEFAULT_PREFIX,
     Relationship,
     RelationType,
+    ScoredSeed,
     Seed,
     SeedStatus,
     SeedType,
@@ -447,9 +448,7 @@ class Database:
         elif sort_by == "created":
             query += " ORDER BY created_at DESC"
         else:
-            raise ValueError(
-                f"sort_by must be 'created' or 'updated', got {sort_by!r}"
-            )
+            raise ValueError(f"sort_by must be 'created' or 'updated', got {sort_by!r}")
 
         rows = conn.execute(query, params).fetchall()
         return [self._row_to_seed(row) for row in rows]
@@ -1129,7 +1128,7 @@ class Database:
         *,
         limit: int = 5,
         open_only: bool = False,
-    ) -> list["ScoredSeed"]:
+    ) -> list[ScoredSeed]:
         """Rank existing seeds by relevance to natural-language ``text``.
 
         Combines three signals:
@@ -1144,7 +1143,7 @@ class Database:
         'does this idea exist in our deliberation history?', not 'what could
         I update?'. Set ``open_only=True`` to restrict to actionable seeds.
         """
-        from seeds.models import ScoredSeed, now_utc, tokenize_for_suggest
+        from seeds.models import tokenize_for_suggest
 
         tokens = tokenize_for_suggest(text)
         if not tokens:

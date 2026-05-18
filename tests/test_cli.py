@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+
 from seeds.cli import main
 from seeds.db import SEEDS_DIR, Database
 from seeds.models import (
@@ -453,26 +454,22 @@ class TestSuggestCommand:
         result = cli_runner.invoke(main, ["suggest", "venn diagram", "--limit", "2"])
         assert result.exit_code == 0
         # Count seed lines (lines starting with a status icon)
-        ids_in_output = sum(1 for line in result.output.splitlines() if "seeds-" in line)
+        ids_in_output = sum(
+            1 for line in result.output.splitlines() if "seeds-" in line
+        )
         assert ids_in_output == 2
 
-    def test_suggest_includes_resolved_by_default(
-        self, cli_runner, initialized_env
-    ):
+    def test_suggest_includes_resolved_by_default(self, cli_runner, initialized_env):
         cli_runner.invoke(main, ["create", "-t", "Venn diagram"])
         cli_runner.invoke(main, ["resolve", "seeds-1", "-r", "Done"])
         result = cli_runner.invoke(main, ["suggest", "venn diagram"])
         assert result.exit_code == 0
         assert "seeds-1" in result.output
 
-    def test_suggest_open_only_excludes_terminal(
-        self, cli_runner, initialized_env
-    ):
+    def test_suggest_open_only_excludes_terminal(self, cli_runner, initialized_env):
         cli_runner.invoke(main, ["create", "-t", "Venn diagram"])
         cli_runner.invoke(main, ["resolve", "seeds-1", "-r", "Done"])
-        result = cli_runner.invoke(
-            main, ["suggest", "venn diagram", "--open-only"]
-        )
+        result = cli_runner.invoke(main, ["suggest", "venn diagram", "--open-only"])
         assert result.exit_code == 0
         assert "No seeds matched" in result.output
 
@@ -664,9 +661,7 @@ class TestIdRefValidation:
     'see seeds-117' with a hallucinated ID. See bead seeds-0vs.
     """
 
-    def test_create_rejects_unknown_ref_in_content(
-        self, cli_runner, initialized_env
-    ):
+    def test_create_rejects_unknown_ref_in_content(self, cli_runner, initialized_env):
         result = cli_runner.invoke(
             main,
             ["create", "-t", "Test", "-c", "see seeds-99999 for context"],
@@ -675,18 +670,12 @@ class TestIdRefValidation:
         assert "unknown IDs" in result.output
         assert "seeds-99999" in result.output
 
-    def test_create_rejects_unknown_ref_in_title(
-        self, cli_runner, initialized_env
-    ):
-        result = cli_runner.invoke(
-            main, ["create", "-t", "Follow-up to seeds-99999"]
-        )
+    def test_create_rejects_unknown_ref_in_title(self, cli_runner, initialized_env):
+        result = cli_runner.invoke(main, ["create", "-t", "Follow-up to seeds-99999"])
         assert result.exit_code != 0
         assert "seeds-99999" in result.output
 
-    def test_create_allow_unknown_refs_overrides(
-        self, cli_runner, initialized_env
-    ):
+    def test_create_allow_unknown_refs_overrides(self, cli_runner, initialized_env):
         result = cli_runner.invoke(
             main,
             [
@@ -753,9 +742,7 @@ class TestIdRefValidation:
         )
         assert result.exit_code == 0
 
-    def test_update_content_rejects_unknown_ref(
-        self, cli_runner, env_with_seeds
-    ):
+    def test_update_content_rejects_unknown_ref(self, cli_runner, env_with_seeds):
         result = cli_runner.invoke(
             main,
             ["update", "seed-test1", "-c", "rewritten body referencing seeds-99999"],
@@ -977,9 +964,7 @@ class TestPrimeCommand:
             finally:
                 os.chdir(original_cwd)
 
-    def test_prime_includes_digest_with_seeds(
-        self, cli_runner, env_with_seeds
-    ):
+    def test_prime_includes_digest_with_seeds(self, cli_runner, env_with_seeds):
         """Prime should append a digest of project state when seeds exist."""
         result = cli_runner.invoke(main, ["prime"])
         assert result.exit_code == 0
@@ -989,9 +974,7 @@ class TestPrimeCommand:
         assert "seed-test1" in result.output
         assert "seed-test2" in result.output
 
-    def test_prime_no_digest_flag_omits_digest(
-        self, cli_runner, env_with_seeds
-    ):
+    def test_prime_no_digest_flag_omits_digest(self, cli_runner, env_with_seeds):
         """--no-digest should produce only the workflow text."""
         result = cli_runner.invoke(main, ["prime", "--no-digest"])
         assert result.exit_code == 0
@@ -999,9 +982,7 @@ class TestPrimeCommand:
         assert "## Current Seeds" not in result.output
         assert "seed-test1" not in result.output
 
-    def test_prime_digest_with_empty_project(
-        self, cli_runner, initialized_env
-    ):
+    def test_prime_digest_with_empty_project(self, cli_runner, initialized_env):
         """Empty project should produce a friendly empty-digest hint."""
         result = cli_runner.invoke(main, ["prime"])
         assert result.exit_code == 0
@@ -1014,9 +995,7 @@ class TestPrimeCommand:
         assert result.exit_code == 0
         assert "Recently Updated (top 1)" in result.output
 
-    def test_prime_digest_shows_active_exploration(
-        self, cli_runner, env_with_seeds
-    ):
+    def test_prime_digest_shows_active_exploration(self, cli_runner, env_with_seeds):
         """Exploring seeds should appear in their own section."""
         result = cli_runner.invoke(main, ["prime"])
         assert result.exit_code == 0

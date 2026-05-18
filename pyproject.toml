@@ -49,8 +49,8 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/seeds"]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "mypy>=1.0.0",
     "pre-commit>=4.3.0",
     "pytest>=8.0.0",

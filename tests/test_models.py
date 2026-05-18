@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 import pytest
+
 from seeds.models import (
     Relationship,
     RelationType,

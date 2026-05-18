@@ -692,9 +692,7 @@ class TestSuggest:
         assert db.suggest("the of and to") == []
 
     def test_matches_by_title(self, db):
-        db.create_seed(
-            Seed(id="seed-1", title="Venn diagram for compare lens")
-        )
+        db.create_seed(Seed(id="seed-1", title="Venn diagram for compare lens"))
         db.create_seed(Seed(id="seed-2", title="Database optimization"))
 
         results = db.suggest("venn diagram showing overlap")
@@ -723,9 +721,7 @@ class TestSuggest:
         db.create_seed(Seed(id="seed-1", title=rich, tags=["compare"]))
         db.create_seed(Seed(id="seed-2", title=rich, tags=["other"]))
 
-        results = db.suggest(
-            "compare diagram venn overlap mapping analysis"
-        )
+        results = db.suggest("compare diagram venn overlap mapping analysis")
         assert len(results) == 2
         assert results[0].seed.id == "seed-1"
         assert results[0].score > results[1].score
@@ -773,9 +769,7 @@ class TestSuggest:
             )
         )
         # The 'weak' seed only mentions one token from input.
-        db.create_seed(
-            Seed(id="seed-weak", title="something about diagram briefly")
-        )
+        db.create_seed(Seed(id="seed-weak", title="something about diagram briefly"))
 
         results = db.suggest("venn diagram comparing two code sets")
         # Strong should be first, weak may be filtered by noise floor.

@@ -125,7 +125,7 @@ _STATUS_ICONS = {
 }
 
 
-def _format_line(seed: "Seed") -> str:
+def _format_line(seed: Seed) -> str:
     """Render a seed as a compact one-liner for the digest."""
     icon = _STATUS_ICONS.get(seed.status, "?")
     tags = f" [{', '.join(seed.tags)}]" if seed.tags else ""
@@ -133,7 +133,7 @@ def _format_line(seed: "Seed") -> str:
 
 
 def build_digest(
-    db: "Database",
+    db: Database,
     *,
     limit_recent: int = 20,
     limit_tag_clusters: int = 15,
@@ -149,7 +149,7 @@ def build_digest(
     if not all_seeds:
         return (
             "\n## Current Seeds\n\n"
-            "_Project is empty. Start with `seeds jot \"first idea\"`._\n"
+            '_Project is empty. Start with `seeds jot "first idea"`._\n'
         )
 
     open_seeds = [s for s in all_seeds if not s.is_terminal()]
@@ -167,9 +167,9 @@ def build_digest(
     )
 
     # Recently updated (any status) — only show meaningful section if there's data
-    recent_seeds = db.list_seeds(
-        include_terminal=True, sort_by="updated"
-    )[:limit_recent]
+    recent_seeds = db.list_seeds(include_terminal=True, sort_by="updated")[
+        :limit_recent
+    ]
     if recent_seeds:
         lines.append("")
         lines.append(f"### Recently Updated (top {len(recent_seeds)})")
@@ -185,9 +185,7 @@ def build_digest(
             lines.append(_format_line(seed))
 
     # Open questions (question-type, not terminal)
-    open_questions = db.list_seeds(
-        seed_type=SeedType.QUESTION, include_terminal=False
-    )
+    open_questions = db.list_seeds(seed_type=SeedType.QUESTION, include_terminal=False)
     if open_questions:
         lines.append("")
         lines.append(f"### Open Questions ({len(open_questions)})")
@@ -210,7 +208,7 @@ def build_digest(
 
 
 def get_prime_output(
-    db: "Database | None" = None,
+    db: Database | None = None,
     *,
     include_digest: bool = True,
     digest_limit: int = 20,
