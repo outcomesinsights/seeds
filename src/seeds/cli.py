@@ -423,6 +423,65 @@ def format_seed_detail(
 
 
 @main.command()
+@click.argument("text")
+@click.option("--limit", type=int, default=5, show_default=True, help="Max results")
+@click.option(
+    "--open-only",
+    is_flag=True,
+    help="Restrict to non-terminal seeds (default includes resolved/abandoned)",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON for agent piping")
+@pass_context
+def suggest(
+    ctx: Context, text: str, limit: int, open_only: bool, as_json: bool
+) -> None:
+    """Find existing seeds related to natural-language TEXT.
+
+    Purpose-built dedup query for the transcript-incorporation workflow:
+    given a candidate item, answer 'does a seed about this already exist?'
+    Includes resolved/abandoned seeds by default — the question is about
+    deliberation history, not just actionable seeds.
+    """
+    db = ctx.get_db()
+    results = db.suggest(text, limit=limit, open_only=open_only)
+
+    if as_json:
+        import json as _json
+
+        payload = [
+            {
+                "id": r.seed.id,
+                "title": r.seed.title,
+                "status": r.seed.status.value,
+                "tags": r.seed.tags,
+                "snippet": r.snippet,
+                "score": round(r.score, 4),
+            }
+            for r in results
+        ]
+        click.echo(_json.dumps(payload, indent=2))
+        return
+
+    if not results:
+        click.echo(f"No seeds matched '{text}'.")
+        return
+
+    status_icon = {
+        SeedStatus.CAPTURED: "○",
+        SeedStatus.EXPLORING: "◐",
+        SeedStatus.DEFERRED: "◌",
+        SeedStatus.RESOLVED: "●",
+        SeedStatus.ABANDONED: "✗",
+    }
+    for r in results:
+        icon = status_icon.get(r.seed.status, "?")
+        tags = f" [{', '.join(r.seed.tags)}]" if r.seed.tags else ""
+        click.echo(f"{icon} {r.seed.id}: {r.seed.title}{tags}")
+        if r.snippet:
+            click.echo(f"    …{r.snippet}…")
+
+
+@main.command()
 @click.argument("query")
 @click.option("--all", "include_all", is_flag=True, help="Include resolved/abandoned")
 @pass_context

@@ -166,6 +166,36 @@ def parse_since(value: str, now: datetime | None = None) -> datetime:
     return dt
 
 
+_SUGGEST_TOKEN_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9_-]*")
+
+# Common English stopwords stripped before building the FTS5 OR query.
+# Kept intentionally small — porter stemming handles morphology, this just
+# trims dead weight that pollutes BM25.
+_SUGGEST_STOPWORDS = frozenset(
+    {
+        "a", "an", "and", "as", "at", "be", "by", "for", "from", "has",
+        "he", "in", "is", "it", "its", "of", "on", "or", "that", "the",
+        "this", "to", "was", "were", "with", "we", "i", "you", "they",
+        "their", "what", "which", "who", "how", "when", "where", "why",
+        "all", "should", "can", "could", "would", "do", "does", "did",
+        "have", "had", "but", "not", "some", "any", "no", "yes", "if",
+        "than", "then", "so", "such", "into", "out", "up", "down", "over",
+        "under", "about", "between", "through", "during", "after", "before",
+    }
+)
+
+
+def tokenize_for_suggest(text: str) -> list[str]:
+    """Lowercase + strip stopwords for natural-language suggest input.
+
+    Keeps tokens of length 2+ that aren't stopwords. Preserves order and
+    keeps duplicates (FTS5 doesn't care, and duplicates are rare in user
+    input).
+    """
+    tokens = _SUGGEST_TOKEN_RE.findall(text.lower())
+    return [t for t in tokens if len(t) >= 2 and t not in _SUGGEST_STOPWORDS]
+
+
 def find_id_refs(text: str, prefix: str) -> list[str]:
     """Return sorted, de-duplicated whole-word seed-ID references in ``text``.
 
@@ -269,6 +299,15 @@ class Seed:
     def is_terminal(self) -> bool:
         """Check if seed is in a terminal state (resolved or abandoned)."""
         return self.status in (SeedStatus.RESOLVED, SeedStatus.ABANDONED)
+
+
+@dataclass
+class ScoredSeed:
+    """A seed with a relevance score and matched-text snippet."""
+
+    seed: Seed
+    score: float
+    snippet: str = ""
 
 
 @dataclass

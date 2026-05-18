@@ -18,6 +18,7 @@ from seeds.models import (
     parse_since,
     rewrite_id_refs,
     sanitize_prefix,
+    tokenize_for_suggest,
 )
 
 
@@ -461,6 +462,43 @@ class TestParseSince:
     def test_invalid_unit(self):
         with pytest.raises(ValueError):
             parse_since("7x")
+
+
+class TestTokenizeForSuggest:
+    """Tests for the natural-language tokenizer used by suggest."""
+
+    def test_empty(self):
+        assert tokenize_for_suggest("") == []
+
+    def test_drops_stopwords(self):
+        result = tokenize_for_suggest("the quick brown fox")
+        assert "the" not in result
+        assert "quick" in result
+        assert "brown" in result
+        assert "fox" in result
+
+    def test_lowercases(self):
+        result = tokenize_for_suggest("VENN Diagram")
+        assert result == ["venn", "diagram"]
+
+    def test_strips_punctuation(self):
+        result = tokenize_for_suggest("compare, diff: overlap!")
+        assert result == ["compare", "diff", "overlap"]
+
+    def test_keeps_hyphenated(self):
+        result = tokenize_for_suggest("opinionated post-alpha mark")
+        assert "post-alpha" in result
+
+    def test_drops_short_tokens(self):
+        result = tokenize_for_suggest("a x ok venn")
+        # 'ok' is a stopword? Actually no — it's just len-2, kept.
+        # 'x' is len-1, dropped. 'a' is stopword.
+        assert "x" not in result
+        assert "a" not in result
+        assert "venn" in result
+
+    def test_all_stopwords(self):
+        assert tokenize_for_suggest("the of and to with") == []
 
 
 class TestRelationship:

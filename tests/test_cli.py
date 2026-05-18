@@ -413,6 +413,70 @@ class TestListCommand:
             assert sid in result.output
 
 
+class TestSuggestCommand:
+    """Tests for 'seeds suggest' command (natural-language dedup query)."""
+
+    def test_suggest_returns_match(self, cli_runner, initialized_env):
+        cli_runner.invoke(
+            main,
+            ["create", "-t", "Venn diagram for compare lens", "--type", "idea"],
+        )
+        result = cli_runner.invoke(main, ["suggest", "venn diagram"])
+        assert result.exit_code == 0
+        assert "seeds-1" in result.output
+        assert "Venn diagram" in result.output
+
+    def test_suggest_no_match_message(self, cli_runner, initialized_env):
+        cli_runner.invoke(main, ["create", "-t", "Totally unrelated topic"])
+        result = cli_runner.invoke(main, ["suggest", "venn diagram"])
+        assert result.exit_code == 0
+        assert "No seeds matched" in result.output
+
+    def test_suggest_json_mode(self, cli_runner, initialized_env):
+        cli_runner.invoke(
+            main, ["create", "-t", "Venn diagram", "--tags", "venn,compare"]
+        )
+        result = cli_runner.invoke(main, ["suggest", "venn diagram", "--json"])
+        assert result.exit_code == 0
+        import json as _json
+
+        payload = _json.loads(result.output)
+        assert isinstance(payload, list)
+        assert payload[0]["id"] == "seeds-1"
+        assert payload[0]["title"] == "Venn diagram"
+        assert "compare" in payload[0]["tags"]
+        assert isinstance(payload[0]["score"], (int, float))
+
+    def test_suggest_limit_caps_results(self, cli_runner, initialized_env):
+        for i in range(5):
+            cli_runner.invoke(main, ["create", "-t", f"Venn diagram {i}"])
+        result = cli_runner.invoke(main, ["suggest", "venn diagram", "--limit", "2"])
+        assert result.exit_code == 0
+        # Count seed lines (lines starting with a status icon)
+        ids_in_output = sum(1 for line in result.output.splitlines() if "seeds-" in line)
+        assert ids_in_output == 2
+
+    def test_suggest_includes_resolved_by_default(
+        self, cli_runner, initialized_env
+    ):
+        cli_runner.invoke(main, ["create", "-t", "Venn diagram"])
+        cli_runner.invoke(main, ["resolve", "seeds-1", "-r", "Done"])
+        result = cli_runner.invoke(main, ["suggest", "venn diagram"])
+        assert result.exit_code == 0
+        assert "seeds-1" in result.output
+
+    def test_suggest_open_only_excludes_terminal(
+        self, cli_runner, initialized_env
+    ):
+        cli_runner.invoke(main, ["create", "-t", "Venn diagram"])
+        cli_runner.invoke(main, ["resolve", "seeds-1", "-r", "Done"])
+        result = cli_runner.invoke(
+            main, ["suggest", "venn diagram", "--open-only"]
+        )
+        assert result.exit_code == 0
+        assert "No seeds matched" in result.output
+
+
 class TestRecentCommand:
     """Tests for 'seeds recent' alias."""
 

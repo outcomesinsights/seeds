@@ -1123,6 +1123,91 @@ class Database:
         )
         conn.commit()
 
+    def suggest(
+        self,
+        text: str,
+        *,
+        limit: int = 5,
+        open_only: bool = False,
+    ) -> list["ScoredSeed"]:
+        """Rank existing seeds by relevance to natural-language ``text``.
+
+        Combines three signals:
+          - FTS5 BM25 score over title/content/tags/resolution
+          - Tag-overlap boost (project tags mentioned in ``text``)
+          - Small recency boost (seeds touched within 30 days)
+
+        Returns top ``limit`` results, sorted by combined score descending.
+        Drops any result below half the top score (dynamic noise floor).
+
+        By default includes resolved/abandoned seeds — the question is
+        'does this idea exist in our deliberation history?', not 'what could
+        I update?'. Set ``open_only=True`` to restrict to actionable seeds.
+        """
+        from seeds.models import ScoredSeed, now_utc, tokenize_for_suggest
+
+        tokens = tokenize_for_suggest(text)
+        if not tokens:
+            return []
+
+        self.ensure_fts()
+        conn = self._get_conn()
+
+        # OR the tokens together — BM25 ranks; we'll post-filter.
+        fts_query = " OR ".join(tokens)
+
+        sql = """
+            SELECT s.*,
+                   bm25(seeds_fts) AS bm25_score,
+                   snippet(seeds_fts, 2, '«', '»', '…', 12) AS snip
+            FROM seeds s
+            JOIN seeds_fts fts ON s.id = fts.id
+            WHERE seeds_fts MATCH ?
+        """
+        params: list[str] = [fts_query]
+        if open_only:
+            sql += " AND s.status NOT IN (?, ?)"
+            params.extend([SeedStatus.RESOLVED.value, SeedStatus.ABANDONED.value])
+        sql += " ORDER BY bm25_score LIMIT 200"  # cap candidate pool
+
+        try:
+            rows = conn.execute(sql, params).fetchall()
+        except sqlite3.OperationalError:
+            # FTS5 can reject malformed queries (e.g. only punctuation tokens).
+            return []
+        if not rows:
+            return []
+
+        # Project tags mentioned in input → tag-overlap boost
+        project_tags = set(self.get_all_tags())
+        token_set = set(tokens)
+        candidate_tags = project_tags & token_set
+
+        now = now_utc()
+        candidates: list[ScoredSeed] = []
+        for row in rows:
+            seed = self._row_to_seed(row)
+            # BM25 returns negative numbers (lower = better). Flip sign.
+            base = -float(row["bm25_score"])
+            # Multiplicative boosts so they scale with FTS strength and don't
+            # punch holes through the dynamic noise floor on small matches.
+            overlap = len(set(seed.tags) & candidate_tags)
+            tag_mult = 1.0 + 0.25 * overlap
+            days_old = (now - seed.updated_at).days if seed.updated_at else 9999
+            recency_mult = 1.1 if days_old < 30 else 1.0
+            score = base * tag_mult * recency_mult
+            candidates.append(
+                ScoredSeed(seed=seed, score=score, snippet=row["snip"] or "")
+            )
+
+        candidates.sort(key=lambda c: c.score, reverse=True)
+
+        # Dynamic noise floor: drop hits below half the top score.
+        top = candidates[0].score
+        floor = top / 2 if top > 0 else 0.0
+        kept = [c for c in candidates if c.score >= floor]
+        return kept[:limit]
+
     def search(self, query: str, include_terminal: bool = False) -> list[Seed]:
         """Full-text search across seed titles, content, and tags.
 

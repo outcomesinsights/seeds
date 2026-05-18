@@ -681,6 +681,123 @@ class TestSearch:
         assert len(db.search("automation")) == 1
 
 
+class TestSuggest:
+    """Tests for Database.suggest (natural-language dedup query)."""
+
+    def test_empty_text_returns_empty(self, db):
+        assert db.suggest("") == []
+
+    def test_stopwords_only_returns_empty(self, db):
+        db.create_seed(Seed(id="seed-1", title="Anything"))
+        assert db.suggest("the of and to") == []
+
+    def test_matches_by_title(self, db):
+        db.create_seed(
+            Seed(id="seed-1", title="Venn diagram for compare lens")
+        )
+        db.create_seed(Seed(id="seed-2", title="Database optimization"))
+
+        results = db.suggest("venn diagram showing overlap")
+        assert len(results) >= 1
+        assert results[0].seed.id == "seed-1"
+        assert results[0].score > 0
+
+    def test_matches_by_content(self, db):
+        db.create_seed(
+            Seed(
+                id="seed-1",
+                title="Compare diff",
+                content="Render a Venn diagram across the two code sets",
+            )
+        )
+        db.create_seed(Seed(id="seed-2", title="Unrelated topic"))
+
+        results = db.suggest("venn diagram code sets")
+        assert results[0].seed.id == "seed-1"
+
+    def test_tag_overlap_boosts_score(self, db):
+        # Identical rich text in both seeds so BM25 scores are high enough
+        # that both survive the noise floor — then the only difference is
+        # tag overlap, which should put seed-1 first.
+        rich = "venn diagram compare overlap analysis vocabulary mapping"
+        db.create_seed(Seed(id="seed-1", title=rich, tags=["compare"]))
+        db.create_seed(Seed(id="seed-2", title=rich, tags=["other"]))
+
+        results = db.suggest(
+            "compare diagram venn overlap mapping analysis"
+        )
+        assert len(results) == 2
+        assert results[0].seed.id == "seed-1"
+        assert results[0].score > results[1].score
+
+    def test_includes_resolved_by_default(self, db):
+        db.create_seed(
+            Seed(id="seed-1", title="Compare lens", status=SeedStatus.RESOLVED)
+        )
+        results = db.suggest("compare lens")
+        assert len(results) == 1
+        assert results[0].seed.id == "seed-1"
+
+    def test_includes_abandoned_by_default(self, db):
+        db.create_seed(
+            Seed(id="seed-1", title="Compare lens", status=SeedStatus.ABANDONED)
+        )
+        results = db.suggest("compare lens")
+        assert len(results) == 1
+
+    def test_open_only_excludes_terminal(self, db):
+        db.create_seed(Seed(id="seed-1", title="Compare lens"))
+        db.create_seed(
+            Seed(id="seed-2", title="Compare lens", status=SeedStatus.RESOLVED)
+        )
+
+        results = db.suggest("compare lens", open_only=True)
+        assert len(results) == 1
+        assert results[0].seed.id == "seed-1"
+
+    def test_limit_respected(self, db):
+        for i in range(10):
+            db.create_seed(Seed(id=f"seed-{i}", title=f"compare lens {i}"))
+
+        results = db.suggest("compare lens", limit=3)
+        assert len(results) == 3
+
+    def test_noise_floor_drops_weak_matches(self, db):
+        # A strong match and a much weaker one with no tag/content overlap.
+        db.create_seed(
+            Seed(
+                id="seed-strong",
+                title="Venn diagram comparing two code sets carefully",
+                content="venn diagram overlap compare code sets",
+                tags=["compare", "venn"],
+            )
+        )
+        # The 'weak' seed only mentions one token from input.
+        db.create_seed(
+            Seed(id="seed-weak", title="something about diagram briefly")
+        )
+
+        results = db.suggest("venn diagram comparing two code sets")
+        # Strong should be first, weak may be filtered by noise floor.
+        assert results[0].seed.id == "seed-strong"
+        # Either weak is filtered, or its score is at least half of strong's.
+        if len(results) > 1:
+            assert results[1].score >= results[0].score / 2
+
+    def test_returns_snippet_when_content_matches(self, db):
+        db.create_seed(
+            Seed(
+                id="seed-1",
+                title="Diff lens",
+                content="We could render a Venn diagram across two sets",
+            )
+        )
+        results = db.suggest("venn diagram")
+        assert results[0].snippet  # non-empty
+        # FTS snippet markers around matched term
+        assert "«" in results[0].snippet or "venn" in results[0].snippet.lower()
+
+
 class TestRelationships:
     """Tests for relationship CRUD operations."""
 
