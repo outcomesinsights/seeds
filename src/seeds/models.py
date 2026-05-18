@@ -118,6 +118,19 @@ def rewrite_id_refs(text: str, old_prefix: str, new_prefix: str) -> tuple[str, i
     return _id_ref_pattern(old_prefix).sub(replace, text), count
 
 
+def find_id_refs(text: str, prefix: str) -> list[str]:
+    """Return sorted, de-duplicated whole-word seed-ID references in ``text``.
+
+    Uses the same word-boundary rules as :func:`rewrite_id_refs`, so it matches
+    ``seeds-7`` and ``seeds-12.1`` while leaving compounds like ``seeds-related``
+    or ``foo-seeds-7-bar`` alone. Returns ``[]`` for empty input.
+    """
+    if not text:
+        return []
+    pattern = _id_ref_pattern(prefix)
+    return sorted({m.group(0) for m in pattern.finditer(text)})
+
+
 def iter_id_ref_snippets(
     text: str, old_prefix: str, new_prefix: str, ctx: int = 30
 ) -> list[tuple[str, str]]:

@@ -17,6 +17,7 @@ from seeds.models import (
     Seed,
     SeedStatus,
     SeedType,
+    find_id_refs,
     sanitize_prefix,
 )
 
@@ -44,6 +45,37 @@ class Context:
 
 
 pass_context = click.make_pass_decorator(Context, ensure=True)
+
+
+def _validate_id_refs(
+    db: Database, texts: list[str | None], allow_unknown: bool
+) -> None:
+    """Verify any project-prefixed seed IDs in ``texts`` resolve.
+
+    Catches the common failure where an agent drafts a body like
+    ``see seeds-117`` with a hallucinated ID. Exits with a clear error
+    listing the unknown IDs unless ``allow_unknown`` is true.
+    """
+    if allow_unknown:
+        return
+    prefix = db.get_prefix()
+    refs: set[str] = set()
+    for text in texts:
+        if not text:
+            continue
+        for ref in find_id_refs(text, prefix):
+            refs.add(ref)
+    unknown = sorted(r for r in refs if db.get_seed(r) is None)
+    if unknown:
+        click.echo(
+            "Error: seed body references unknown IDs: " + ", ".join(unknown),
+            err=True,
+        )
+        click.echo(
+            "  Fix the references, or pass --allow-unknown-refs to override.",
+            err=True,
+        )
+        sys.exit(1)
 
 
 def require_init(f: Callable[..., Any]) -> Callable[..., Any]:
@@ -131,6 +163,11 @@ SEED_TYPES = [t.value for t in SeedType]
 )
 @click.option("--tags", help="Comma-separated tags")
 @click.option("--parent", "parent_id", help="Parent seed ID for hierarchical grouping")
+@click.option(
+    "--allow-unknown-refs",
+    is_flag=True,
+    help="Skip validation of seed-ID cross-references in title/content",
+)
 @pass_context
 def create(
     ctx: Context,
@@ -139,6 +176,7 @@ def create(
     seed_type: str,
     tags: str | None,
     parent_id: str | None,
+    allow_unknown_refs: bool,
 ) -> None:
     """Create a new seed."""
     db = ctx.get_db()
@@ -153,6 +191,8 @@ def create(
         seed_id = db.get_next_child_id(parent_id)
     else:
         seed_id = db.next_id()
+
+    _validate_id_refs(db, [title, content], allow_unknown_refs)
 
     # Parse tags
     tag_list = [t.strip() for t in tags.split(",")] if tags else []
@@ -526,6 +566,11 @@ def abandon(ctx: Context, seed_id: str, reason: str | None) -> None:
 @click.option("--content", "-c", help="New content (replaces existing)")
 @click.option("--tags", help="New tags (comma-separated, replaces existing)")
 @click.option("--append", "-a", "append_text", help="Append to content")
+@click.option(
+    "--allow-unknown-refs",
+    is_flag=True,
+    help="Skip validation of seed-ID cross-references in title/content/append",
+)
 @pass_context
 def update(
     ctx: Context,
@@ -534,10 +579,13 @@ def update(
     content: str | None,
     tags: str | None,
     append_text: str | None,
+    allow_unknown_refs: bool,
 ) -> None:
     """Update a seed's fields."""
     db = ctx.get_db()
     seed = get_seed_or_exit(db, seed_id)
+
+    _validate_id_refs(db, [title, content, append_text], allow_unknown_refs)
 
     changed = False
 

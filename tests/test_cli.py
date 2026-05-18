@@ -530,6 +530,120 @@ class TestUpdateCommand:
         assert "No changes specified" in result.output
 
 
+class TestIdRefValidation:
+    """Tests for seed-ID cross-reference validation on create/update.
+
+    Guards against the common failure where an agent drafts a body like
+    'see seeds-117' with a hallucinated ID. See bead seeds-0vs.
+    """
+
+    def test_create_rejects_unknown_ref_in_content(
+        self, cli_runner, initialized_env
+    ):
+        result = cli_runner.invoke(
+            main,
+            ["create", "-t", "Test", "-c", "see seeds-99999 for context"],
+        )
+        assert result.exit_code != 0
+        assert "unknown IDs" in result.output
+        assert "seeds-99999" in result.output
+
+    def test_create_rejects_unknown_ref_in_title(
+        self, cli_runner, initialized_env
+    ):
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Follow-up to seeds-99999"]
+        )
+        assert result.exit_code != 0
+        assert "seeds-99999" in result.output
+
+    def test_create_allow_unknown_refs_overrides(
+        self, cli_runner, initialized_env
+    ):
+        result = cli_runner.invoke(
+            main,
+            [
+                "create",
+                "-t",
+                "Test",
+                "-c",
+                "see seeds-99999",
+                "--allow-unknown-refs",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "Created seed" in result.output
+
+    def test_create_accepts_existing_ref(self, cli_runner, initialized_env):
+        first = cli_runner.invoke(main, ["jot", "First seed"])
+        assert first.exit_code == 0
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Second", "-c", "follow-up to seeds-1"]
+        )
+        assert result.exit_code == 0
+
+    def test_create_accepts_existing_child_ref(self, cli_runner, initialized_env):
+        cli_runner.invoke(main, ["jot", "Parent"])
+        cli_runner.invoke(main, ["create", "-t", "Child", "--parent", "seeds-1"])
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Third", "-c", "see seeds-1.1"]
+        )
+        assert result.exit_code == 0
+
+    def test_create_rejects_unknown_child_ref(self, cli_runner, initialized_env):
+        cli_runner.invoke(main, ["jot", "Parent"])
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Third", "-c", "see seeds-1.99"]
+        )
+        assert result.exit_code != 0
+        assert "seeds-1.99" in result.output
+
+    def test_create_accepts_text_without_refs(self, cli_runner, initialized_env):
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Plain", "-c", "no IDs here, just words"]
+        )
+        assert result.exit_code == 0
+
+    def test_update_append_rejects_unknown_ref(self, cli_runner, env_with_seeds):
+        result = cli_runner.invoke(
+            main, ["update", "seed-test1", "--append", "see seeds-99999"]
+        )
+        assert result.exit_code != 0
+        assert "seeds-99999" in result.output
+
+    def test_update_append_allow_unknown_refs_overrides(
+        self, cli_runner, env_with_seeds
+    ):
+        result = cli_runner.invoke(
+            main,
+            [
+                "update",
+                "seed-test1",
+                "--append",
+                "see seeds-99999",
+                "--allow-unknown-refs",
+            ],
+        )
+        assert result.exit_code == 0
+
+    def test_update_content_rejects_unknown_ref(
+        self, cli_runner, env_with_seeds
+    ):
+        result = cli_runner.invoke(
+            main,
+            ["update", "seed-test1", "-c", "rewritten body referencing seeds-99999"],
+        )
+        assert result.exit_code != 0
+        assert "seeds-99999" in result.output
+
+    def test_update_title_rejects_unknown_ref(self, cli_runner, env_with_seeds):
+        result = cli_runner.invoke(
+            main, ["update", "seed-test1", "-t", "Renamed: see seeds-99999"]
+        )
+        assert result.exit_code != 0
+        assert "seeds-99999" in result.output
+
+
 class TestQuestionCommands:
     """Tests for question-related commands (question-seeds + relationships)."""
 
