@@ -80,6 +80,11 @@ Cutting a release (manual steps; intentionally no automation yet):
 5. Push: `git push origin main && git push origin vX.Y.Z`.
 6. Create the GitHub Release with the same notes:
    `gh release create vX.Y.Z --notes "..."`.
+7. Refresh the global `seeds` CLI on your dev host so the new version is
+   available outside the source tree:
+   `uv cache clean seeds && uv tool install --reinstall .`.
+   (`uv tool` installs to `~/.local/bin`, per-user — system-wide install
+   would need sudo/nix and isn't part of the standard flow.)
 
 The pre-push hook runs the full local CI equivalent (mypy + ruff + pytest), so
 if it fires green, the GitHub Actions CI on push is the last line of defense
