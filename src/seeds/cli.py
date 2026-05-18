@@ -909,7 +909,19 @@ def sync(ctx: Context, flush_only: bool) -> None:
 
 
 @main.command()
-def prime() -> None:
+@click.option(
+    "--no-digest",
+    is_flag=True,
+    help="Omit the project-state digest (counts, recent, exploration, questions, tags)",
+)
+@click.option(
+    "--digest-limit",
+    type=int,
+    default=20,
+    show_default=True,
+    help="Max entries in the 'Recently Updated' section",
+)
+def prime(no_digest: bool, digest_limit: int) -> None:
     """Output AI-optimized workflow context for Claude Code hooks.
 
     Silently exits with code 0 if not in a seeds project.
@@ -926,7 +938,14 @@ def prime() -> None:
         # CRITICAL: No output, exit 0 to enable hook coexistence
         return
 
-    click.echo(get_prime_output())
+    db = Database()
+    click.echo(
+        get_prime_output(
+            db=db,
+            include_digest=not no_digest,
+            digest_limit=digest_limit,
+        )
+    )
 
 
 @main.command()

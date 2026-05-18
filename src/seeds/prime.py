@@ -1,5 +1,17 @@
 """seeds prime command output for AI context injection."""
 
+from __future__ import annotations
+
+from collections import Counter
+from typing import TYPE_CHECKING
+
+from seeds.models import SeedStatus, SeedType
+
+if TYPE_CHECKING:
+    from seeds.db import Database
+    from seeds.models import Seed
+
+
 PRIME_OUTPUT = """# seeds Workflow Context
 
 > **Context Recovery**: Run `seeds prime` after compaction, clear, or new session
@@ -100,6 +112,113 @@ changes it later.
 """
 
 
-def get_prime_output() -> str:
-    """Get the prime output for AI context injection."""
-    return PRIME_OUTPUT.strip()
+_STATUS_ICONS = {
+    SeedStatus.CAPTURED: "○",
+    SeedStatus.EXPLORING: "◐",
+    SeedStatus.DEFERRED: "◌",
+    SeedStatus.RESOLVED: "●",
+    SeedStatus.ABANDONED: "✗",
+}
+
+
+def _format_line(seed: "Seed") -> str:
+    """Render a seed as a compact one-liner for the digest."""
+    icon = _STATUS_ICONS.get(seed.status, "?")
+    tags = f" [{', '.join(seed.tags)}]" if seed.tags else ""
+    return f"- {icon} {seed.id}: {seed.title}{tags}"
+
+
+def build_digest(
+    db: "Database",
+    *,
+    limit_recent: int = 20,
+    limit_tag_clusters: int = 15,
+) -> str:
+    """Build the project-state digest section appended to the prime output.
+
+    Surfaces what the agent would otherwise need 3-6 discovery commands to
+    rebuild: counts, recently-updated seeds, active exploration, open
+    questions, and the tag-cluster shape of the project. Body content is
+    intentionally omitted — agents can ``seeds show <id>`` for detail.
+    """
+    all_seeds = db.list_seeds(include_terminal=True)
+    if not all_seeds:
+        return (
+            "\n## Current Seeds\n\n"
+            "_Project is empty. Start with `seeds jot \"first idea\"`._\n"
+        )
+
+    open_seeds = [s for s in all_seeds if not s.is_terminal()]
+    status_counts = Counter(s.status for s in open_seeds)
+
+    lines: list[str] = []
+    lines.append("")
+    lines.append("## Current Seeds")
+    lines.append("")
+    lines.append(
+        f"**Counts:** {len(all_seeds)} total · {len(open_seeds)} open "
+        f"({status_counts[SeedStatus.CAPTURED]} captured, "
+        f"{status_counts[SeedStatus.EXPLORING]} exploring, "
+        f"{status_counts[SeedStatus.DEFERRED]} deferred)"
+    )
+
+    # Recently updated (any status) — only show meaningful section if there's data
+    recent_seeds = db.list_seeds(
+        include_terminal=True, sort_by="updated"
+    )[:limit_recent]
+    if recent_seeds:
+        lines.append("")
+        lines.append(f"### Recently Updated (top {len(recent_seeds)})")
+        for seed in recent_seeds:
+            lines.append(_format_line(seed))
+
+    # Active exploration
+    exploring = db.list_seeds(status=SeedStatus.EXPLORING)
+    if exploring:
+        lines.append("")
+        lines.append(f"### Active Exploration ({len(exploring)})")
+        for seed in exploring:
+            lines.append(_format_line(seed))
+
+    # Open questions (question-type, not terminal)
+    open_questions = db.list_seeds(
+        seed_type=SeedType.QUESTION, include_terminal=False
+    )
+    if open_questions:
+        lines.append("")
+        lines.append(f"### Open Questions ({len(open_questions)})")
+        for seed in open_questions:
+            lines.append(_format_line(seed))
+
+    # Tag cluster summary
+    tag_counts: Counter[str] = Counter()
+    for seed in open_seeds:
+        for tag in seed.tags:
+            tag_counts[tag] += 1
+    if tag_counts:
+        lines.append("")
+        top_tags = tag_counts.most_common(limit_tag_clusters)
+        rendered = ", ".join(f"{tag} ({count})" for tag, count in top_tags)
+        lines.append(f"### Top Tag Clusters\n{rendered}")
+
+    lines.append("")
+    return "\n".join(lines)
+
+
+def get_prime_output(
+    db: "Database | None" = None,
+    *,
+    include_digest: bool = True,
+    digest_limit: int = 20,
+) -> str:
+    """Get the prime output for AI context injection.
+
+    If ``db`` is supplied and ``include_digest`` is true, appends a digest
+    of project state (counts, recent activity, exploration, questions, tag
+    clusters) after the static workflow text. ``digest_limit`` caps the
+    "Recently Updated" entries.
+    """
+    body = PRIME_OUTPUT.strip()
+    if db is None or not include_digest:
+        return body
+    return body + "\n\n" + build_digest(db, limit_recent=digest_limit).lstrip("\n")

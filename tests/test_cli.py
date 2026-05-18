@@ -913,6 +913,52 @@ class TestPrimeCommand:
             finally:
                 os.chdir(original_cwd)
 
+    def test_prime_includes_digest_with_seeds(
+        self, cli_runner, env_with_seeds
+    ):
+        """Prime should append a digest of project state when seeds exist."""
+        result = cli_runner.invoke(main, ["prime"])
+        assert result.exit_code == 0
+        assert "## Current Seeds" in result.output
+        assert "Counts:" in result.output
+        # Fixture has captured + exploring + deferred + child
+        assert "seed-test1" in result.output
+        assert "seed-test2" in result.output
+
+    def test_prime_no_digest_flag_omits_digest(
+        self, cli_runner, env_with_seeds
+    ):
+        """--no-digest should produce only the workflow text."""
+        result = cli_runner.invoke(main, ["prime", "--no-digest"])
+        assert result.exit_code == 0
+        assert "seeds Workflow Context" in result.output
+        assert "## Current Seeds" not in result.output
+        assert "seed-test1" not in result.output
+
+    def test_prime_digest_with_empty_project(
+        self, cli_runner, initialized_env
+    ):
+        """Empty project should produce a friendly empty-digest hint."""
+        result = cli_runner.invoke(main, ["prime"])
+        assert result.exit_code == 0
+        assert "## Current Seeds" in result.output
+        assert "Project is empty" in result.output
+
+    def test_prime_digest_limit_respected(self, cli_runner, env_with_seeds):
+        """--digest-limit should cap the Recently Updated section."""
+        result = cli_runner.invoke(main, ["prime", "--digest-limit", "1"])
+        assert result.exit_code == 0
+        assert "Recently Updated (top 1)" in result.output
+
+    def test_prime_digest_shows_active_exploration(
+        self, cli_runner, env_with_seeds
+    ):
+        """Exploring seeds should appear in their own section."""
+        result = cli_runner.invoke(main, ["prime"])
+        assert result.exit_code == 0
+        # Fixture sets seed-test2 to EXPLORING
+        assert "Active Exploration" in result.output
+
 
 class TestShowOutputFile:
     """Tests for 'seeds show --output-file' flag."""
