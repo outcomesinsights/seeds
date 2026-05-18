@@ -7,7 +7,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 
@@ -116,6 +116,54 @@ def rewrite_id_refs(text: str, old_prefix: str, new_prefix: str) -> tuple[str, i
         return f"{new_prefix}-{m.group(1)}"
 
     return _id_ref_pattern(old_prefix).sub(replace, text), count
+
+
+_RELATIVE_SINCE_RE = re.compile(r"^(\d+)([dwmy])$")
+_RELATIVE_UNIT_DAYS = {"d": 1, "w": 7, "m": 30, "y": 365}
+
+
+def parse_since(value: str, now: datetime | None = None) -> datetime:
+    """Parse a ``--since`` value into a UTC datetime.
+
+    Accepts:
+      - ISO 8601 date or datetime: ``'2026-05-08'``,
+        ``'2026-05-08T12:00:00+00:00'``
+      - Relative: ``'7d'`` (days), ``'2w'`` (weeks), ``'3m'`` (30-day months),
+        ``'1y'`` (365-day years)
+      - Keywords: ``'today'`` (UTC midnight), ``'yesterday'`` (UTC midnight)
+
+    Naive ISO datetimes are interpreted as UTC. Raises ``ValueError`` on
+    unparseable input.
+    """
+    if not value or not value.strip():
+        raise ValueError("--since value cannot be empty")
+    if now is None:
+        now = now_utc()
+    val = value.strip().lower()
+
+    if val == "today":
+        return now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if val == "yesterday":
+        return (now - timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+
+    m = _RELATIVE_SINCE_RE.match(val)
+    if m:
+        n = int(m.group(1))
+        unit = m.group(2)
+        return now - timedelta(days=n * _RELATIVE_UNIT_DAYS[unit])
+
+    try:
+        dt = datetime.fromisoformat(value.strip())
+    except ValueError as exc:
+        raise ValueError(
+            f"Unrecognized --since value {value!r}; expected ISO date "
+            f"(2026-05-08), relative (7d, 2w, 3m, 1y), or 'today'/'yesterday'"
+        ) from exc
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def find_id_refs(text: str, prefix: str) -> list[str]:

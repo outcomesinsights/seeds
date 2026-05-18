@@ -408,8 +408,15 @@ class Database:
         seed_type: SeedType | None = None,
         tag: str | None = None,
         include_terminal: bool = False,
+        since: datetime | None = None,
+        sort_by: str = "created",
     ) -> list[Seed]:
-        """List seeds with optional filters."""
+        """List seeds with optional filters.
+
+        ``since`` filters to seeds whose ``updated_at`` is on or after the
+        given datetime. ``sort_by`` is ``'created'`` (default, mirrors prior
+        behavior) or ``'updated'``; both sort descending.
+        """
         conn = self._get_conn()
         query = "SELECT * FROM seeds WHERE 1=1"
         params: list[str] = []
@@ -431,7 +438,18 @@ class Database:
             query += " AND tags LIKE ?"
             params.append(f'%"{tag}"%')
 
-        query += " ORDER BY created_at DESC"
+        if since is not None:
+            query += " AND updated_at >= ?"
+            params.append(_datetime_to_str(since) or "")
+
+        if sort_by == "updated":
+            query += " ORDER BY updated_at DESC"
+        elif sort_by == "created":
+            query += " ORDER BY created_at DESC"
+        else:
+            raise ValueError(
+                f"sort_by must be 'created' or 'updated', got {sort_by!r}"
+            )
 
         rows = conn.execute(query, params).fetchall()
         return [self._row_to_seed(row) for row in rows]

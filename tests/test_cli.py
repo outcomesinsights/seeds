@@ -375,6 +375,69 @@ class TestListCommand:
         assert "seed-test1" in result.output
         assert "seed-test2" not in result.output
 
+    def test_list_since_includes_recent(self, cli_runner, env_with_seeds):
+        """--since=1d should include seeds just created in the fixture."""
+        result = cli_runner.invoke(main, ["list", "--since", "1d"])
+        assert result.exit_code == 0
+        assert "seed-test1" in result.output
+
+    def test_list_since_excludes_old(self, cli_runner, env_with_seeds):
+        """--since=2026-12-01 (far future) should exclude all fixture seeds."""
+        result = cli_runner.invoke(main, ["list", "--since", "2099-01-01"])
+        assert result.exit_code == 0
+        assert "No seeds found" in result.output
+
+    def test_list_since_iso_date(self, cli_runner, env_with_seeds):
+        result = cli_runner.invoke(main, ["list", "--since", "2020-01-01"])
+        assert result.exit_code == 0
+        assert "seed-test1" in result.output
+
+    def test_list_since_invalid_value(self, cli_runner, env_with_seeds):
+        result = cli_runner.invoke(main, ["list", "--since", "not-a-date"])
+        assert result.exit_code != 0
+        assert "Unrecognized" in result.output
+
+    def test_list_sort_updated(self, cli_runner, env_with_seeds):
+        """--sort=updated should succeed and produce all open seeds."""
+        result = cli_runner.invoke(main, ["list", "--sort", "updated"])
+        assert result.exit_code == 0
+        assert "seed-test1" in result.output
+        assert "seed-test2" in result.output
+
+    def test_list_sort_default_is_created(self, cli_runner, env_with_seeds):
+        """Default sort behavior unchanged when no --sort given."""
+        result = cli_runner.invoke(main, ["list"])
+        assert result.exit_code == 0
+        # All 4 fixture seeds present
+        for sid in ["seed-test1", "seed-test2", "seed-test3", "seed-test1.1"]:
+            assert sid in result.output
+
+
+class TestRecentCommand:
+    """Tests for 'seeds recent' alias."""
+
+    def test_recent_default_window(self, cli_runner, env_with_seeds):
+        """Default 7d window includes fixture seeds created moments ago."""
+        result = cli_runner.invoke(main, ["recent"])
+        assert result.exit_code == 0
+        assert "seed-test1" in result.output
+
+    def test_recent_explicit_since(self, cli_runner, env_with_seeds):
+        result = cli_runner.invoke(main, ["recent", "--since", "today"])
+        assert result.exit_code == 0
+        assert "seed-test1" in result.output
+
+    def test_recent_empty_window(self, cli_runner, env_with_seeds):
+        """Far-future --since produces 'no seeds' message."""
+        result = cli_runner.invoke(main, ["recent", "--since", "2099-01-01"])
+        assert result.exit_code == 0
+        assert "No seeds updated since" in result.output
+
+    def test_recent_invalid_since(self, cli_runner, env_with_seeds):
+        result = cli_runner.invoke(main, ["recent", "--since", "not-a-date"])
+        assert result.exit_code != 0
+        assert "Unrecognized" in result.output
+
 
 class TestShowCommand:
     """Tests for 'seeds show' command."""

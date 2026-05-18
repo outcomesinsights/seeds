@@ -18,6 +18,7 @@ from seeds.models import (
     SeedStatus,
     SeedType,
     find_id_refs,
+    parse_since,
     sanitize_prefix,
 )
 
@@ -263,6 +264,21 @@ def format_seed_line(seed: Seed, db: Database) -> str:
 )
 @click.option("--tag", help="Filter by tag")
 @click.option("--all", "include_all", is_flag=True, help="Include resolved/abandoned")
+@click.option(
+    "--since",
+    "since_value",
+    help=(
+        "Only show seeds updated on or after this point. Accepts ISO date "
+        "(2026-05-08), relative (7d, 2w, 3m, 1y), or 'today'/'yesterday'."
+    ),
+)
+@click.option(
+    "--sort",
+    "sort_by",
+    type=click.Choice(["created", "updated"]),
+    default="created",
+    help="Sort order (descending). Defaults to 'created'.",
+)
 @pass_context
 def list_seeds(
     ctx: Context,
@@ -270,6 +286,8 @@ def list_seeds(
     seed_type: str | None,
     tag: str | None,
     include_all: bool,
+    since_value: str | None,
+    sort_by: str,
 ) -> None:
     """List seeds with optional filters."""
     db = ctx.get_db()
@@ -277,15 +295,66 @@ def list_seeds(
     status_enum = SeedStatus(status) if status else None
     type_enum = SeedType(seed_type) if seed_type else None
 
+    since_dt = None
+    if since_value:
+        try:
+            since_dt = parse_since(since_value)
+        except ValueError as exc:
+            click.echo(f"Error: {exc}", err=True)
+            sys.exit(1)
+
     seeds = db.list_seeds(
         status=status_enum,
         seed_type=type_enum,
         tag=tag,
         include_terminal=include_all,
+        since=since_dt,
+        sort_by=sort_by,
     )
 
     if not seeds:
         click.echo("No seeds found.")
+        return
+
+    for seed in seeds:
+        click.echo(format_seed_line(seed, db))
+
+
+@main.command()
+@click.option(
+    "--since",
+    "since_value",
+    default="7d",
+    show_default=True,
+    help=(
+        "Recency window. Accepts ISO date (2026-05-08), relative "
+        "(7d, 2w, 3m, 1y), or 'today'/'yesterday'."
+    ),
+)
+@click.option("--all", "include_all", is_flag=True, help="Include resolved/abandoned")
+@pass_context
+def recent(ctx: Context, since_value: str, include_all: bool) -> None:
+    """Show seeds updated recently, sorted by updated_at descending.
+
+    Thin alias for ``seeds list --since=<value> --sort=updated`` with a
+    default window of 7 days.
+    """
+    db = ctx.get_db()
+
+    try:
+        since_dt = parse_since(since_value)
+    except ValueError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    seeds = db.list_seeds(
+        since=since_dt,
+        sort_by="updated",
+        include_terminal=include_all,
+    )
+
+    if not seeds:
+        click.echo(f"No seeds updated since {since_value}.")
         return
 
     for seed in seeds:

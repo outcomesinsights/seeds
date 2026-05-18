@@ -1,5 +1,7 @@
 """Tests for seeds data models."""
 
+from datetime import datetime, timezone
+
 import pytest
 from seeds.models import (
     Relationship,
@@ -7,11 +9,13 @@ from seeds.models import (
     Seed,
     SeedStatus,
     SeedType,
+    find_id_refs,
     generate_id,
     get_parent_id,
     is_valid_prefix,
     iter_id_ref_snippets,
     parse_sequential_id,
+    parse_since,
     rewrite_id_refs,
     sanitize_prefix,
 )
@@ -356,6 +360,107 @@ class TestIterIdRefSnippets:
         )
         assert "\n" not in pairs[0][0]
         assert "\n" not in pairs[0][1]
+
+
+class TestFindIdRefs:
+    """Tests for find_id_refs helper."""
+
+    def test_empty_text(self):
+        assert find_id_refs("", "seeds") == []
+
+    def test_single_ref(self):
+        assert find_id_refs("see seeds-7", "seeds") == ["seeds-7"]
+
+    def test_multiple_unique_refs(self):
+        assert find_id_refs("seeds-7 and seeds-12 also seeds-3", "seeds") == [
+            "seeds-12",
+            "seeds-3",
+            "seeds-7",
+        ]
+
+    def test_dedupes_repeated(self):
+        assert find_id_refs("seeds-7 seeds-7 seeds-7", "seeds") == ["seeds-7"]
+
+    def test_child_ids(self):
+        assert find_id_refs("see seeds-7.1 and seeds-12.3.4", "seeds") == [
+            "seeds-12.3.4",
+            "seeds-7.1",
+        ]
+
+    def test_ignores_compound_words(self):
+        assert find_id_refs("the seeds-related work", "seeds") == []
+        assert find_id_refs("foo-seeds-7-bar", "seeds") == []
+
+    def test_wrong_prefix_not_matched(self):
+        assert find_id_refs("see csc-7", "seeds") == []
+
+
+class TestParseSince:
+    """Tests for parse_since helper."""
+
+    def test_empty_raises(self):
+        with pytest.raises(ValueError):
+            parse_since("")
+
+    def test_whitespace_only_raises(self):
+        with pytest.raises(ValueError):
+            parse_since("   ")
+
+    def test_iso_date(self):
+        result = parse_since("2026-05-08")
+        assert result.year == 2026
+        assert result.month == 5
+        assert result.day == 8
+        assert result.tzinfo is not None  # naive interpreted as UTC
+
+    def test_iso_datetime_with_tz(self):
+        result = parse_since("2026-05-08T12:00:00+00:00")
+        assert result.year == 2026
+        assert result.hour == 12
+
+    def test_relative_days(self):
+        now = datetime(2026, 5, 18, 12, 0, tzinfo=timezone.utc)
+        result = parse_since("7d", now=now)
+        assert result == datetime(2026, 5, 11, 12, 0, tzinfo=timezone.utc)
+
+    def test_relative_weeks(self):
+        now = datetime(2026, 5, 18, tzinfo=timezone.utc)
+        result = parse_since("2w", now=now)
+        assert result == datetime(2026, 5, 4, tzinfo=timezone.utc)
+
+    def test_relative_months(self):
+        now = datetime(2026, 5, 18, tzinfo=timezone.utc)
+        result = parse_since("1m", now=now)
+        # 30-day month convention
+        assert result == datetime(2026, 4, 18, tzinfo=timezone.utc)
+
+    def test_relative_years(self):
+        now = datetime(2026, 5, 18, tzinfo=timezone.utc)
+        result = parse_since("1y", now=now)
+        # 365-day year convention
+        assert result == datetime(2025, 5, 18, tzinfo=timezone.utc)
+
+    def test_today_keyword(self):
+        now = datetime(2026, 5, 18, 15, 30, 22, tzinfo=timezone.utc)
+        result = parse_since("today", now=now)
+        assert result == datetime(2026, 5, 18, 0, 0, 0, tzinfo=timezone.utc)
+
+    def test_yesterday_keyword(self):
+        now = datetime(2026, 5, 18, 15, 30, tzinfo=timezone.utc)
+        result = parse_since("yesterday", now=now)
+        assert result == datetime(2026, 5, 17, 0, 0, 0, tzinfo=timezone.utc)
+
+    def test_case_insensitive_keyword(self):
+        now = datetime(2026, 5, 18, 15, tzinfo=timezone.utc)
+        assert parse_since("TODAY", now=now) == parse_since("today", now=now)
+
+    def test_invalid_value(self):
+        with pytest.raises(ValueError, match="Unrecognized"):
+            parse_since("not-a-date")
+
+    def test_invalid_unit(self):
+        with pytest.raises(ValueError):
+            parse_since("7x")
 
 
 class TestRelationship:
