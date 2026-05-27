@@ -1,0 +1,15 @@
+{
+  "name": "seeds-marketplace",
+  "description": "Local marketplace for skills shipped with the seeds CLI",
+  "owner": {
+    "name": "Outcomes Insights"
+  },
+  "plugins": [
+    {
+      "name": "seeds",
+      "source": "./claude-plugin",
+      "description": "Deliberation workflow skills for the seeds CLI",
+      "version": "0.1.0"
+    }
+  ]
+}
