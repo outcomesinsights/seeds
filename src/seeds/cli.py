@@ -1293,5 +1293,61 @@ def show_prefix(ctx: Context) -> None:
     click.echo(db.get_prefix())
 
 
+@main.group()
+def skills() -> None:
+    """Manage Claude Code skills shipped with seeds."""
+
+
+@skills.command()
+def install() -> None:
+    """Install the seeds Claude Code plugin (provides seeds:* skills)."""
+    import importlib.resources
+    import shutil
+    import subprocess
+
+    if not shutil.which("claude"):
+        click.echo("`claude` CLI not found. Install Claude Code first.", err=True)
+        raise click.Abort()
+
+    plugin_root = importlib.resources.files("seeds") / "plugin"
+    plugin_path = str(plugin_root)
+
+    # Register the local marketplace (idempotent — re-adding is a no-op or warning).
+    subprocess.run(
+        ["claude", "plugin", "marketplace", "add", plugin_path],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    # Detect whether plugin is already installed, choose install vs update.
+    list_result = subprocess.run(
+        ["claude", "plugin", "list"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    action = "update" if "seeds@seeds-marketplace" in list_result.stdout else "install"
+
+    result = subprocess.run(
+        [
+            "claude",
+            "plugin",
+            action,
+            "seeds@seeds-marketplace",
+            "--scope",
+            "user",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        click.echo(f"Plugin {action} failed: {result.stderr}", err=True)
+        raise click.Abort()
+
+    click.echo(f"seeds plugin {action}ed successfully")
+
+
 if __name__ == "__main__":
     main()
