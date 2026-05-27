@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-05-27
+
+First Claude Code skills shipped with seeds. The new `seeds skills install`
+command registers a bundled local marketplace and installs the `seeds` plugin
+under the `seeds:*` namespace (mirroring the `beads:*` pattern). Two
+prompt-macro skills ship in this release; see `seeds-152` and its sub-seeds in
+the seed database for the deliberation that produced them.
+
+### Added
+
+- **`seeds skills install`** — registers the bundled Claude Code plugin
+  marketplace and installs (or updates) the `seeds` plugin under the user
+  scope. Idempotent; safe to re-run after `uv tool upgrade seeds`.
+- **`seeds:feedback` skill** — prompt-macro that frames the next user message
+  as feedback on the agent's prior turn, then has the agent invite further
+  questions, comments, or criticisms exactly once. Per the deliberation that
+  produced it, the closer's value comes from being user-initiated; the skill
+  explicitly scopes the invitation to the single reply being generated rather
+  than installing it as ongoing agent behavior.
+- **`seeds:seeds-to-beads` skill** — prompt-macro for converting deliberated
+  seeds into a set of beads suitable for execution by a Sonnet-based agent.
+  Encodes principles for separating actionable scope from context, embedding
+  content templates in bead descriptions, writing mechanical acceptance
+  criteria, and setting explicit dependencies.
+- **Claude Code plugin tree** under `src/seeds/plugin/` — `seeds-marketplace`
+  + `seeds` plugin manifests for local distribution. Bundled with the Python
+  package via Hatchling's `force-include`.
+
+### Documentation
+
+- README section describing the Claude Code skills and the install command.
+
 ## [0.3.0] - 2026-05-18
 
 Discovery and dedup primitives aimed at the recurring transcript-incorporation
@@ -116,7 +148,8 @@ Initial public beta release.
 - **Experimental web UI**: `seeds serve` for read-only browsing of seeds and questions
 - **Doctor command**: `seeds doctor` for installation health checks
 
-[Unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/outcomesinsights/seeds/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/outcomesinsights/seeds/compare/v0.2.0...v0.3.0
 [0.2.1]: https://github.com/outcomesinsights/seeds/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/outcomesinsights/seeds/releases/tag/v0.2.0
