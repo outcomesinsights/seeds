@@ -118,6 +118,23 @@ seeds serve                              # Starts on http://localhost:53365
 
 This provides read-only views of your seeds, questions, and their relationships.
 
+## Claude Code Skills
+
+Seeds ships a small set of skills for use with [Claude Code](https://claude.com/claude-code), distributed as a local plugin. After installing the seeds CLI, run:
+
+```bash
+seeds skills install
+```
+
+This registers the bundled marketplace and installs the `seeds` plugin under the `seeds:*` namespace.
+
+### Available skills
+
+- **`seeds:feedback`** — frames the next user message as feedback on the agent's prior turn and invites the agent to follow up with its own questions, comments, or criticisms. Useful during deliberation when you want the agent to push back rather than just execute.
+- **`seeds:seeds-to-beads`** — frames the user's request as "convert these seeds into beads" and applies the agreed seeds-to-beads conversion principles (separating action from context, mechanically checkable acceptance criteria, etc.) for that one reply.
+
+Re-run `seeds skills install` after upgrading the seeds CLI to pick up updated skill content.
+
 ## Acknowledgments
 
 Seeds was inspired by Steve Yegge's [beads](https://github.com/steveyegge/beads) project and its core insight: giving AI agents structured tools improves how agents work, bridges AI-human communication, and unlocks AI potential not accessible through unstructured conversation alone.
