@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-06-04
+
+A correctness release for the Claude Code skills installer. `seeds skills
+install` now guarantees the plugin ends up *enabled*, so the bundled `seeds:*`
+skills actually load in new Claude Code sessions — previously the plugin could
+install but sit disabled, silently contributing nothing. Clean package builds
+are restored, and the version is now single-sourced so the CLI and the plugin
+manifests can no longer drift apart.
+
+### Fixed
+
+- **`seeds skills install` now enables the plugin.** The command registered the
+  marketplace and installed the plugin but never enabled it, so it could remain
+  `disabled` in `~/.claude/settings.json` and load none of its skills. It now
+  runs `claude plugin enable` on every install/update. A new `--reinstall`
+  (alias `--upgrade`) flag refreshes the marketplace from source and replaces a
+  stale cached copy after the seeds CLI itself is upgraded.
+- **Clean wheel builds.** A redundant hatchling `force-include` re-mapped the
+  bundled plugin files to wheel paths already provided by `packages`, so any
+  build from a clean cache failed with a "same path" collision. Removing it
+  fixes `uv build` / `uv tool install`.
+- **Beads pre-commit hook.** Set `BD_GIT_HOOK=1` in the pre-commit entry to
+  avoid a `.git/index.lock` race during beads' auto-export.
+
+### Tooling
+
+- **Single-sourced the package version.** `pyproject.toml` now derives the
+  version from `src/seeds/__init__.py` (hatchling dynamic version); the two
+  plugin manifests are kept in lockstep by `just bump-version`, guarded by a
+  test that fails the build on drift. Previously the version lived in four
+  hand-edited places and had already drifted (plugin manifests at 0.2.0 while
+  the CLI was 0.3.1).
+
 ## [0.3.1] - 2026-05-27
 
 First Claude Code skills shipped with seeds. The new `seeds skills install`
