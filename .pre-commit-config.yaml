@@ -17,7 +17,10 @@ repos:
 
       - id: beads-pre-commit
         name: beads pre-commit
-        entry: bd hooks run pre-commit
+        # BD_GIT_HOOK=1 mirrors the .beads/hooks/pre-commit shim so bd knows it
+        # runs inside a commit and suppresses its racing auto-export `git add`
+        # (which otherwise fails on .git/index.lock and trips pre-commit).
+        entry: env BD_GIT_HOOK=1 bd hooks run pre-commit
         language: system
         pass_filenames: false
         always_run: true
