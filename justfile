@@ -1,6 +1,12 @@
 test:
     uv run pytest
 
+# Bump the version in every place it must appear: src/seeds/__init__.py
+# (canonical; pyproject derives it) plus the two Claude Code plugin manifests.
+# Usage: just bump-version 0.3.2
+bump-version VERSION:
+    @uv run python scripts/bump_version.py {{VERSION}}
+
 # git-cliff drives [Unreleased] and future versions in CHANGELOG.md;
 # v0.1.0–v0.3.0 sections are intentionally hand-written. See cliff.toml.
 

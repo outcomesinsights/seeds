@@ -1,6 +1,7 @@
 [project]
 name = "seeds"
-version = "0.3.1"
+# Single source of truth: src/seeds/__init__.py __version__ (see [tool.hatch.version]).
+dynamic = ["version"]
 description = "Git-backed deliberation capture for ideas that need time to grow"
 readme = "README.md"
 license = "MIT"
@@ -45,6 +46,11 @@ seeds = "seeds.cli:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# Canonical version lives in src/seeds/__init__.py; pyproject derives it so the
+# two can never drift. Plugin manifests are kept in sync via `just bump-version`.
+[tool.hatch.version]
+path = "src/seeds/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/seeds"]
