@@ -1299,54 +1299,80 @@ def skills() -> None:
 
 
 @skills.command()
-def install() -> None:
-    """Install the seeds Claude Code plugin (provides seeds:* skills)."""
+@click.option(
+    "--reinstall",
+    "--upgrade",
+    "reinstall",
+    is_flag=True,
+    help="Force a clean refresh: re-read the marketplace from source and replace "
+    "the installed plugin. Use after upgrading the seeds CLI so Claude Code picks "
+    "up updated skill content.",
+)
+def install(reinstall: bool) -> None:
+    """Install (and enable) the seeds Claude Code plugin (provides seeds:* skills).
+
+    Idempotent and safe to re-run. Always ensures the plugin ends up *enabled* —
+    install/update alone can leave it disabled, which silently drops every
+    seeds:* skill from new Claude Code sessions. Pass --reinstall (alias
+    --upgrade) after upgrading the seeds CLI to replace a stale cached copy.
+    """
     import importlib.resources
     import shutil
     import subprocess
+
+    plugin = "seeds@seeds-marketplace"
+    marketplace = "seeds-marketplace"
 
     if not shutil.which("claude"):
         click.echo("`claude` CLI not found. Install Claude Code first.", err=True)
         raise click.Abort()
 
-    plugin_root = importlib.resources.files("seeds") / "plugin"
-    plugin_path = str(plugin_root)
+    def claude(*args: str, fatal: bool = False) -> subprocess.CompletedProcess[str]:
+        """Run a `claude` subcommand; abort the install only when fatal."""
+        proc = subprocess.run(
+            ["claude", *args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0 and fatal:
+            click.echo(
+                f"`claude {' '.join(args)}` failed: {proc.stderr.strip()}", err=True
+            )
+            raise click.Abort()
+        return proc
 
-    # Register the local marketplace (idempotent — re-adding is a no-op or warning).
-    subprocess.run(
-        ["claude", "plugin", "marketplace", "add", plugin_path],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    plugin_path = str(importlib.resources.files("seeds") / "plugin")
 
-    # Detect whether plugin is already installed, choose install vs update.
-    list_result = subprocess.run(
-        ["claude", "plugin", "list"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    action = "update" if "seeds@seeds-marketplace" in list_result.stdout else "install"
+    # Register the local marketplace (idempotent — re-adding is a no-op/warning).
+    claude("plugin", "marketplace", "add", plugin_path)
+    if reinstall:
+        # Re-read marketplace.json + plugin files from the on-disk source so an
+        # upgraded seeds CLI's newer skill content is picked up.
+        claude("plugin", "marketplace", "update", marketplace)
 
-    result = subprocess.run(
-        [
-            "claude",
-            "plugin",
-            action,
-            "seeds@seeds-marketplace",
-            "--scope",
-            "user",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        click.echo(f"Plugin {action} failed: {result.stderr}", err=True)
-        raise click.Abort()
+    installed = plugin in claude("plugin", "list").stdout
 
-    click.echo(f"seeds plugin {action}ed successfully")
+    if reinstall and installed:
+        # Drop the cached copy so we re-copy fresh content. The plugin manifest
+        # version is not always bumped, so `plugin update` can no-op on changed
+        # content — a clean uninstall/install is reliable.
+        claude("plugin", "uninstall", plugin, "--scope", "user", "-y")
+        installed = False
+
+    if installed:
+        claude("plugin", "update", plugin, "--scope", "user", fatal=True)
+        action = "updated"
+    else:
+        claude("plugin", "install", plugin, "--scope", "user", fatal=True)
+        action = "installed"
+
+    # Always enable — a freshly installed/updated plugin can land disabled, which
+    # is exactly the failure mode where seeds:* skills never appear in sessions.
+    claude("plugin", "enable", plugin, "--scope", "user")
+
+    click.echo(f"seeds plugin {action} and enabled.")
+    click.echo("Start a new Claude Code session to load the seeds:* skills.")
 
 
 if __name__ == "__main__":

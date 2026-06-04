@@ -1,8 +1,10 @@
 """Tests for seeds CLI commands."""
 
 import os
+import subprocess
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
@@ -1412,3 +1414,143 @@ class TestMigrateIdsCommand:
         result = cli_runner.invoke(main, ["migrate-ids"])
         assert result.exit_code == 0
         assert "No migration needed" in result.output
+
+
+class TestSkillsInstall:
+    """Tests for 'seeds skills install' (Claude Code plugin installer)."""
+
+    @staticmethod
+    def _completed(stdout: str = "") -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess([], 0, stdout=stdout, stderr="")
+
+    @staticmethod
+    def _argvs(mock_run):
+        """The `claude ...` argv list passed to each subprocess.run call."""
+        return [c.args[0] for c in mock_run.call_args_list]
+
+    def test_fresh_install_then_enables(self, cli_runner):
+        """A not-yet-installed plugin is installed and then explicitly enabled.
+
+        Enabling is the whole point: install alone can leave the plugin disabled,
+        which silently drops every seeds:* skill from new sessions.
+        """
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch(
+                "subprocess.run", return_value=self._completed(stdout="")
+            ) as mock_run,
+        ):
+            result = cli_runner.invoke(main, ["skills", "install"])
+
+        assert result.exit_code == 0, result.output
+        argvs = self._argvs(mock_run)
+        assert [
+            "claude",
+            "plugin",
+            "install",
+            "seeds@seeds-marketplace",
+            "--scope",
+            "user",
+        ] in argvs
+        assert [
+            "claude",
+            "plugin",
+            "enable",
+            "seeds@seeds-marketplace",
+            "--scope",
+            "user",
+        ] in argvs
+        assert "enabled" in result.output
+
+    def test_already_installed_updates_then_enables(self, cli_runner):
+        """When already present, the command updates (not re-installs) and enables."""
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch(
+                "subprocess.run",
+                return_value=self._completed(stdout="seeds@seeds-marketplace\n"),
+            ) as mock_run,
+        ):
+            result = cli_runner.invoke(main, ["skills", "install"])
+
+        assert result.exit_code == 0, result.output
+        argvs = self._argvs(mock_run)
+        assert [
+            "claude",
+            "plugin",
+            "update",
+            "seeds@seeds-marketplace",
+            "--scope",
+            "user",
+        ] in argvs
+        # Update path must NOT uninstall.
+        assert not any(a[:3] == ["claude", "plugin", "uninstall"] for a in argvs)
+        assert [
+            "claude",
+            "plugin",
+            "enable",
+            "seeds@seeds-marketplace",
+            "--scope",
+            "user",
+        ] in argvs
+
+    def test_reinstall_refreshes_marketplace_and_replaces_before_enabling(
+        self, cli_runner
+    ):
+        """--reinstall refreshes the source and replaces the stale copy."""
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch(
+                "subprocess.run",
+                return_value=self._completed(stdout="seeds@seeds-marketplace\n"),
+            ) as mock_run,
+        ):
+            result = cli_runner.invoke(main, ["skills", "install", "--reinstall"])
+
+        assert result.exit_code == 0, result.output
+        argvs = self._argvs(mock_run)
+        assert [
+            "claude",
+            "plugin",
+            "marketplace",
+            "update",
+            "seeds-marketplace",
+        ] in argvs
+        # Stale copy is uninstalled, then a fresh copy installed, then enabled —
+        # in that order.
+        order = {
+            a[2]: i
+            for i, a in enumerate(argvs)
+            if a[1] == "plugin" and a[2] in ("uninstall", "install", "enable")
+        }
+        assert order["uninstall"] < order["install"] < order["enable"]
+
+    def test_aborts_without_claude_cli(self, cli_runner):
+        """The command fails cleanly when the `claude` CLI is not installed."""
+        with patch("shutil.which", return_value=None):
+            result = cli_runner.invoke(main, ["skills", "install"])
+
+        assert result.exit_code != 0
+        assert "claude" in result.output.lower()
+
+    def test_upgrade_is_an_alias_for_reinstall(self, cli_runner):
+        """--upgrade behaves identically to --reinstall."""
+        with (
+            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch(
+                "subprocess.run",
+                return_value=self._completed(stdout="seeds@seeds-marketplace\n"),
+            ) as mock_run,
+        ):
+            result = cli_runner.invoke(main, ["skills", "install", "--upgrade"])
+
+        assert result.exit_code == 0, result.output
+        argvs = self._argvs(mock_run)
+        assert [
+            "claude",
+            "plugin",
+            "marketplace",
+            "update",
+            "seeds-marketplace",
+        ] in argvs
+        assert any(a[:3] == ["claude", "plugin", "uninstall"] for a in argvs)
