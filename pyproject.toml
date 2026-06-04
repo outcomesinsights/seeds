@@ -48,9 +48,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/seeds"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/seeds/plugin" = "seeds/plugin"
+# Non-Python data under src/seeds/plugin (the Claude Code plugin: marketplace.json,
+# plugin.json, SKILL.md files) is included by `packages` above. Do NOT add a
+# force-include for src/seeds/plugin — it maps to the same wheel paths and makes
+# hatchling fail the build with a "same path" collision.
 
 [dependency-groups]
 dev = [
