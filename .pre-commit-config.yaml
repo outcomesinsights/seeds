@@ -25,6 +25,19 @@ repos:
         pass_filenames: false
         always_run: true
 
+      # bd's own racing auto-export is suppressed above (BD_GIT_HOOK=1) and
+      # `bd hooks run pre-commit` does not otherwise write .beads/issues.jsonl,
+      # so export the Dolt DB to it explicitly here. Without this a `bd create`
+      # survives in Dolt but a plain `git commit` silently omits it (this
+      # stranded seeds-5uw). `bd export` is synchronous, so it avoids the
+      # index.lock race the native auto-export hits.
+      - id: beads-export
+        name: beads export (db -> tracked JSONL)
+        entry: bash -c 'bd export -o .beads/issues.jsonl && git add .beads/issues.jsonl'
+        language: system
+        pass_filenames: false
+        always_run: true
+
       # --- pre-push: run the same checks CI runs, so CI on remote is the
       # last line of defense, not the first. Matches the lint+test jobs in
       # .github/workflows/ci.yml (modulo the Python-version matrix).
