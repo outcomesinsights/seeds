@@ -4,7 +4,7 @@ import os
 import sqlite3
 import tempfile
 
-from seeds.db import SCHEMA, Database, find_seeds_dir
+from seeds.db import SCHEMA, Database, find_seeds_dir, recover_prefix_from_id
 from seeds.models import (
     RelationType,
     Seed,
@@ -1185,6 +1185,46 @@ class TestPrefixConfig:
         assert db.next_id() == "myproj-1"
         db.create_seed(Seed(id="myproj-1", title="First"))
         assert db.next_id() == "myproj-2"
+
+
+class TestRecoverPrefixFromId:
+    """Tests for recover_prefix_from_id (fresh-clone prefix recovery)."""
+
+    def test_recovers_simple_prefix(self):
+        """'seeds-155' -> 'seeds'."""
+        assert recover_prefix_from_id("seeds-155") == "seeds"
+
+    def test_recovers_from_single_digit(self):
+        """'myproj-1' -> 'myproj'."""
+        assert recover_prefix_from_id("myproj-1") == "myproj"
+
+    def test_recovers_from_child_id(self):
+        """A child ID recovers the top-level parent's prefix."""
+        assert recover_prefix_from_id("seeds-155.1") == "seeds"
+        assert recover_prefix_from_id("seeds-155.2.3") == "seeds"
+
+    def test_hyphenated_prefix(self):
+        """A prefix containing a hyphen is preserved."""
+        assert recover_prefix_from_id("my-proj-42") == "my-proj"
+
+    def test_hex_hash_id_is_unrecoverable(self):
+        """A legacy hex-hash ID has no numeric sequence; returns None."""
+        assert recover_prefix_from_id("seed-a1b2") is None
+
+    def test_no_hyphen_is_unrecoverable(self):
+        """An ID without a '-<number>' segment returns None."""
+        assert recover_prefix_from_id("seeds") is None
+
+    def test_empty_id_is_none(self):
+        """Empty input returns None."""
+        assert recover_prefix_from_id("") is None
+
+    def test_recovered_prefix_is_valid_for_set_prefix(self, db):
+        """A recovered prefix round-trips through set_prefix without error."""
+        prefix = recover_prefix_from_id("seeds-155")
+        assert prefix is not None
+        db.set_prefix(prefix)
+        assert db.get_prefix() == "seeds"
 
 
 class TestRenamePrefix:

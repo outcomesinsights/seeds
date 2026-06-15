@@ -301,6 +301,43 @@ class TestJotCommand:
                 os.chdir(original_cwd)
 
 
+class TestGetDbBootstrap:
+    """Tests for Context.get_db's bootstrap seam (fresh-clone import path)."""
+
+    def test_get_db_exits_when_uninitialized_by_default(self):
+        """Default get_db() still exits 'run seeds init' when the DB is absent."""
+        from seeds.cli import Context
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                ctx = Context()
+                with pytest.raises(SystemExit):
+                    ctx.get_db()
+            finally:
+                os.chdir(original_cwd)
+
+    def test_get_db_bootstrap_bypasses_init_guard(self):
+        """get_db(bootstrap=True) returns an (uninitialized) DB without exiting.
+
+        This is the seam an import caller uses to bootstrap from JSONL itself;
+        the actual `seeds import` command that calls it lands in a later bead.
+        """
+        from seeds.cli import Context
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                ctx = Context()
+                db = ctx.get_db(bootstrap=True)
+                assert db is not None
+                assert db.is_initialized() is False  # not created yet
+            finally:
+                os.chdir(original_cwd)
+
+
 class TestCreateCommand:
     """Tests for 'seeds create' command."""
 

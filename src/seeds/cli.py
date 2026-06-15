@@ -29,11 +29,20 @@ class Context:
     def __init__(self) -> None:
         self.db: Database | None = None
 
-    def get_db(self) -> Database:
-        """Get database, initializing if needed."""
+    def get_db(self, bootstrap: bool = False) -> Database:
+        """Get database, initializing if needed.
+
+        By default, exits with an error when the DB file is absent (seeds not
+        initialized). Pass ``bootstrap=True`` to bypass that guard and return
+        the (uninitialized) ``Database`` so an import caller can create the
+        schema and recover the prefix from JSONL itself — the fresh-clone
+        rehydration path, where ``.seeds/seeds.jsonl`` exists but the gitignored
+        DB does not. The caller is responsible for actually bootstrapping
+        (e.g. ``import_from_jsonl(db, bootstrap=True)``).
+        """
         if self.db is None:
             self.db = Database()
-            if not self.db.is_initialized():
+            if not bootstrap and not self.db.is_initialized():
                 click.echo(
                     "Error: seeds not initialized. Run 'seeds init' first.", err=True
                 )

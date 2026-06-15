@@ -748,3 +748,165 @@ class TestImportLastWriteWins:
         """ImportResult.total sums created/updated/skipped."""
         assert ImportResult(created=2, updated=1, skipped=3).total == 6
         assert ImportResult().total == 0
+
+
+class TestImportBootstrap:
+    """Fresh-clone bootstrap: import into a directory with only seeds.jsonl."""
+
+    def _write_jsonl(self, path, records):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(json.dumps(r) + "\n" for r in records))
+
+    def test_bootstrap_creates_db_and_recovers_prefix(self, temp_dir):
+        """Import into a dir with only seeds.jsonl builds a populated DB.
+
+        The DB file is absent (gitignored on a fresh clone) and the prefix
+        lives only in the gitignored DB config. bootstrap=True must create the
+        schema and recover the prefix ('seeds') from the first record's ID.
+        """
+        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        seeds_dir = temp_dir / ".seeds"
+        jsonl_path = seeds_dir / "seeds.jsonl"
+        self._write_jsonl(
+            jsonl_path,
+            [
+                _v2_record("seeds-155", title="First", updated_at=ts),
+                _v2_record("seeds-156", title="Second", updated_at=ts),
+            ],
+        )
+
+        db_path = seeds_dir / "seeds.db"
+        assert not db_path.exists()
+
+        db = Database(path=db_path)
+        result = import_from_jsonl(db, jsonl_path, bootstrap=True)
+
+        assert result.created == 2
+        assert db_path.exists()
+        assert db.is_initialized()
+        assert db.get_prefix() == "seeds"
+        assert db.has_prefix_configured() is True
+        assert db.get_seed("seeds-155").title == "First"
+        assert db.get_seed("seeds-156").title == "Second"
+        db.close()
+
+    def test_bootstrap_next_id_continues_sequence(self, temp_dir):
+        """After a bootstrap import, next_id continues the JSONL's sequence."""
+        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        jsonl_path = temp_dir / ".seeds" / "seeds.jsonl"
+        self._write_jsonl(
+            jsonl_path,
+            [
+                _v2_record("seeds-155", title="First", updated_at=ts),
+                _v2_record("seeds-156", title="Second", updated_at=ts),
+            ],
+        )
+
+        db = Database(path=temp_dir / ".seeds" / "seeds.db")
+        import_from_jsonl(db, jsonl_path, bootstrap=True)
+
+        # A subsequent jot continues the sequence: max(155, 156) + 1 = 157,
+        # and uses the recovered prefix.
+        assert db.next_id() == "seeds-157"
+        db.create_seed(Seed(id=db.next_id(), title="Third"))
+        assert db.next_id() == "seeds-158"
+        db.close()
+
+    def test_bootstrap_recovers_custom_prefix(self, temp_dir):
+        """The recovered prefix is the JSONL's, not a directory-derived one."""
+        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        jsonl_path = temp_dir / ".seeds" / "seeds.jsonl"
+        self._write_jsonl(
+            jsonl_path,
+            [_v2_record("myproj-42", title="Only", updated_at=ts)],
+        )
+
+        db = Database(path=temp_dir / ".seeds" / "seeds.db")
+        import_from_jsonl(db, jsonl_path, bootstrap=True)
+
+        assert db.get_prefix() == "myproj"
+        assert db.next_id() == "myproj-43"
+        db.close()
+
+    def test_bootstrap_on_initialized_db_does_not_clobber_prefix(self, temp_dir):
+        """An already-initialized DB keeps its prefix; bootstrap is a no-op there."""
+        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        db_path = temp_dir / ".seeds" / "seeds.db"
+        db = Database(path=db_path)
+        db.init(prefix="existing")
+
+        jsonl_path = temp_dir / ".seeds" / "seeds.jsonl"
+        self._write_jsonl(
+            jsonl_path,
+            [_v2_record("seeds-155", title="First", updated_at=ts)],
+        )
+
+        result = import_from_jsonl(db, jsonl_path, bootstrap=True)
+
+        assert result.created == 1
+        # Prefix recovered from the JSONL must NOT overwrite the configured one.
+        assert db.get_prefix() == "existing"
+        assert db.get_seed("seeds-155").title == "First"
+        db.close()
+
+    def test_bootstrap_lines_seam(self, temp_dir):
+        """import_lines also bootstraps when fed an iterable (stdin seam)."""
+        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        lines = [
+            json.dumps(_v2_record("seeds-7", title="One", updated_at=ts)),
+            json.dumps(_v2_record("seeds-8", title="Two", updated_at=ts)),
+        ]
+
+        db = Database(path=temp_dir / ".seeds" / "seeds.db")
+        result = import_lines(db, iter(lines), bootstrap=True)
+
+        assert result.created == 2
+        assert db.get_prefix() == "seeds"
+        assert db.next_id() == "seeds-9"
+        db.close()
+
+    def test_bootstrap_empty_jsonl_creates_db_without_prefix(self, temp_dir):
+        """Bootstrap with no records still creates a usable DB (prefix unset)."""
+        jsonl_path = temp_dir / ".seeds" / "seeds.jsonl"
+        jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+        jsonl_path.write_text("")
+
+        db = Database(path=temp_dir / ".seeds" / "seeds.db")
+        result = import_from_jsonl(db, jsonl_path, bootstrap=True)
+
+        assert result.total == 0
+        assert db.is_initialized()
+        # No records to recover from -> prefix left unset (DEFAULT fallback).
+        assert db.has_prefix_configured() is False
+        db.close()
+
+    def test_bootstrap_unrecoverable_first_id_leaves_prefix_unset(self, temp_dir):
+        """A legacy hex-hash first ID can't yield a prefix; DB still bootstraps."""
+        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        jsonl_path = temp_dir / ".seeds" / "seeds.jsonl"
+        self._write_jsonl(
+            jsonl_path,
+            [_v2_record("seed-a1b2", title="Hex", updated_at=ts)],
+        )
+
+        db = Database(path=temp_dir / ".seeds" / "seeds.db")
+        result = import_from_jsonl(db, jsonl_path, bootstrap=True)
+
+        assert result.created == 1
+        assert db.is_initialized()
+        assert db.has_prefix_configured() is False
+        assert db.get_seed("seed-a1b2").title == "Hex"
+        db.close()
+
+    def test_no_bootstrap_skips_missing_file_without_creating_db(self, temp_dir):
+        """Default bootstrap=False against a missing file does not create a DB.
+
+        Confirms the default leaves existing behavior intact: a nonexistent
+        JSONL yields an empty result and never touches the DB file.
+        """
+        db_path = temp_dir / ".seeds" / "seeds.db"
+        db = Database(path=db_path)
+        result = import_from_jsonl(db, temp_dir / ".seeds" / "missing.jsonl")
+        assert result.total == 0
+        assert not db_path.exists()
+        db.close()

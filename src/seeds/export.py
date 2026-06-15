@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from seeds.db import SEEDS_DIR, Database
+from seeds.db import SEEDS_DIR, Database, recover_prefix_from_id
 from seeds.models import (
     RelationType,
     Seed,
@@ -253,13 +253,53 @@ def _iter_records(lines: Iterable[str]) -> Iterable[dict[str, Any]]:
         yield json.loads(line)
 
 
-def import_records(db: Database, records: Iterable[dict[str, Any]]) -> ImportResult:
+def _bootstrap_db_if_absent(db: Database, records: list[dict[str, Any]]) -> None:
+    """Create the schema + recover the prefix when the DB file is absent.
+
+    The fresh-clone rehydration case: a checkout ships ``.seeds/seeds.jsonl``
+    but the DB is gitignored, and the project prefix lives only in the
+    gitignored DB config. Rather than erroring "run seeds init" or inheriting a
+    wrong directory-derived prefix, recover the prefix from the first record's
+    ID (e.g. ``seeds-155`` -> ``seeds``) and write it to config as part of
+    ``init``.
+
+    No-op when the DB file already exists (existing initialized projects are
+    untouched) or when ``records`` is empty (nothing to recover a prefix from;
+    ``init`` would leave the prefix unset, which the import has no IDs to need).
+    Recovery falls back to leaving the prefix unset (``init()`` with no prefix)
+    when the first record's ID is not a recoverable ``<prefix>-<number>``
+    shape, so a legacy-only export still bootstraps a usable DB.
+    """
+    if db.is_initialized():
+        return
+    prefix: str | None = None
+    if records:
+        prefix = recover_prefix_from_id(records[0]["id"])
+    db.init(prefix=prefix)
+
+
+def import_records(
+    db: Database,
+    records: Iterable[dict[str, Any]],
+    bootstrap: bool = False,
+) -> ImportResult:
     """Import already-parsed JSONL records into the database.
 
     Detects format version per record (v2 has ``format_version: 2``; anything
     else is treated as legacy v1) and applies it via the matching importer.
     Tallies the per-record outcomes into an :class:`ImportResult`.
+
+    When ``bootstrap`` is True and the database file does not yet exist, the
+    schema is created and the project prefix is recovered from the first
+    record's ID before importing (fresh-clone rehydration). ``records`` is
+    materialized into a list in that case so the first ID can be peeked.
+    Existing initialized databases are imported into unchanged regardless of
+    ``bootstrap``.
     """
+    if bootstrap:
+        records = list(records)
+        _bootstrap_db_if_absent(db, records)
+
     result = ImportResult()
     for data in records:
         if data.get("format_version") == 2:
@@ -277,16 +317,24 @@ def import_records(db: Database, records: Iterable[dict[str, Any]]) -> ImportRes
     return result
 
 
-def import_lines(db: Database, lines: Iterable[str]) -> ImportResult:
+def import_lines(
+    db: Database, lines: Iterable[str], bootstrap: bool = False
+) -> ImportResult:
     """Import seeds from an iterable of JSONL lines (e.g. a file or stdin).
 
     Blank lines are ignored. This is the seam the CLI can feed stdin through
     without first materializing a file on disk.
+
+    Pass ``bootstrap=True`` to create the schema and recover the project
+    prefix from the first record when the DB file is absent (fresh-clone
+    rehydration); see :func:`import_records`.
     """
-    return import_records(db, _iter_records(lines))
+    return import_records(db, _iter_records(lines), bootstrap=bootstrap)
 
 
-def import_from_jsonl(db: Database, input_path: Path | None = None) -> ImportResult:
+def import_from_jsonl(
+    db: Database, input_path: Path | None = None, bootstrap: bool = False
+) -> ImportResult:
     """Import seeds from a JSONL file using UPSERT / last-write-wins semantics.
 
     Detects format version automatically per record:
@@ -296,6 +344,10 @@ def import_from_jsonl(db: Database, input_path: Path | None = None) -> ImportRes
     Args:
         db: Database instance
         input_path: Path to input file. If None, uses .seeds/seeds.jsonl
+        bootstrap: When True and the DB file is absent, create the schema and
+            recover the project prefix from the first record's ID before
+            importing (fresh-clone rehydration). Defaults to False so existing
+            initialized projects are unaffected.
 
     Returns:
         An :class:`ImportResult` with created/updated/skipped counts. A missing
@@ -308,4 +360,4 @@ def import_from_jsonl(db: Database, input_path: Path | None = None) -> ImportRes
         return ImportResult()
 
     with open(input_path) as f:
-        return import_lines(db, f)
+        return import_lines(db, f, bootstrap=bootstrap)
