@@ -362,9 +362,17 @@ class Database:
             return None
         return self._row_to_seed(row)
 
-    def update_seed(self, seed: Seed) -> Seed:
-        """Update an existing seed."""
-        seed.updated_at = now_utc()
+    def update_seed(self, seed: Seed, touch: bool = True) -> Seed:
+        """Update an existing seed.
+
+        By default (``touch=True``) the seed's ``updated_at`` is force-bumped
+        to the current time, matching every interactive edit path. Pass
+        ``touch=False`` to write the seed's existing ``updated_at`` verbatim —
+        used by JSONL import, which must preserve the source timestamp so that
+        last-write-wins comparisons stay meaningful across round-trips.
+        """
+        if touch:
+            seed.updated_at = now_utc()
         conn = self._get_conn()
         conn.execute(
             """

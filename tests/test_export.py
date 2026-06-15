@@ -1,10 +1,16 @@
 """Tests for seeds export/import functionality."""
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from seeds.db import Database
-from seeds.export import export_to_jsonl, import_from_jsonl, seed_to_dict
+from seeds.export import (
+    ImportResult,
+    export_to_jsonl,
+    import_from_jsonl,
+    import_lines,
+    seed_to_dict,
+)
 from seeds.models import (
     RelationType,
     Seed,
@@ -196,8 +202,10 @@ class TestImportV1:
         input_path = temp_dir / "import.jsonl"
         input_path.write_text(json.dumps(data) + "\n")
 
-        count = import_from_jsonl(db, input_path)
-        assert count == 1
+        result = import_from_jsonl(db, input_path)
+        assert result.created == 1
+        assert result.updated == 0
+        assert result.skipped == 0
 
         seed = db.get_seed("seed-import")
         assert seed is not None
@@ -237,8 +245,8 @@ class TestImportV1:
         input_path = temp_dir / "import.jsonl"
         input_path.write_text(json.dumps(data_a) + "\n" + json.dumps(data_b) + "\n")
 
-        count = import_from_jsonl(db, input_path)
-        assert count == 2
+        result = import_from_jsonl(db, input_path)
+        assert result.created == 2
 
         # Check relationship was created
         rels = db.get_relationships("seed-a", rel_type=RelationType.RELATES_TO)
@@ -281,8 +289,8 @@ class TestImportV1:
         input_path = temp_dir / "import.jsonl"
         input_path.write_text(json.dumps(data) + "\n")
 
-        count = import_from_jsonl(db, input_path)
-        assert count == 1
+        result = import_from_jsonl(db, input_path)
+        assert result.created == 1
 
         # Question-seeds should have been created
         q_seeds = db.get_questions_for_seed("seed-parent")
@@ -316,8 +324,8 @@ class TestImportV2:
         input_path = temp_dir / "import.jsonl"
         input_path.write_text(json.dumps(data) + "\n")
 
-        count = import_from_jsonl(db, input_path)
-        assert count == 1
+        result = import_from_jsonl(db, input_path)
+        assert result.created == 1
 
         seed = db.get_seed("seed-v2")
         assert seed is not None
@@ -360,8 +368,8 @@ class TestImportV2:
         input_path = temp_dir / "import.jsonl"
         input_path.write_text(json.dumps(data_a) + "\n" + json.dumps(data_b) + "\n")
 
-        count = import_from_jsonl(db, input_path)
-        assert count == 2
+        result = import_from_jsonl(db, input_path)
+        assert result.created == 2
 
         rels = db.get_relationships("seed-a", rel_type=RelationType.RELATES_TO)
         assert len(rels) == 2  # Bidirectional
@@ -371,24 +379,30 @@ class TestImportGeneral:
     """Tests for import edge cases."""
 
     def test_import_nonexistent_file(self, db, temp_dir):
-        """Verify import returns 0 for nonexistent file."""
+        """Verify import returns an empty result for a nonexistent file."""
         input_path = temp_dir / "nonexistent.jsonl"
-        count = import_from_jsonl(db, input_path)
-        assert count == 0
+        result = import_from_jsonl(db, input_path)
+        assert result.total == 0
 
     def test_import_empty_file(self, db, temp_dir):
         """Verify import handles empty file."""
         input_path = temp_dir / "empty.jsonl"
         input_path.write_text("")
 
-        count = import_from_jsonl(db, input_path)
-        assert count == 0
+        result = import_from_jsonl(db, input_path)
+        assert result.total == 0
 
-    def test_import_skips_existing_seeds(self, db, temp_dir, sample_seed):
-        """Verify import skips seeds that already exist."""
+    def test_import_skips_stale_existing_seeds(self, db, temp_dir, sample_seed):
+        """A record whose updated_at is not newer than the DB's is skipped.
+
+        ``sample_seed`` has no explicit timestamps, so create_seed stamps it at
+        import-of-the-fixture time; the JSONL record's older updated_at must NOT
+        clobber it (last-write-wins).
+        """
         db.create_seed(sample_seed)
+        db_seed = db.get_seed(sample_seed.id)
 
-        now = datetime.now(timezone.utc).isoformat()
+        stale = (db_seed.updated_at - timedelta(hours=1)).isoformat()
         data = {
             "format_version": 2,
             "id": sample_seed.id,
@@ -397,8 +411,8 @@ class TestImportGeneral:
             "status": "captured",
             "seed_type": "idea",
             "tags": [],
-            "created_at": now,
-            "updated_at": now,
+            "created_at": stale,
+            "updated_at": stale,
             "resolved_at": None,
             "relationships": [],
         }
@@ -406,8 +420,10 @@ class TestImportGeneral:
         input_path = temp_dir / "import.jsonl"
         input_path.write_text(json.dumps(data) + "\n")
 
-        count = import_from_jsonl(db, input_path)
-        assert count == 0
+        result = import_from_jsonl(db, input_path)
+        assert result.created == 0
+        assert result.updated == 0
+        assert result.skipped == 1
 
         seed = db.get_seed(sample_seed.id)
         assert seed.title == sample_seed.title  # Original preserved
@@ -431,8 +447,8 @@ class TestImportGeneral:
         input_path = temp_dir / "blanks.jsonl"
         input_path.write_text("\n\n" + json.dumps(data) + "\n\n")
 
-        count = import_from_jsonl(db, input_path)
-        assert count == 1
+        result = import_from_jsonl(db, input_path)
+        assert result.created == 1
 
 
 class TestImportDefaultPath:
@@ -464,8 +480,8 @@ class TestImportDefaultPath:
             jsonl_path = seeds_dir / "seeds.jsonl"
             jsonl_path.write_text(json.dumps(data) + "\n")
 
-            count = import_from_jsonl(db)
-            assert count == 1
+            result = import_from_jsonl(db)
+            assert result.created == 1
 
             seed = db.get_seed("seed-default")
             assert seed is not None
@@ -519,8 +535,8 @@ class TestRoundTrip:
         db2 = Database(path=db2_path)
         db2.init()
 
-        count = import_from_jsonl(db2, export_path)
-        assert count == 3  # seed-roundtrip, seed-other, seeds-qrt
+        result = import_from_jsonl(db2, export_path)
+        assert result.created == 3  # seed-roundtrip, seed-other, seeds-qrt
 
         # Verify seed data
         imported_seed = db2.get_seed("seed-roundtrip")
@@ -567,10 +583,168 @@ class TestRoundTrip:
         db2 = Database(path=db2_path)
         db2.init()
 
-        count = import_from_jsonl(db2, export_path)
-        assert count == 1
+        result = import_from_jsonl(db2, export_path)
+        assert result.created == 1
 
         imported = db2.get_seed("seed-res")
         assert imported.resolution == "Shipped in PR #42"
         assert imported.status == SeedStatus.RESOLVED
         db2.close()
+
+
+def _v2_record(seed_id, *, title, updated_at, relationships=None, **extra):
+    """Build a minimal v2 JSONL record dict for import tests."""
+    ts = updated_at if isinstance(updated_at, str) else updated_at.isoformat()
+    record = {
+        "format_version": 2,
+        "id": seed_id,
+        "title": title,
+        "content": "",
+        "status": "captured",
+        "seed_type": "idea",
+        "tags": [],
+        "created_at": ts,
+        "updated_at": ts,
+        "resolved_at": None,
+        "relationships": relationships or [],
+    }
+    record.update(extra)
+    return record
+
+
+class TestImportLastWriteWins:
+    """Acceptance criteria for the v2 upsert / last-write-wins import path."""
+
+    def test_reimport_is_full_noop(self, temp_dir):
+        """Re-importing the same JSONL skips every record (no creates/updates)."""
+        db1 = Database(path=temp_dir / "db1" / ".seeds" / "seeds.db")
+        db1.init()
+        db1.create_seed(Seed(id="seed-a", title="A"))
+        db1.create_seed(Seed(id="seed-b", title="B"))
+        db1.create_relationship("seed-a", "seed-b", RelationType.RELATES_TO)
+        export_path = temp_dir / "rt.jsonl"
+        export_to_jsonl(db1, export_path)
+        db1.close()
+
+        db2 = Database(path=temp_dir / "db2" / ".seeds" / "seeds.db")
+        db2.init()
+
+        first = import_from_jsonl(db2, export_path)
+        assert first.created == 2
+        assert first.updated == 0
+        assert first.skipped == 0
+
+        # Second import of the identical file: equal updated_at -> all skipped.
+        second = import_from_jsonl(db2, export_path)
+        assert second.created == 0
+        assert second.updated == 0
+        assert second.skipped == 2
+        db2.close()
+
+    def test_newer_updated_at_overwrites(self, db, temp_dir):
+        """A record with a newer updated_at overwrites the existing seed."""
+        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        db.create_seed(
+            Seed(id="seed-x", title="Old title", created_at=base, updated_at=base)
+        )
+
+        newer = (base + timedelta(days=1)).isoformat()
+        record = _v2_record(
+            "seed-x", title="New title", updated_at=newer, content="updated body"
+        )
+        input_path = temp_dir / "newer.jsonl"
+        input_path.write_text(json.dumps(record) + "\n")
+
+        result = import_from_jsonl(db, input_path)
+        assert result.created == 0
+        assert result.updated == 1
+        assert result.skipped == 0
+
+        seed = db.get_seed("seed-x")
+        assert seed.title == "New title"
+        assert seed.content == "updated body"
+        # updated_at is written verbatim from the JSONL (touch=False), not bumped.
+        assert seed.updated_at == datetime.fromisoformat(newer)
+
+    def test_stale_updated_at_does_not_clobber(self, db, temp_dir):
+        """A record older than the DB row leaves the DB row untouched."""
+        fresh = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        db.create_seed(
+            Seed(id="seed-y", title="Fresh title", created_at=fresh, updated_at=fresh)
+        )
+
+        stale = (fresh - timedelta(days=10)).isoformat()
+        record = _v2_record("seed-y", title="Stale title", updated_at=stale)
+        input_path = temp_dir / "stale.jsonl"
+        input_path.write_text(json.dumps(record) + "\n")
+
+        result = import_from_jsonl(db, input_path)
+        assert result.skipped == 1
+        assert result.updated == 0
+
+        seed = db.get_seed("seed-y")
+        assert seed.title == "Fresh title"
+        assert seed.updated_at == fresh
+
+    def test_equal_updated_at_is_skipped(self, db, temp_dir):
+        """Equal updated_at is not 'newer' — the record is skipped, not updated."""
+        ts = datetime(2025, 3, 3, 9, 0, 0, tzinfo=timezone.utc)
+        db.create_seed(
+            Seed(id="seed-z", title="Original", created_at=ts, updated_at=ts)
+        )
+
+        record = _v2_record("seed-z", title="Changed", updated_at=ts.isoformat())
+        input_path = temp_dir / "equal.jsonl"
+        input_path.write_text(json.dumps(record) + "\n")
+
+        result = import_from_jsonl(db, input_path)
+        assert result.skipped == 1
+        assert db.get_seed("seed-z").title == "Original"
+
+    def test_relationships_not_duplicated_on_reimport(self, db, temp_dir):
+        """Re-importing does not duplicate relationship edges."""
+        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        rec_a = _v2_record(
+            "seed-a",
+            title="A",
+            updated_at=ts,
+            relationships=[
+                {"target_id": "seed-b", "rel_type": "relates-to", "created_at": ts}
+            ],
+        )
+        rec_b = _v2_record(
+            "seed-b",
+            title="B",
+            updated_at=ts,
+            relationships=[
+                {"target_id": "seed-a", "rel_type": "relates-to", "created_at": ts}
+            ],
+        )
+        input_path = temp_dir / "rels.jsonl"
+        input_path.write_text(json.dumps(rec_a) + "\n" + json.dumps(rec_b) + "\n")
+
+        import_from_jsonl(db, input_path)
+        import_from_jsonl(db, input_path)  # re-import
+
+        rels = db.get_relationships(
+            "seed-a", rel_type=RelationType.RELATES_TO, direction="outbound"
+        )
+        assert len(rels) == 1  # not duplicated despite two imports
+
+    def test_import_lines_accepts_iterable(self, db):
+        """import_lines consumes an arbitrary iterable of JSONL lines (stdin seam)."""
+        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        lines = [
+            "",  # blank lines ignored
+            json.dumps(_v2_record("seed-1", title="One", updated_at=ts)),
+            json.dumps(_v2_record("seed-2", title="Two", updated_at=ts)),
+        ]
+        result = import_lines(db, iter(lines))
+        assert result.created == 2
+        assert db.get_seed("seed-1").title == "One"
+        assert db.get_seed("seed-2").title == "Two"
+
+    def test_import_result_total(self):
+        """ImportResult.total sums created/updated/skipped."""
+        assert ImportResult(created=2, updated=1, skipped=3).total == 6
+        assert ImportResult().total == 0
