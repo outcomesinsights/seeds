@@ -11,6 +11,7 @@ import click
 
 from seeds import __version__
 from seeds.db import SEEDS_DIR, Database
+from seeds.export import ImportResult
 from seeds.models import (
     DEFAULT_PREFIX,
     RelationType,
@@ -960,14 +961,57 @@ def tree(ctx: Context, seed_id: str) -> None:
 # --- Sync and export commands ---
 
 
+def _format_import_summary(result: ImportResult) -> str:
+    """One-line created/updated/skipped summary shared by import and sync."""
+    return (
+        f"Imported: {result.created} created, "
+        f"{result.updated} updated, {result.skipped} skipped"
+    )
+
+
+@main.command("import")
+@click.argument("path", required=False)
+@pass_context
+def import_(ctx: Context, path: str | None) -> None:
+    """Rehydrate seeds from JSONL (last-write-wins upsert).
+
+    PATH defaults to .seeds/seeds.jsonl. Pass '-' to read JSONL from stdin.
+    Uses the bootstrap seam so it works on a fresh clone with no DB: the
+    schema is created and the project prefix recovered from the JSONL itself.
+    DB rows fresher than their JSONL record are never clobbered, and DB-only
+    seeds (absent from the JSONL) are never deleted.
+    """
+    from seeds.export import import_from_jsonl, import_lines
+
+    db = ctx.get_db(bootstrap=True)
+
+    if path == "-":
+        result = import_lines(db, sys.stdin, bootstrap=True)
+    else:
+        input_path = Path(path) if path is not None else None
+        result = import_from_jsonl(db, input_path, bootstrap=True)
+
+    click.echo(_format_import_summary(result))
+
+
 @main.command()
 @click.option("--flush-only", is_flag=True, help="Only export to JSONL (no git ops)")
 @pass_context
 def sync(ctx: Context, flush_only: bool) -> None:
-    """Export seeds to JSONL for git-friendly storage."""
+    """Round-trip seeds with JSONL: import (LWW) then export.
+
+    The import half rehydrates any seeds present in .seeds/seeds.jsonl but
+    missing or staler in the DB, without clobbering fresher DB rows or
+    deleting DB-only seeds. Pass --flush-only to skip the import and export
+    only (the original behaviour).
+    """
     db = ctx.get_db()
 
-    from seeds.export import export_to_jsonl
+    from seeds.export import export_to_jsonl, import_from_jsonl
+
+    if not flush_only:
+        import_result = import_from_jsonl(db)
+        click.echo(_format_import_summary(import_result))
 
     output_path = export_to_jsonl(db)
 

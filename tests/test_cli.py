@@ -959,6 +959,61 @@ class TestTreeCommand:
         assert "seed-test1.1" in result.output
 
 
+class TestImportCommand:
+    """Tests for 'seeds import' command (rehydrate from JSONL)."""
+
+    def test_import_rehydrates_and_prints_counts(self, cli_runner, env_with_seeds):
+        """import rebuilds DB-absent seeds from JSONL and prints created counts."""
+        # Export the fixture's seeds, then wipe the DB to simulate a fresh clone.
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        db_path = env_with_seeds / SEEDS_DIR / "seeds.db"
+        db_path.unlink()
+
+        result = cli_runner.invoke(main, ["import"])
+        assert result.exit_code == 0
+        # Fixture has 4 seeds, all newly created on a fresh DB.
+        assert "Imported: 4 created, 0 updated, 0 skipped" in result.output
+
+        # The seeds are actually back in the DB.
+        list_result = cli_runner.invoke(main, ["list", "--all"])
+        assert "seed-test1" in list_result.output
+
+    def test_import_again_skips_unchanged(self, cli_runner, env_with_seeds):
+        """A second import of the same JSONL leaves fresh DB rows untouched."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        result = cli_runner.invoke(main, ["import"])
+        assert result.exit_code == 0
+        # DB rows are as-fresh-or-fresher than JSONL -> all skipped.
+        assert "Imported: 0 created, 0 updated, 4 skipped" in result.output
+
+    def test_import_reads_from_stdin(self, cli_runner, env_with_seeds):
+        """import - reads JSONL from stdin and rehydrates a wiped DB."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
+        jsonl_text = jsonl_path.read_text()
+
+        # Wipe the DB so the stdin records are genuinely created.
+        (env_with_seeds / SEEDS_DIR / "seeds.db").unlink()
+
+        result = cli_runner.invoke(main, ["import", "-"], input=jsonl_text)
+        assert result.exit_code == 0
+        assert "Imported: 4 created, 0 updated, 0 skipped" in result.output
+
+        list_result = cli_runner.invoke(main, ["list", "--all"])
+        assert "seed-test1" in list_result.output
+
+    def test_import_explicit_path(self, cli_runner, env_with_seeds):
+        """import accepts an explicit PATH argument."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
+        (env_with_seeds / SEEDS_DIR / "seeds.db").unlink()
+
+        result = cli_runner.invoke(main, ["import", str(jsonl_path)])
+        assert result.exit_code == 0
+        assert "Imported: 4 created" in result.output
+
+
 class TestSyncCommand:
     """Tests for 'seeds sync' command."""
 
@@ -971,6 +1026,48 @@ class TestSyncCommand:
 
         jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
         assert jsonl_path.exists()
+
+    def test_sync_round_trips_import_then_export(self, cli_runner, env_with_seeds):
+        """Default sync prints both an import summary and an export summary."""
+        # Seed the JSONL so the import half has something to report.
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        result = cli_runner.invoke(main, ["sync"])
+        assert result.exit_code == 0
+        assert "Imported:" in result.output
+        assert "Exported" in result.output
+
+    def test_sync_import_does_not_clobber_db_only_seed(
+        self, cli_runner, env_with_seeds
+    ):
+        """sync imports JSONL records but never deletes seeds only in the DB."""
+        # Snapshot the fixture seeds into JSONL.
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        # Add a seed that exists ONLY in the DB (absent from the JSONL).
+        db = Database()
+        db.create_seed(Seed(id="seed-dbonly", title="DB-only seed"))
+        db.close()
+
+        result = cli_runner.invoke(main, ["sync"])
+        assert result.exit_code == 0
+
+        # The DB-only seed survives the round-trip (import must not delete it)
+        # and the subsequent export now includes it.
+        list_result = cli_runner.invoke(main, ["list", "--all"])
+        assert "seed-dbonly" in list_result.output
+
+        jsonl_text = (env_with_seeds / SEEDS_DIR / "seeds.jsonl").read_text()
+        assert "seed-dbonly" in jsonl_text
+
+    def test_sync_flush_only_is_export_only(self, cli_runner, env_with_seeds):
+        """--flush-only exports without importing (no import summary line)."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        result = cli_runner.invoke(main, ["sync", "--flush-only"])
+        assert result.exit_code == 0
+        assert "Exported" in result.output
+        assert "Imported:" not in result.output
 
 
 class TestPrimeCommand:
