@@ -1060,6 +1060,32 @@ class TestSyncCommand:
         jsonl_text = (env_with_seeds / SEEDS_DIR / "seeds.jsonl").read_text()
         assert "seed-dbonly" in jsonl_text
 
+    def test_sync_preserves_multiple_db_only_seeds(self, cli_runner, env_with_seeds):
+        """A round-trip sync preserves every DB-only seed, not just one.
+
+        Generalizes the single-seed case: several seeds present only in the DB
+        (absent from the JSONL the import half reads) all survive the import and
+        all reappear in the re-exported JSONL.
+        """
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        db = Database()
+        db.create_seed(Seed(id="seed-only1", title="DB only 1"))
+        db.create_seed(Seed(id="seed-only2", title="DB only 2"))
+        db.create_seed(Seed(id="seed-only3", title="DB only 3"))
+        db.close()
+
+        result = cli_runner.invoke(main, ["sync"])
+        assert result.exit_code == 0
+
+        list_result = cli_runner.invoke(main, ["list", "--all"])
+        for sid in ("seed-only1", "seed-only2", "seed-only3"):
+            assert sid in list_result.output
+
+        jsonl_text = (env_with_seeds / SEEDS_DIR / "seeds.jsonl").read_text()
+        for sid in ("seed-only1", "seed-only2", "seed-only3"):
+            assert sid in jsonl_text
+
     def test_sync_flush_only_is_export_only(self, cli_runner, env_with_seeds):
         """--flush-only exports without importing (no import summary line)."""
         cli_runner.invoke(main, ["sync", "--flush-only"])

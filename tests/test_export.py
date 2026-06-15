@@ -450,6 +450,51 @@ class TestImportGeneral:
         result = import_from_jsonl(db, input_path)
         assert result.created == 1
 
+    def test_import_mixed_v1_and_v2_in_one_file(self, db, temp_dir):
+        """A single file may interleave legacy v1 and v2 records.
+
+        Format is detected per record (``format_version: 2`` -> v2, anything
+        else -> legacy v1), so a v1 record (``related_to``/``questions``) and a
+        v2 record (``relationships``) in the same file each import via their own
+        code path.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        v1 = {
+            "id": "seed-v1",
+            "title": "Legacy",
+            "content": "",
+            "status": "captured",
+            "seed_type": "idea",
+            "tags": [],
+            "related_to": [],
+            "created_at": now,
+            "updated_at": now,
+            "resolved_at": None,
+            "questions": [],
+        }
+        v2 = {
+            "format_version": 2,
+            "id": "seed-v2",
+            "title": "Modern",
+            "content": "",
+            "status": "captured",
+            "seed_type": "idea",
+            "tags": [],
+            "created_at": now,
+            "updated_at": now,
+            "resolved_at": None,
+            "relationships": [],
+        }
+
+        input_path = temp_dir / "mixed.jsonl"
+        input_path.write_text(json.dumps(v1) + "\n" + json.dumps(v2) + "\n")
+
+        result = import_from_jsonl(db, input_path)
+        assert result.created == 2
+
+        assert db.get_seed("seed-v1").title == "Legacy"
+        assert db.get_seed("seed-v2").title == "Modern"
+
 
 class TestImportDefaultPath:
     """Tests for import using default path."""
@@ -730,6 +775,49 @@ class TestImportLastWriteWins:
             "seed-a", rel_type=RelationType.RELATES_TO, direction="outbound"
         )
         assert len(rels) == 1  # not duplicated despite two imports
+
+    def test_skipped_stale_seed_still_backfills_missing_edge(self, db, temp_dir):
+        """A record skipped as stale still asserts its (missing) relationships.
+
+        ``_import_v2_record`` re-asserts edges in every branch, so even when the
+        seed itself is left untouched (DB row as-fresh-or-fresher), an edge the
+        DB is missing gets backfilled. Here the DB seed is fresh (so the record
+        is skipped) but carries no relationship; the stale record names one,
+        which must still be created.
+        """
+        fresh = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        # seed-a is fresh in the DB and has NO outbound edge yet.
+        db.create_seed(Seed(id="seed-a", title="A", created_at=fresh, updated_at=fresh))
+        # seed-b exists so the edge has a target (no FK, but keep it realistic).
+        db.create_seed(Seed(id="seed-b", title="B"))
+
+        assert db.get_relationships("seed-a", direction="outbound") == []
+
+        stale = (fresh - timedelta(days=5)).isoformat()
+        record = _v2_record(
+            "seed-a",
+            title="Stale A",
+            updated_at=stale,
+            relationships=[
+                {"target_id": "seed-b", "rel_type": "relates-to", "created_at": stale}
+            ],
+        )
+        input_path = temp_dir / "backfill.jsonl"
+        input_path.write_text(json.dumps(record) + "\n")
+
+        result = import_from_jsonl(db, input_path)
+
+        # The seed row is stale -> skipped (title untouched)...
+        assert result.skipped == 1
+        assert result.updated == 0
+        assert db.get_seed("seed-a").title == "A"
+
+        # ...yet the missing edge was backfilled.
+        rels = db.get_relationships(
+            "seed-a", rel_type=RelationType.RELATES_TO, direction="outbound"
+        )
+        assert len(rels) == 1
+        assert rels[0].target_id == "seed-b"
 
     def test_import_lines_accepts_iterable(self, db):
         """import_lines consumes an arbitrary iterable of JSONL lines (stdin seam)."""
