@@ -25,6 +25,32 @@ from seeds.models import (
 )
 
 
+def recover_prefix_from_id(seed_id: str) -> str | None:
+    """Recover the project prefix from a seed ID like 'seeds-155' -> 'seeds'.
+
+    Strips any child suffix first (``seeds-155.1`` is the child of top-level
+    ``seeds-155``), then takes everything before the final ``-<number>``
+    segment. Returns ``None`` when ``seed_id`` is not a recoverable
+    ``<prefix>-<number>`` shape (e.g. a legacy hex hash like ``seed-a1b2`` or
+    a malformed ID), or when the recovered prefix is not a valid prefix.
+
+    Used by fresh-clone import bootstrap to set the project prefix from the
+    first JSONL record when the gitignored DB (which holds the prefix config)
+    is absent.
+    """
+    if not seed_id:
+        return None
+    # Drop any child suffix: 'seeds-155.1' -> 'seeds-155'.
+    top_level = seed_id.split(".", 1)[0]
+    # The trailing '-'-delimited segment must be the sequence number.
+    if parse_sequential_id(top_level) is None:
+        return None
+    prefix = top_level.rsplit("-", 1)[0]
+    if not is_valid_prefix(prefix):
+        return None
+    return prefix
+
+
 @dataclass(frozen=True)
 class BodyRefChange:
     """A single ID reference change inside a seed's body field."""
