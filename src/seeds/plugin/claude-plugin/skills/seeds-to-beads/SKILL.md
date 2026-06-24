@@ -32,6 +32,6 @@ These beads close a loop that began in deliberation, so the place to learn wheth
 - **If so, was it catchable in planning?** *planning-miss* (a better bead would have caught it) vs *inherent unknown* (only discoverable by building it).
 - **What a better bead would have said** — one line, when there's a lesson worth carrying forward.
 
-Capture first, quantify later: this is a qualitative record of where planning helped or missed, not a metric. Whether and how to formalize it is still open (seeds-185).
+Capture first, quantify later: this is a qualitative record of where planning helped or missed, not a metric. The `resolve-seeds-from-beads` skill walks this at resolution time; whether and how to formalize the note itself is still open (seeds-185).
 
 Do this conversion once when invoked. Do not adopt the conversion behavior as a default for subsequent turns.
