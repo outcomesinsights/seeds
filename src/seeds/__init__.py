@@ -1,3 +1,3 @@
 """seeds: deliberation capture for ideas that need time to grow."""
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"

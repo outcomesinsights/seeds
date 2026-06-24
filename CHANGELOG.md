@@ -6,6 +6,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-06-24
+
+This release rounds out the seeds↔beads workflow and makes JSONL import a
+first-class, round-trippable operation.
+
+On the workflow side, the bundled skills now carry intent in both directions.
+`seeds-to-beads` records the *why* behind each bead — locked decisions and their
+rationale, verbatim stakeholder voice on subjective calls, and seed lineage —
+and suggests a short efficacy note to capture when the work is done. A new
+`resolve-seeds-from-beads` skill closes the loop: after an implementation
+session it reconciles what actually shipped back into the originating seeds,
+captures that efficacy note, and resolves them.
+
+On the data side, `seeds import` lands with last-write-wins upsert semantics, a
+fresh-clone bootstrap, and prefix recovery, so a seeds database can be rebuilt
+from its JSONL export and synced round-trip without drift.
+
+### Added
+
+- **`seeds import [PATH|-]` with round-trip `seeds sync`.** Import seeds from a
+  JSONL file or stdin; export and re-import are now lossless, enabling
+  backup/restore and cross-clone sync.
+- **Fresh-clone bootstrap + prefix recovery on import.** A freshly cloned repo
+  with only its JSONL export can reconstruct a working database, recovering the
+  project's seed-ID prefix.
+- **Last-write-wins upsert for import.** Re-importing reconciles by `updated_at`
+  and reports an `ImportResult` summary instead of duplicating or clobbering.
+- **Executor intent in the `seeds-to-beads` skill.** Converted beads now record
+  locked decisions + their rationale, verbatim stakeholder voice, and seed
+  lineage — separating motivation from constraints.
+- **Efficacy note suggested at seed resolution.** `seeds-to-beads` now proposes
+  a short qualitative note (tweaking needed? planning-miss vs inherent unknown?)
+  to capture when the originating seed is resolved.
+- **New `resolve-seeds-from-beads` skill.** The symmetric bookend to
+  `seeds-to-beads`: reconcile deliberation against what shipped, capture the
+  efficacy note, and resolve the seeds.
+
+### Documentation
+
+- Added the intent-debt investigation and feedback-response notes under `docs/`.
+
+### Tooling
+
+- Beads now exports `issues.jsonl` on commit via a hook.
+- Relocked ruff (0.15.14 → 0.15.16); raised the requirement floor to >=0.15.15.
+
 ## [0.3.2] - 2026-06-04
 
 A correctness release for the Claude Code skills installer. `seeds skills
@@ -181,7 +227,9 @@ Initial public beta release.
 - **Experimental web UI**: `seeds serve` for read-only browsing of seeds and questions
 - **Doctor command**: `seeds doctor` for installation health checks
 
-[Unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/outcomesinsights/seeds/compare/v0.3.2...v0.3.3
+[0.3.2]: https://github.com/outcomesinsights/seeds/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/outcomesinsights/seeds/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/outcomesinsights/seeds/compare/v0.2.0...v0.3.0
 [0.2.1]: https://github.com/outcomesinsights/seeds/compare/v0.2.0...v0.3.0
