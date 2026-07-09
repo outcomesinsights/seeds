@@ -32,6 +32,17 @@ The exemplars (all dates verified against the GitHub/npm APIs, current to within
 - `llm-deliberate` proves the **"process, not destination" framing is in the air** — but it's been pointed at *machine* consensus, not *human* reasoning. The vocabulary seeds uses is being claimed for a different target.
 - This is a **naming/positioning hazard**: in mid-2026, someone searching "deliberation tool / deliberation MCP" lands in a sea of agent-councils, not journey-capture. seeds' category label now resolves to something else.
 
+### Closer look: `deliberum` — the most seeds-adjacent entrant
+
+Fetched directly ([github.com/xuhuanstudio/deliberum](https://github.com/xuhuanstudio/deliberum); v1.0.0 dated 2026-06-15; **4★ / 0 forks**; self-described "pre-production local-first"). On a closer read it's the one entrant that shares seeds' *convictions*, not just the word:
+
+- **Rejects the council pattern** the rest of the wave is built on — *"not a voting system, not a central-Judge workflow"*; critiques majority voting because *"weak consensus [can] overpower strong objections."*
+- **Humans and models are uniform participants** ("represented uniformly as participants") — the AI-as-participant idea.
+- **Objections are first-class** (an "Objection Ledger"); it *"compiles an outcome with unresolved boundaries instead of pretending that every disagreement disappeared"* — keeps the dissent rather than flattening to a clean conclusion.
+- **Already persists the journey** — append-only event store, `.deliberum/deliberum.sqlite`, rotated JSONL audit. So the "watch if it adds persistence" flag (below) already fired on day one.
+
+But it is **not** seeds, in three ways: **unit** — a live single-topic deliberation *room/session runtime*, vs seeds' *corpus over time* (lifecycle, hierarchy, cross-links, "what did we decide 8 months ago and why"); **stack** — TypeScript + Hono daemon + React/Vite web UI at `:3877`, vs seeds' CLI-first, git-backed JSONL, no-daemon shape; **maturity** — one author, days old, the name itself provisional. Net: strong philosophical validation from an independent build, but a different product. The thing to watch is whether it generalizes from single-session to corpus-over-time.
+
 ---
 
 ## Strand 2 — The design-rationale problem, independently rediscovered in dev tooling *(HIGH confidence; primary sources)*
@@ -70,7 +81,7 @@ There is continued, possibly accelerating activity in AI-mediated *democratic* d
 3. **Your rejected approaches are the ones the field is adopting.** Post-hoc extraction → ADRs (Architecture Without Architects) is exactly what you declined in `seeds-166` and at founding. The destination-oriented "verdict" shape of the agent-councils is exactly what `seeds-168` argues against. seeds is differentiated *by contrast* with the wave.
 4. **seeds' exact shape remains unoccupied.** No CLI-first + human-reasoning + capture-at-decision-time competitor surfaced. Problem crowded; solution-shape empty.
 5. **No funding signal** specific to deliberation-*capture* (vs. agent-orchestration) survived verification — so "is money flowing to this niche" is unresolved.
-6. **One to watch:** `deliberum` ("peer deliberation runtime for humans, models, and tools") is the agent-debate tool most likely to grow *persistence of the deliberation transcript* — if it does, it moves onto seeds' capture turf. Worth a periodic check.
+6. **One to watch — `deliberum`** (see *Closer look* under Strand 1). The journey-persistence signal I flagged **already fired**: it ships an append-only event store on day one, and it's the most seeds-aligned entrant *philosophically* (rejects voting/judge, objections first-class, keeps unresolved boundaries). What still separates it is *unit* (single-session room vs corpus-over-time) and *stack* (TS/daemon/web vs CLI/git). Watch whether it generalizes from a single deliberation to a persistent corpus.
 
 ---
 
