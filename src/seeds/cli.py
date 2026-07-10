@@ -700,6 +700,84 @@ def abandon(ctx: Context, seed_id: str, reason: str | None) -> None:
 
 @main.command()
 @click.argument("seed_id")
+@click.option(
+    "--to",
+    "target_file",
+    required=True,
+    help="Durable context file to write the lodestone into (e.g. CLAUDE.md).",
+)
+@click.option(
+    "--as",
+    "principle",
+    required=True,
+    help="The one-line principle to record as a lodestone.",
+)
+@click.option(
+    "--no-resolve",
+    is_flag=True,
+    help="Promote without resolving the seed (promotion resolves by default).",
+)
+@click.option(
+    "--section",
+    default="## Lodestones",
+    show_default=True,
+    help="Managed section heading to find-or-create in the target file.",
+)
+@pass_context
+def promote(
+    ctx: Context,
+    seed_id: str,
+    target_file: str,
+    principle: str,
+    no_resolve: bool,
+    section: str,
+) -> None:
+    """Promote a matured seed into durable context as a lodestone.
+
+    Writes the one-line PRINCIPLE (given with --as) into a managed section of
+    the file named by --to, records two-way provenance (a bullet citing the
+    seed in the file; a resolution naming the file on the seed), tags the seed
+    'lodestone', and resolves it (unless --no-resolve is passed).
+    """
+    from seeds.lodestone import append_to_managed_section
+    from seeds.models import now_utc
+
+    db = ctx.get_db()
+    seed = get_seed_or_exit(db, seed_id)
+
+    date_str = now_utc().strftime("%Y-%m-%d")
+    bullet = f"- {principle} — {seed.id}, promoted {date_str}"
+
+    # Forward-provenance: file -> seed (the bullet cites the seed id).
+    path = Path(target_file)
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        append_to_managed_section(existing, section, bullet), encoding="utf-8"
+    )
+
+    # Back-provenance: seed -> file (the resolution names the file + date).
+    seed.resolution = (
+        f"Promoted to `{target_file}` on {date_str} as a lodestone: {principle}"
+    )
+    if "lodestone" not in seed.tags:
+        seed.tags.append("lodestone")
+
+    if not no_resolve:
+        seed.status = SeedStatus.RESOLVED
+        seed.resolved_at = now_utc()
+
+    db.update_seed(seed)
+
+    # Echo both ends of the link: the appended bullet and the new resolution.
+    click.echo(f"Promoted {seed.id} → {target_file}")
+    click.echo(f"  {bullet}")
+    click.echo(f"  Resolution: {seed.resolution}")
+    click.echo(f"  Status: {seed.status.value}")
+
+
+@main.command()
+@click.argument("seed_id")
 @click.option("--title", "-t", help="New title")
 @click.option("--content", "-c", help="New content (replaces existing)")
 @click.option("--tags", help="New tags (comma-separated, replaces existing)")
