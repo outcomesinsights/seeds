@@ -78,6 +78,12 @@ seeds resolve <id>                       # Mark as resolved
 seeds abandon <id>                       # Decided against
 ```
 
+### Promote
+
+```bash
+seeds promote <id> --to <file> --as "<principle>"   # Distill a resolved seed into a durable lodestone
+```
+
 ### Ask Questions
 
 ```bash
@@ -103,6 +109,16 @@ seeds sync --flush-only                  # Export to .seeds/seeds.jsonl (git-tra
 ```bash
 seeds prime                              # Output context for AI agents
 ```
+
+## Lodestones
+
+A **lodestone** is a load-bearing principle — one crisp, bounded line — that you want every future session steered by. `seeds promote` distills a matured or resolved seed into such a principle and writes it, with a two-way provenance link, into durable, always-on project context (`CLAUDE.md`, `AGENTS.md`, or the README), then resolves the seed. The point is *placement*: a lodestone lands in the context your agent runtime injects every session, so it stays in front of the agent without anyone re-explaining it.
+
+```bash
+seeds promote <id> --to CLAUDE.md --as "a code set has exactly one vocabulary ID"
+```
+
+Under the hood this appends a provenance-stamped bullet under a managed `## Lodestones` section of the target file, tags the seed `lodestone`, records the back-link in the seed's resolution, and resolves it (pass `--no-resolve` to keep deliberating). Reach for promotion **sparingly** — only when a deliberation has settled into a genuinely load-bearing, *bounded* principle, not for everyday seeds. Keep the line scoped ("a code set has exactly one vocabulary ID"), never an open-ended imperative ("respect deprecations and move forward"), because a promoted line is read as a hard rule every session. In [Claude Code](https://claude.com/claude-code), saying **"promote this"** or **"make this a lodestone"** fires the bundled `seeds:promote` skill, which walks the deliberation, helps you distill the one line, and runs `seeds promote` for you.
 
 ## Status
 
@@ -132,6 +148,7 @@ This registers the bundled marketplace and installs the `seeds` plugin under the
 
 - **`seeds:feedback`** — frames the next user message as feedback on the agent's prior turn and invites the agent to follow up with its own questions, comments, or criticisms. Useful during deliberation when you want the agent to push back rather than just execute.
 - **`seeds:seeds-to-beads`** — frames the user's request as "convert these seeds into beads" and applies the agreed seeds-to-beads conversion principles (separating action from context, mechanically checkable acceptance criteria, etc.) for that one reply.
+- **`seeds:promote`** — fires when you say "promote this" or "make this a lodestone"; distills the seed's deliberation into one bounded principle and promotes it into durable context via `seeds promote`.
 
 Re-run `seeds skills install` after upgrading the seeds CLI to pick up updated skill content.
 
