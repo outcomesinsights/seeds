@@ -8,19 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.3.4] - 2026-07-16
 
-This release adds a new output mode: turning a matured seed into a *lodestone*.
+This release adds a new output mode: turning a matured seed into a *trellis*.
 
-`seeds lodestone <id> --to <file> --as "<principle>"` distills a resolved seed's
+`seeds trellis <id> --to <file> --as "<principle>"` distills a resolved seed's
 deliberation into one crisp, bounded principle and writes it — with a two-way
 provenance link — into durable, always-on project context such as `CLAUDE.md`
-or `README`, then resolves the seed. A lodestone is a load-bearing principle
+or `README`, then resolves the seed. A trellis is a load-bearing principle
 you want every future session steered by; it lives in the context the agent
 runtime injects each session, not in anything seeds surfaces internally. A
-companion `seeds:lodestone` skill supplies the language judgment — distilling the
+companion `seeds:trellis` skill supplies the language judgment — distilling the
 one-line principle and advising the target file — and fires when you say
-"promote this" or "make this a lodestone". The verb's bookkeeping stays
-deterministic (a provenance bullet under a `## Lodestones` section, a
-`lodestone` tag, and resolution), and README and CLAUDE.md explain when to
+"promote this" or "make this a trellis". The verb's bookkeeping stays
+deterministic (a provenance bullet under a `## Trellises` section, a
+`trellis` tag, and resolution), and README and CLAUDE.md explain when to
 reach for it.
 
 Also includes routine dependency maintenance (ruff floor bumps,

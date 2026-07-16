@@ -704,27 +704,27 @@ def abandon(ctx: Context, seed_id: str, reason: str | None) -> None:
     "--to",
     "target_file",
     required=True,
-    help="Durable context file to write the lodestone into (e.g. CLAUDE.md).",
+    help="Durable context file to write the trellis into (e.g. CLAUDE.md).",
 )
 @click.option(
     "--as",
     "principle",
     required=True,
-    help="The one-line principle to record as a lodestone.",
+    help="The one-line principle to record as a trellis.",
 )
 @click.option(
     "--no-resolve",
     is_flag=True,
-    help="Record the lodestone without resolving the seed (resolves by default).",
+    help="Record the trellis without resolving the seed (resolves by default).",
 )
 @click.option(
     "--section",
-    default="## Lodestones",
+    default="## Trellises",
     show_default=True,
     help="Managed section heading to find-or-create in the target file.",
 )
 @pass_context
-def lodestone(
+def trellis(
     ctx: Context,
     seed_id: str,
     target_file: str,
@@ -732,15 +732,15 @@ def lodestone(
     no_resolve: bool,
     section: str,
 ) -> None:
-    """Record a matured seed as a lodestone in durable context.
+    """Record a matured seed as a trellis in durable context.
 
     Writes the one-line PRINCIPLE (given with --as) into a managed section of
     the file named by --to, records two-way provenance (a bullet citing the
     seed in the file; a resolution naming the file on the seed), tags the seed
-    'lodestone', and resolves it (unless --no-resolve is passed).
+    'trellis', and resolves it (unless --no-resolve is passed).
     """
-    from seeds.lodestone import append_to_managed_section
     from seeds.models import now_utc
+    from seeds.trellis import append_to_managed_section
 
     db = ctx.get_db()
     seed = get_seed_or_exit(db, seed_id)
@@ -758,10 +758,10 @@ def lodestone(
 
     # Back-provenance: seed -> file (the resolution names the file + date).
     seed.resolution = (
-        f"Recorded as a lodestone in `{target_file}` on {date_str}: {principle}"
+        f"Recorded as a trellis in `{target_file}` on {date_str}: {principle}"
     )
-    if "lodestone" not in seed.tags:
-        seed.tags.append("lodestone")
+    if "trellis" not in seed.tags:
+        seed.tags.append("trellis")
 
     if not no_resolve:
         seed.status = SeedStatus.RESOLVED
@@ -770,7 +770,7 @@ def lodestone(
     db.update_seed(seed)
 
     # Echo both ends of the link: the appended bullet and the new resolution.
-    click.echo(f"● {seed.id}: lodestone → {target_file}")
+    click.echo(f"● {seed.id}: trellis → {target_file}")
     click.echo(f"  {bullet}")
     click.echo(f"  Resolution: {seed.resolution}")
     click.echo(f"  Status: {seed.status.value}")

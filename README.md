@@ -78,10 +78,10 @@ seeds resolve <id>                       # Mark as resolved
 seeds abandon <id>                       # Decided against
 ```
 
-### Lodestone
+### Trellis
 
 ```bash
-seeds lodestone <id> --to <file> --as "<principle>"   # Distill a resolved seed into a durable lodestone
+seeds trellis <id> --to <file> --as "<principle>"   # Distill a resolved seed into a durable trellis
 ```
 
 ### Ask Questions
@@ -110,15 +110,15 @@ seeds sync --flush-only                  # Export to .seeds/seeds.jsonl (git-tra
 seeds prime                              # Output context for AI agents
 ```
 
-## Lodestones
+## Trellises
 
-A **lodestone** is a load-bearing principle — one crisp, bounded line — that you want every future session steered by. `seeds lodestone` distills a matured or resolved seed into such a principle and writes it, with a two-way provenance link, into durable, always-on project context (`CLAUDE.md`, `AGENTS.md`, or the README), then resolves the seed. The point is *placement*: a lodestone lands in the context your agent runtime injects every session, so it stays in front of the agent without anyone re-explaining it.
+A **trellis** is a durable principle that future work is *trained along* — a load-bearing but gentle guide (one crisp, bounded line) that stays in front of every future session. `seeds trellis` distills a matured or resolved seed into such a principle and writes it, with a two-way provenance link, into always-on project context (`CLAUDE.md`, `AGENTS.md`, or the README), then resolves the seed. The point is *placement*: a trellis lands in the context your agent runtime injects every session, so it shapes what grows next without anyone re-explaining it.
 
 ```bash
-seeds lodestone <id> --to CLAUDE.md --as "a code set has exactly one vocabulary ID"
+seeds trellis <id> --to CLAUDE.md --as "a code set has exactly one vocabulary ID"
 ```
 
-Under the hood this appends a provenance-stamped bullet under a managed `## Lodestones` section of the target file, tags the seed `lodestone`, records the back-link in the seed's resolution, and resolves it (pass `--no-resolve` to keep deliberating). Reach for this **sparingly** — only when a deliberation has settled into a genuinely load-bearing, *bounded* principle, not for everyday seeds. Keep the line scoped ("a code set has exactly one vocabulary ID"), never an open-ended imperative ("respect deprecations and move forward"), because a lodestone line is read as a hard rule every session. In [Claude Code](https://claude.com/claude-code), saying **"promote this"** or **"make this a lodestone"** fires the bundled `seeds:lodestone` skill, which walks the deliberation, helps you distill the one line, and runs `seeds lodestone` for you.
+Under the hood this appends a provenance-stamped bullet under a managed `## Trellises` section of the target file, tags the seed `trellis`, records the back-link in the seed's resolution, and resolves it (pass `--no-resolve` to keep deliberating). Reach for this **sparingly** — only when a deliberation has settled into a genuinely load-bearing, *bounded* principle, not for everyday seeds. Keep the line scoped ("a code set has exactly one vocabulary ID"), never an open-ended imperative ("respect deprecations and move forward"), because a trellis line is read as a hard rule every session. In [Claude Code](https://claude.com/claude-code), saying **"trellis this"** or **"make this a trellis"** fires the bundled `seeds:trellis` skill, which walks the deliberation, helps you distill the one line, and runs `seeds trellis` for you.
 
 ## Status
 
@@ -148,7 +148,7 @@ This registers the bundled marketplace and installs the `seeds` plugin under the
 
 - **`seeds:feedback`** — frames the next user message as feedback on the agent's prior turn and invites the agent to follow up with its own questions, comments, or criticisms. Useful during deliberation when you want the agent to push back rather than just execute.
 - **`seeds:seeds-to-beads`** — frames the user's request as "convert these seeds into beads" and applies the agreed seeds-to-beads conversion principles (separating action from context, mechanically checkable acceptance criteria, etc.) for that one reply.
-- **`seeds:lodestone`** — fires when you say "promote this" or "make this a lodestone"; distills the seed's deliberation into one bounded principle and writes it into durable context via `seeds lodestone`.
+- **`seeds:trellis`** — fires when you say "trellis this" or "make this a trellis"; distills the seed's deliberation into one bounded principle and writes it into durable context via `seeds trellis`.
 
 Re-run `seeds skills install` after upgrading the seeds CLI to pick up updated skill content.
 
