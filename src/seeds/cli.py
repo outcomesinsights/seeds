@@ -719,7 +719,7 @@ def abandon(ctx: Context, seed_id: str, reason: str | None) -> None:
 )
 @click.option(
     "--section",
-    default="## Trellises",
+    default="## Principles",
     show_default=True,
     help="Managed section heading to find-or-create in the target file.",
 )

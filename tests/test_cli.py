@@ -677,7 +677,7 @@ class TestTrellisCommand:
         assert result.exit_code == 0
         assert target.exists()
         text = target.read_text(encoding="utf-8")
-        assert "## Trellises" in text
+        assert "## Principles" in text
         assert "Prefer boring technology" in text
 
     def test_trellis_does_not_duplicate_existing_heading(
@@ -687,7 +687,7 @@ class TestTrellisCommand:
         target = env_with_seeds / "CONTEXT.md"
         target.write_text(
             "# Project Context\n\n"
-            "## Trellises\n\n"
+            "## Principles\n\n"
             "- Existing principle — seed-test1, 2020-01-01\n\n"
             "## Other Notes\n\n"
             "Some trailing prose.\n",
@@ -706,7 +706,7 @@ class TestTrellisCommand:
         )
         assert result.exit_code == 0
         text = target.read_text(encoding="utf-8")
-        assert text.count("## Trellises") == 1
+        assert text.count("## Principles") == 1
         # The new bullet lands inside the section, before the following heading.
         assert text.index("New principle here") < text.index("## Other Notes")
 

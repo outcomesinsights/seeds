@@ -19,7 +19,7 @@ runtime injects each session, not in anything seeds surfaces internally. A
 companion `seeds:trellis` skill supplies the language judgment — distilling the
 one-line principle and advising the target file — and fires when you say
 "promote this" or "make this a trellis". The verb's bookkeeping stays
-deterministic (a provenance bullet under a `## Trellises` section, a
+deterministic (a provenance bullet under a `## Principles` section, a
 `trellis` tag, and resolution), and README and CLAUDE.md explain when to
 reach for it.
 
