@@ -1,6 +1,6 @@
-"""Pure text helpers for lodestone promotion (no filesystem access).
+"""Pure text helpers for writing lodestones (no filesystem access).
 
-The ``seeds promote`` verb writes a one-line principle into a managed section
+The ``seeds lodestone`` verb writes a one-line principle into a managed section
 of a durable context file (e.g. CLAUDE.md / README). The section
 find-or-create + append logic lives here as a pure ``text_in -> text_out``
 function so it is unit-testable without touching the disk.

@@ -92,7 +92,7 @@ uv run seeds list                    # List non-terminal seeds
 uv run seeds show <id>               # Show seed details
 uv run seeds explore <id>            # Start exploring
 uv run seeds resolve <id>            # Mark resolved
-uv run seeds promote <id> --to <file> --as "<principle>"   # Promote a matured seed into a durable lodestone
+uv run seeds lodestone <id> --to <file> --as "<principle>"   # Record a matured seed as a durable lodestone
 uv run seeds ask "?" --seed=<id>     # Attach question
 uv run seeds answer <q-id> "answer"  # Answer question
 uv run seeds sync                    # Export to JSONL

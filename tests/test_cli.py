@@ -657,16 +657,16 @@ class TestStatusCommands:
         db.close()
 
 
-class TestPromoteCommand:
-    """Tests for 'seeds promote' command (lodestone output mode)."""
+class TestLodestoneCommand:
+    """Tests for 'seeds lodestone' command (lodestone output mode)."""
 
-    def test_promote_creates_section_in_fresh_file(self, cli_runner, env_with_seeds):
-        """Promoting a fresh file creates the section and writes the principle."""
+    def test_lodestone_creates_section_in_fresh_file(self, cli_runner, env_with_seeds):
+        """Writing to a fresh file creates the section and the principle."""
         target = env_with_seeds / "LODESTONES.md"
         result = cli_runner.invoke(
             main,
             [
-                "promote",
+                "lodestone",
                 "seed-test2",
                 "--to",
                 str(target),
@@ -680,7 +680,7 @@ class TestPromoteCommand:
         assert "## Lodestones" in text
         assert "Prefer boring technology" in text
 
-    def test_promote_does_not_duplicate_existing_heading(
+    def test_lodestone_does_not_duplicate_existing_heading(
         self, cli_runner, env_with_seeds
     ):
         """Appending to a file that already has the section keeps one heading."""
@@ -688,7 +688,7 @@ class TestPromoteCommand:
         target.write_text(
             "# Project Context\n\n"
             "## Lodestones\n\n"
-            "- Existing principle — seed-test1, promoted 2020-01-01\n\n"
+            "- Existing principle — seed-test1, 2020-01-01\n\n"
             "## Other Notes\n\n"
             "Some trailing prose.\n",
             encoding="utf-8",
@@ -696,7 +696,7 @@ class TestPromoteCommand:
         result = cli_runner.invoke(
             main,
             [
-                "promote",
+                "lodestone",
                 "seed-test2",
                 "--to",
                 str(target),
@@ -710,12 +710,12 @@ class TestPromoteCommand:
         # The new bullet lands inside the section, before the following heading.
         assert text.index("New principle here") < text.index("## Other Notes")
 
-    def test_promote_bullet_has_id_and_date(self, cli_runner, env_with_seeds):
+    def test_lodestone_bullet_has_id_and_date(self, cli_runner, env_with_seeds):
         """The appended bullet cites the seed ID and an ISO (YYYY-MM-DD) date."""
         target = env_with_seeds / "LODESTONES.md"
         result = cli_runner.invoke(
             main,
-            ["promote", "seed-test2", "--to", str(target), "--as", "A principle"],
+            ["lodestone", "seed-test2", "--to", str(target), "--as", "A principle"],
         )
         assert result.exit_code == 0
         text = target.read_text(encoding="utf-8")
@@ -724,12 +724,12 @@ class TestPromoteCommand:
         assert "seed-test2" in bullets[0]
         assert re.search(r"\d{4}-\d{2}-\d{2}", bullets[0])
 
-    def test_promote_resolution_names_target_file(self, cli_runner, env_with_seeds):
-        """The promoted seed's resolution names the target file path."""
+    def test_lodestone_resolution_names_target_file(self, cli_runner, env_with_seeds):
+        """The resolved seed's resolution names the target file path."""
         target = env_with_seeds / "LODESTONES.md"
         result = cli_runner.invoke(
             main,
-            ["promote", "seed-test2", "--to", str(target), "--as", "A principle"],
+            ["lodestone", "seed-test2", "--to", str(target), "--as", "A principle"],
         )
         assert result.exit_code == 0
         db = Database()
@@ -737,24 +737,24 @@ class TestPromoteCommand:
         assert str(target) in seed.resolution
         db.close()
 
-    def test_promote_adds_lodestone_tag_idempotently(self, cli_runner, env_with_seeds):
-        """Promoting tags the seed 'lodestone', without duplicating on re-promote."""
+    def test_lodestone_tag_idempotent(self, cli_runner, env_with_seeds):
+        """Tags the seed 'lodestone', without duplicating on repeat."""
         target = env_with_seeds / "LODESTONES.md"
-        args = ["promote", "seed-test2", "--to", str(target), "--as", "A principle"]
+        args = ["lodestone", "seed-test2", "--to", str(target), "--as", "A principle"]
         assert cli_runner.invoke(main, args).exit_code == 0
-        # Promote a second time — the tag must not be duplicated.
+        # Run it a second time — the tag must not be duplicated.
         assert cli_runner.invoke(main, args).exit_code == 0
         db = Database()
         seed = db.get_seed("seed-test2")
         assert seed.tags.count("lodestone") == 1
         db.close()
 
-    def test_promote_resolves_by_default(self, cli_runner, env_with_seeds):
-        """Promotion resolves the seed by default."""
+    def test_lodestone_resolves_by_default(self, cli_runner, env_with_seeds):
+        """Making a lodestone resolves the seed by default."""
         target = env_with_seeds / "LODESTONES.md"
         result = cli_runner.invoke(
             main,
-            ["promote", "seed-test2", "--to", str(target), "--as", "A principle"],
+            ["lodestone", "seed-test2", "--to", str(target), "--as", "A principle"],
         )
         assert result.exit_code == 0
         db = Database()
@@ -763,13 +763,13 @@ class TestPromoteCommand:
         assert seed.resolved_at is not None
         db.close()
 
-    def test_promote_no_resolve_keeps_status(self, cli_runner, env_with_seeds):
+    def test_lodestone_no_resolve_keeps_status(self, cli_runner, env_with_seeds):
         """With --no-resolve the status is unchanged and the seed stays queryable."""
         target = env_with_seeds / "LODESTONES.md"
         result = cli_runner.invoke(
             main,
             [
-                "promote",
+                "lodestone",
                 "seed-test2",
                 "--to",
                 str(target),
@@ -783,17 +783,17 @@ class TestPromoteCommand:
         seed = db.get_seed("seed-test2")
         assert seed.status == SeedStatus.EXPLORING
         db.close()
-        # A non-terminal promoted seed is surfaced by the lodestone tag filter.
+        # A non-terminal lodestone seed is surfaced by the tag filter.
         listed = cli_runner.invoke(main, ["list", "--tag", "lodestone"])
         assert listed.exit_code == 0
         assert "seed-test2" in listed.output
 
-    def test_promote_nonexistent_exits_nonzero(self, cli_runner, env_with_seeds):
-        """Promoting an unknown seed id exits non-zero."""
+    def test_lodestone_nonexistent_exits_nonzero(self, cli_runner, env_with_seeds):
+        """Running lodestone on an unknown seed id exits non-zero."""
         target = env_with_seeds / "LODESTONES.md"
         result = cli_runner.invoke(
             main,
-            ["promote", "does-not-exist", "--to", str(target), "--as", "X"],
+            ["lodestone", "does-not-exist", "--to", str(target), "--as", "X"],
         )
         assert result.exit_code != 0
         assert "not found" in result.output
