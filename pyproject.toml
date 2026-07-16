@@ -5,7 +5,7 @@ dynamic = ["version"]
 description = "Git-backed deliberation capture for ideas that need time to grow"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     { name = "Ryan Duryea", email = "aguynamedryan@gmail.com" },
 ]
@@ -24,7 +24,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -88,7 +87,7 @@ select = [
 "src/seeds/prime.py" = ["E501"]  # Prose content in string constant
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 strict = true
 warn_return_any = true
 warn_unused_configs = true

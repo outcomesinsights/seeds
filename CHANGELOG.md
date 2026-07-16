@@ -23,8 +23,9 @@ deterministic (a provenance bullet under a `## Principles` section, a
 `trellis` tag, and resolution), and README and CLAUDE.md explain when to
 reach for it.
 
-Also includes routine dependency maintenance (ruff floor bumps,
-actions/checkout v7).
+This release also **drops Python 3.9** (end-of-life; `requires-python` is now
+`>=3.10`) and refreshes the dev toolchain — mypy 2.3, pytest 9.1, ruff 0.15.22,
+and pre-commit 4.6.
 
 ## [0.3.3] - 2026-06-24
 

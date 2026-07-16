@@ -41,7 +41,7 @@ cd seeds
 pip install .
 ```
 
-Requires Python 3.9+.
+Requires Python 3.10+.
 
 ## Usage
 
