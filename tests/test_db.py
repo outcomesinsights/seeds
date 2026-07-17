@@ -1228,9 +1228,23 @@ class TestRecoverPrefixFromId:
         """A prefix containing a hyphen is preserved."""
         assert recover_prefix_from_id("my-proj-42") == "my-proj"
 
-    def test_hex_hash_id_is_unrecoverable(self):
-        """A legacy hex-hash ID has no numeric sequence; returns None."""
-        assert recover_prefix_from_id("seed-a1b2") is None
+    def test_recovers_from_hash_id(self):
+        """A base36 hash ID (seeds-199) recovers its prefix."""
+        assert recover_prefix_from_id("seeds-k3n") == "seeds"
+        assert recover_prefix_from_id("myproj-8su7") == "myproj"
+
+    def test_recovers_from_hash_child_id(self):
+        """A child of a hash-ID parent recovers the top-level prefix."""
+        assert recover_prefix_from_id("seeds-k3n.2") == "seeds"
+
+    def test_recovers_from_legacy_hex_id(self):
+        """A legacy hex-hash ID recovers its prefix too: the suffix is a
+        base36 token, so the prefix before it is recoverable."""
+        assert recover_prefix_from_id("seed-a1b2") == "seed"
+
+    def test_leading_digit_prefix_is_unrecoverable(self):
+        """A leading-digit 'prefix' is not a valid prefix; returns None."""
+        assert recover_prefix_from_id("123-k3n") is None
 
     def test_no_hyphen_is_unrecoverable(self):
         """An ID without a '-<number>' segment returns None."""

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import time
 from collections.abc import Callable
@@ -34,15 +35,22 @@ from seeds.models import (
     rewrite_id_refs,
 )
 
+# A recoverable ID suffix is a base36 token — this spans the sequential scheme
+# ('seeds-155'), legacy hex hashes ('seed-a1b2'), and the base36 hash scheme
+# (seeds-199, 'seeds-k3n'). The project prefix is whatever precedes it.
+_ID_SUFFIX_RE = re.compile(r"[0-9a-z]+")
+
 
 def recover_prefix_from_id(seed_id: str) -> str | None:
-    """Recover the project prefix from a seed ID like 'seeds-155' -> 'seeds'.
+    """Recover the project prefix from a seed ID: 'seeds-155' -> 'seeds',
+    'seeds-k3n' -> 'seeds'.
 
     Strips any child suffix first (``seeds-155.1`` is the child of top-level
-    ``seeds-155``), then takes everything before the final ``-<number>``
-    segment. Returns ``None`` when ``seed_id`` is not a recoverable
-    ``<prefix>-<number>`` shape (e.g. a legacy hex hash like ``seed-a1b2`` or
-    a malformed ID), or when the recovered prefix is not a valid prefix.
+    ``seeds-155``), then takes everything before the final ``-<suffix>``
+    segment, where ``<suffix>`` is a base36 token — the sequential, legacy-hex,
+    or base36 hash scheme (seeds-199). Returns ``None`` when ``seed_id`` has no
+    recoverable ``<prefix>-<suffix>`` shape, or when the recovered prefix is
+    not a valid prefix.
 
     Used by fresh-clone import bootstrap to set the project prefix from the
     first JSONL record when the gitignored DB (which holds the prefix config)
@@ -52,10 +60,10 @@ def recover_prefix_from_id(seed_id: str) -> str | None:
         return None
     # Drop any child suffix: 'seeds-155.1' -> 'seeds-155'.
     top_level = seed_id.split(".", 1)[0]
-    # The trailing '-'-delimited segment must be the sequence number.
-    if parse_sequential_id(top_level) is None:
+    # Split off the trailing '-<suffix>' segment; the suffix must be base36.
+    prefix, sep, suffix = top_level.rpartition("-")
+    if not sep or not _ID_SUFFIX_RE.fullmatch(suffix):
         return None
-    prefix = top_level.rsplit("-", 1)[0]
     if not is_valid_prefix(prefix):
         return None
     return prefix

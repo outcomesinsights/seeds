@@ -924,6 +924,26 @@ class TestImportBootstrap:
         assert new_id != "myproj-42"
         db.close()
 
+    def test_bootstrap_recovers_prefix_from_hash_ids(self, temp_dir):
+        """Fresh-clone bootstrap recovers the prefix from a base36 hash-ID
+        export (seeds-199), not just legacy sequential IDs. Regression guard:
+        without this, hash-ID stores fall back to a wrong directory-derived
+        prefix on fresh clone."""
+        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        jsonl_path = temp_dir / ".seeds" / "seeds.jsonl"
+        self._write_jsonl(
+            jsonl_path,
+            [_v2_record("myproj-k3n", title="Only", updated_at=ts)],
+        )
+
+        db = Database(path=temp_dir / ".seeds" / "seeds.db")
+        import_from_jsonl(db, jsonl_path, bootstrap=True)
+
+        assert db.get_prefix() == "myproj"
+        new_id = db.next_id()
+        assert re.match(r"^myproj-[0-9a-z]{3,8}$", new_id)
+        db.close()
+
     def test_bootstrap_on_initialized_db_does_not_clobber_prefix(self, temp_dir):
         """An already-initialized DB keeps its prefix; bootstrap is a no-op there."""
         ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
@@ -979,12 +999,13 @@ class TestImportBootstrap:
         db.close()
 
     def test_bootstrap_unrecoverable_first_id_leaves_prefix_unset(self, temp_dir):
-        """A legacy hex-hash first ID can't yield a prefix; DB still bootstraps."""
+        """A malformed first ID with no '<prefix>-<suffix>' shape can't yield a
+        prefix; the DB still bootstraps with the prefix left unset."""
         ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
         jsonl_path = temp_dir / ".seeds" / "seeds.jsonl"
         self._write_jsonl(
             jsonl_path,
-            [_v2_record("seed-a1b2", title="Hex", updated_at=ts)],
+            [_v2_record("nohyphen", title="Malformed", updated_at=ts)],
         )
 
         db = Database(path=temp_dir / ".seeds" / "seeds.db")
@@ -993,7 +1014,7 @@ class TestImportBootstrap:
         assert result.created == 1
         assert db.is_initialized()
         assert db.has_prefix_configured() is False
-        assert db.get_seed("seed-a1b2").title == "Hex"
+        assert db.get_seed("nohyphen").title == "Malformed"
         db.close()
 
     def test_no_bootstrap_skips_missing_file_without_creating_db(self, temp_dir):
