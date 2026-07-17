@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-07-17
+
+This release changes how new seed IDs are minted: from a sequential counter
+(`seeds-1`, `seeds-2`, …) to short, collision-resistant **base36 hash IDs**
+(`seeds-k3n`), adopted whole-cloth from beads. The sequential scheme derived
+each next number by scanning the local store, so the same git-backed repo
+worked from two machines could mint the same ID on each and collide when the
+JSONL merged; hash IDs need no shared counter, so that whole class of
+collision is gone. Existing IDs are **grandfathered** — nothing is renumbered
+and there is no migration. Suffix length scales with store size (3 characters
+in a fresh store, 4 once it grows), keeping IDs as short and typeable as the
+sequential ones they replace.
+
+### Added
+
+- Switch next_id() to base36 hash IDs (seeds-mlj) ([5a8346a](https://github.com/outcomesinsights/seeds/commit/5a8346a3587cd673e87ff58b0e7237e09a52e9e4))
+- Add base36 hash-ID generator module ([9e5ca96](https://github.com/outcomesinsights/seeds/commit/9e5ca9669229016cde716fdcf6ed7001e2860dd2))
+
+### Fixed
+
+- Recover_prefix_from_id handles base36 hash IDs (fresh-clone bootstrap) ([ca89711](https://github.com/outcomesinsights/seeds/commit/ca89711b4eaefcc29ac2d7c057137e76beb0a25a))
+
 ## [0.3.4] - 2026-07-16
 
 This release adds a new output mode: turning a matured seed into a *trellis*.
