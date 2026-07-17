@@ -201,7 +201,7 @@ def create(
             sys.exit(1)
         seed_id = db.get_next_child_id(parent_id)
     else:
-        seed_id = db.next_id()
+        seed_id = db.next_id(seed_text=title)
 
     _validate_id_refs(db, [title, content], allow_unknown_refs)
 
@@ -233,7 +233,7 @@ def jot(ctx: Context, thought: str) -> None:
     """
     db = ctx.get_db()
 
-    seed_id = db.next_id()
+    seed_id = db.next_id(seed_text=thought)
     seed = Seed(id=seed_id, title=thought)
 
     db.create_seed(seed)

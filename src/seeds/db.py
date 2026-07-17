@@ -5,10 +5,20 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import TypeVar
 
+from seeds.idgen import (
+    DEFAULT_MAX_COLLISION_PROB,
+    DEFAULT_MAX_HASH_LENGTH,
+    DEFAULT_MIN_HASH_LENGTH,
+    compute_adaptive_length,
+    generate_hash_id,
+)
 from seeds.models import (
     DEFAULT_PREFIX,
     Relationship,
@@ -49,6 +59,11 @@ def recover_prefix_from_id(seed_id: str) -> str | None:
     if not is_valid_prefix(prefix):
         return None
     return prefix
+
+
+# Bound for get_id_length_config's cast helper: each config knob casts to
+# either float (max_collision_prob) or int (the length bounds).
+_ConfigNum = TypeVar("_ConfigNum", float, int)
 
 
 @dataclass(frozen=True)
@@ -316,25 +331,53 @@ class Database:
         """Check if database exists and is initialized."""
         return self.path.exists()
 
-    def next_id(self, prefix: str | None = None) -> str:
-        """Generate the next sequential ID like 'myproj-1', 'myproj-2', etc.
+    def get_id_length_config(self) -> tuple[float, int, int]:
+        """(max_collision_prob, min_hash_length, max_hash_length) from config,
+        else defaults."""
 
-        Scans all existing IDs to find the current max sequential number.
-        If ``prefix`` is None, the configured project prefix is used
-        (falling back to DEFAULT_PREFIX when no config entry exists).
-        """
+        def _get(
+            key: str, default: _ConfigNum, cast: Callable[[str], _ConfigNum]
+        ) -> _ConfigNum:
+            raw = self.get_config(key)
+            if raw is None or raw == "":
+                return default
+            try:
+                return cast(raw)
+            except (TypeError, ValueError):
+                return default
+
+        return (
+            _get("max_collision_prob", DEFAULT_MAX_COLLISION_PROB, float),
+            _get("min_hash_length", DEFAULT_MIN_HASH_LENGTH, int),
+            _get("max_hash_length", DEFAULT_MAX_HASH_LENGTH, int),
+        )
+
+    def next_id(self, prefix: str | None = None, *, seed_text: str = "") -> str:
+        """Generate a new top-level hash ID like 'seeds-k3n7' (beads-style adaptive
+        base36, seeds-199). Length scales with the top-level seed count; the
+        candidate is checked against the DB and the nonce bumped until free.
+        Existing sequential IDs are never reissued."""
         if prefix is None:
             prefix = self.get_prefix()
         conn = self._get_conn()
-        rows = conn.execute("SELECT id FROM seeds").fetchall()
-
-        max_num = 0
-        for row in rows:
-            num = parse_sequential_id(row["id"])
-            if num is not None and num > max_num:
-                max_num = num
-
-        return f"{prefix}-{max_num + 1}"
+        n = conn.execute(
+            "SELECT COUNT(*) AS c FROM seeds WHERE id NOT LIKE '%.%'"
+        ).fetchone()["c"]
+        max_prob, min_len, max_len = self.get_id_length_config()
+        length = compute_adaptive_length(n, min_len, max_len, max_prob)
+        ts = time.time_ns()
+        for nonce in range(10_000):
+            candidate = generate_hash_id(prefix, seed_text, ts, nonce, length)
+            if (
+                conn.execute(
+                    "SELECT 1 FROM seeds WHERE id = ?", (candidate,)
+                ).fetchone()
+                is None
+            ):
+                return candidate
+        raise RuntimeError(
+            f"could not mint a free hash ID (prefix={prefix}, length={length})"
+        )
 
     # --- Seed operations ---
 

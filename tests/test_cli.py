@@ -20,6 +20,24 @@ from seeds.models import (
 )
 
 
+def _extract_created_id(output: str) -> str:
+    """Pull the seed ID out of a 'create' command's 'Created seed: <id>' line.
+
+    Needed since seeds-mlj: next_id() mints hash IDs, so tests can no longer
+    assume a fresh 'create'/'jot' produces a predictable sequential ID.
+    """
+    match = re.search(r"Created seed: (\S+)", output)
+    assert match, f"no 'Created seed:' line in output: {output!r}"
+    return match.group(1)
+
+
+def _extract_jot_id(output: str) -> str:
+    """Pull the seed ID out of a 'jot' command's leading '<id>: <thought>' line."""
+    match = re.match(r"(\S+):", output)
+    assert match, f"no leading '<id>:' in output: {output!r}"
+    return match.group(1)
+
+
 @pytest.fixture
 def cli_runner():
     """Create a CLI runner for testing commands."""
@@ -131,15 +149,23 @@ class TestInitCommand:
 
 
 class TestRenamePrefixCommand:
-    """Tests for 'seeds rename-prefix' command."""
+    """Tests for 'seeds rename-prefix' command.
+
+    Database.rename_prefix() only rewrites IDs whose suffix is purely
+    numeric (its guard against renaming something like 'seeds-experiment')
+    — since seeds-mlj, fresh 'jot'/'create' output is a base36 hash suffix,
+    which never matches. So rename-prefix is now only meaningful for
+    legacy sequential IDs; tests that need renamable IDs seed the DB
+    directly with 'seeds-N' rows to simulate that legacy data instead of
+    minting them via the CLI.
+    """
 
     def test_rename_prefix_rewrites_ids(self, cli_runner, initialized_env):
         """rename-prefix rewrites all seed IDs and updates config."""
-        # Create some seeds with the default 'seeds' prefix.
-        result = cli_runner.invoke(main, ["jot", "first"])
-        assert result.exit_code == 0
-        result = cli_runner.invoke(main, ["jot", "second"])
-        assert result.exit_code == 0
+        db = Database()
+        db.create_seed(Seed(id="seeds-1", title="first"))
+        db.create_seed(Seed(id="seeds-2", title="second"))
+        db.close()
 
         result = cli_runner.invoke(main, ["rename-prefix", "myproj"])
         assert result.exit_code == 0
@@ -184,12 +210,10 @@ class TestRenamePrefixCommand:
 
     def test_rename_prefix_rewrites_children(self, cli_runner, initialized_env):
         """rename-prefix rewrites child IDs and updates parent references."""
-        cli_runner.invoke(main, ["create", "--title", "parent"])
-        result = cli_runner.invoke(
-            main, ["create", "--title", "child", "--parent", "seeds-1"]
-        )
-        assert result.exit_code == 0
-        assert "seeds-1.1" in result.output
+        db = Database()
+        db.create_seed(Seed(id="seeds-1", title="parent"))
+        db.create_seed(Seed(id="seeds-1.1", title="child"))
+        db.close()
 
         result = cli_runner.invoke(main, ["rename-prefix", "demo"])
         assert result.exit_code == 0
@@ -203,8 +227,10 @@ class TestRenamePrefixCommand:
 
     def test_rename_prefix_reexports_jsonl(self, cli_runner, initialized_env):
         """rename-prefix re-exports JSONL with the new IDs."""
-        cli_runner.invoke(main, ["jot", "alpha"])
-        cli_runner.invoke(main, ["jot", "beta"])
+        db = Database()
+        db.create_seed(Seed(id="seeds-1", title="alpha"))
+        db.create_seed(Seed(id="seeds-2", title="beta"))
+        db.close()
 
         result = cli_runner.invoke(main, ["rename-prefix", "demo"])
         assert result.exit_code == 0
@@ -217,24 +243,32 @@ class TestRenamePrefixCommand:
 
     def test_rename_prefix_rewrites_body_refs(self, cli_runner, initialized_env):
         """rename-prefix rewrites ID refs inside seed content by default."""
-        cli_runner.invoke(main, ["jot", "target"])
-        cli_runner.invoke(
+        db = Database()
+        db.create_seed(Seed(id="seeds-1", title="target"))
+        db.close()
+        create_result = cli_runner.invoke(
             main, ["create", "--title", "hub", "--content", "see seeds-1"]
         )
+        hub_id = _extract_created_id(create_result.output)
 
         result = cli_runner.invoke(main, ["rename-prefix", "demo"])
         assert result.exit_code == 0
         assert "Rewrote 1 ID reference" in result.output
 
-        result = cli_runner.invoke(main, ["show", "demo-2"])
+        # The hub's own ID is a hash ID, so it's untouched by rename-prefix
+        # itself — only the "seeds-1" reference inside its content changes.
+        result = cli_runner.invoke(main, ["show", hub_id])
         assert "see demo-1" in result.output
 
     def test_rename_prefix_no_rewrite_bodies(self, cli_runner, initialized_env):
         """--no-rewrite-bodies leaves seed content alone."""
-        cli_runner.invoke(main, ["jot", "target"])
-        cli_runner.invoke(
+        db = Database()
+        db.create_seed(Seed(id="seeds-1", title="target"))
+        db.close()
+        create_result = cli_runner.invoke(
             main, ["create", "--title", "hub", "--content", "see seeds-1"]
         )
+        hub_id = _extract_created_id(create_result.output)
 
         result = cli_runner.invoke(
             main, ["rename-prefix", "demo", "--no-rewrite-bodies"]
@@ -242,13 +276,15 @@ class TestRenamePrefixCommand:
         assert result.exit_code == 0
         assert "body" not in result.output.lower()
 
-        result = cli_runner.invoke(main, ["show", "demo-2"])
+        result = cli_runner.invoke(main, ["show", hub_id])
         # Reference is now stale — the seeds-1 in body wasn't rewritten.
         assert "see seeds-1" in result.output
 
     def test_rename_prefix_dry_run(self, cli_runner, initialized_env):
         """--dry-run reports what would change without writing."""
-        cli_runner.invoke(main, ["jot", "target"])
+        db = Database()
+        db.create_seed(Seed(id="seeds-1", title="target"))
+        db.close()
         cli_runner.invoke(
             main, ["create", "--title", "hub", "--content", "see seeds-1"]
         )
@@ -256,7 +292,7 @@ class TestRenamePrefixCommand:
         result = cli_runner.invoke(main, ["rename-prefix", "demo", "--dry-run"])
         assert result.exit_code == 0
         assert "DRY RUN" in result.output
-        assert "Would rename 2 IDs" in result.output
+        assert "Would rename 1 IDs" in result.output
         assert "Would rewrite 1 ID reference" in result.output
         assert "seeds-1 → demo-1" in result.output
         assert "see seeds-1" in result.output  # old snippet
@@ -458,13 +494,14 @@ class TestSuggestCommand:
     """Tests for 'seeds suggest' command (natural-language dedup query)."""
 
     def test_suggest_returns_match(self, cli_runner, initialized_env):
-        cli_runner.invoke(
+        create_result = cli_runner.invoke(
             main,
             ["create", "-t", "Venn diagram for compare lens", "--type", "idea"],
         )
+        seed_id = _extract_created_id(create_result.output)
         result = cli_runner.invoke(main, ["suggest", "venn diagram"])
         assert result.exit_code == 0
-        assert "seeds-1" in result.output
+        assert seed_id in result.output
         assert "Venn diagram" in result.output
 
     def test_suggest_no_match_message(self, cli_runner, initialized_env):
@@ -474,16 +511,17 @@ class TestSuggestCommand:
         assert "No seeds matched" in result.output
 
     def test_suggest_json_mode(self, cli_runner, initialized_env):
-        cli_runner.invoke(
+        create_result = cli_runner.invoke(
             main, ["create", "-t", "Venn diagram", "--tags", "venn,compare"]
         )
+        seed_id = _extract_created_id(create_result.output)
         result = cli_runner.invoke(main, ["suggest", "venn diagram", "--json"])
         assert result.exit_code == 0
         import json as _json
 
         payload = _json.loads(result.output)
         assert isinstance(payload, list)
-        assert payload[0]["id"] == "seeds-1"
+        assert payload[0]["id"] == seed_id
         assert payload[0]["title"] == "Venn diagram"
         assert "compare" in payload[0]["tags"]
         assert isinstance(payload[0]["score"], (int, float))
@@ -500,15 +538,17 @@ class TestSuggestCommand:
         assert ids_in_output == 2
 
     def test_suggest_includes_resolved_by_default(self, cli_runner, initialized_env):
-        cli_runner.invoke(main, ["create", "-t", "Venn diagram"])
-        cli_runner.invoke(main, ["resolve", "seeds-1", "-r", "Done"])
+        create_result = cli_runner.invoke(main, ["create", "-t", "Venn diagram"])
+        seed_id = _extract_created_id(create_result.output)
+        cli_runner.invoke(main, ["resolve", seed_id, "-r", "Done"])
         result = cli_runner.invoke(main, ["suggest", "venn diagram"])
         assert result.exit_code == 0
-        assert "seeds-1" in result.output
+        assert seed_id in result.output
 
     def test_suggest_open_only_excludes_terminal(self, cli_runner, initialized_env):
-        cli_runner.invoke(main, ["create", "-t", "Venn diagram"])
-        cli_runner.invoke(main, ["resolve", "seeds-1", "-r", "Done"])
+        create_result = cli_runner.invoke(main, ["create", "-t", "Venn diagram"])
+        seed_id = _extract_created_id(create_result.output)
+        cli_runner.invoke(main, ["resolve", seed_id, "-r", "Done"])
         result = cli_runner.invoke(main, ["suggest", "venn diagram", "--open-only"])
         assert result.exit_code == 0
         assert "No seeds matched" in result.output
@@ -875,16 +915,18 @@ class TestIdRefValidation:
     def test_create_accepts_existing_ref(self, cli_runner, initialized_env):
         first = cli_runner.invoke(main, ["jot", "First seed"])
         assert first.exit_code == 0
+        first_id = _extract_jot_id(first.output)
         result = cli_runner.invoke(
-            main, ["create", "-t", "Second", "-c", "follow-up to seeds-1"]
+            main, ["create", "-t", "Second", "-c", f"follow-up to {first_id}"]
         )
         assert result.exit_code == 0
 
     def test_create_accepts_existing_child_ref(self, cli_runner, initialized_env):
-        cli_runner.invoke(main, ["jot", "Parent"])
-        cli_runner.invoke(main, ["create", "-t", "Child", "--parent", "seeds-1"])
+        parent = cli_runner.invoke(main, ["jot", "Parent"])
+        parent_id = _extract_jot_id(parent.output)
+        cli_runner.invoke(main, ["create", "-t", "Child", "--parent", parent_id])
         result = cli_runner.invoke(
-            main, ["create", "-t", "Third", "-c", "see seeds-1.1"]
+            main, ["create", "-t", "Third", "-c", f"see {parent_id}.1"]
         )
         assert result.exit_code == 0
 

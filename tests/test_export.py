@@ -1,6 +1,7 @@
 """Tests for seeds export/import functionality."""
 
 import json
+import re
 from datetime import datetime, timedelta, timezone
 
 from seeds.db import Database
@@ -878,8 +879,9 @@ class TestImportBootstrap:
         assert db.get_seed("seeds-156").title == "Second"
         db.close()
 
-    def test_bootstrap_next_id_continues_sequence(self, temp_dir):
-        """After a bootstrap import, next_id continues the JSONL's sequence."""
+    def test_bootstrap_next_id_avoids_imported_ids(self, temp_dir):
+        """After a bootstrap import, next_id mints hash IDs (seeds-mlj) that
+        don't collide with the imported ones, using the recovered prefix."""
         ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
         jsonl_path = temp_dir / ".seeds" / "seeds.jsonl"
         self._write_jsonl(
@@ -893,11 +895,15 @@ class TestImportBootstrap:
         db = Database(path=temp_dir / ".seeds" / "seeds.db")
         import_from_jsonl(db, jsonl_path, bootstrap=True)
 
-        # A subsequent jot continues the sequence: max(155, 156) + 1 = 157,
-        # and uses the recovered prefix.
-        assert db.next_id() == "seeds-157"
-        db.create_seed(Seed(id=db.next_id(), title="Third"))
-        assert db.next_id() == "seeds-158"
+        # A subsequent jot avoids the imported IDs and uses the recovered
+        # prefix; it does not reissue or renumber them.
+        id1 = db.next_id()
+        assert re.match(r"^seeds-[0-9a-z]{3,8}$", id1)
+        assert id1 not in {"seeds-155", "seeds-156"}
+        db.create_seed(Seed(id=id1, title="Third"))
+        id2 = db.next_id()
+        assert re.match(r"^seeds-[0-9a-z]{3,8}$", id2)
+        assert id2 != id1
         db.close()
 
     def test_bootstrap_recovers_custom_prefix(self, temp_dir):
@@ -913,7 +919,9 @@ class TestImportBootstrap:
         import_from_jsonl(db, jsonl_path, bootstrap=True)
 
         assert db.get_prefix() == "myproj"
-        assert db.next_id() == "myproj-43"
+        new_id = db.next_id()
+        assert re.match(r"^myproj-[0-9a-z]{3,8}$", new_id)
+        assert new_id != "myproj-42"
         db.close()
 
     def test_bootstrap_on_initialized_db_does_not_clobber_prefix(self, temp_dir):
@@ -950,7 +958,9 @@ class TestImportBootstrap:
 
         assert result.created == 2
         assert db.get_prefix() == "seeds"
-        assert db.next_id() == "seeds-9"
+        new_id = db.next_id()
+        assert re.match(r"^seeds-[0-9a-z]{3,8}$", new_id)
+        assert new_id not in {"seeds-7", "seeds-8"}
         db.close()
 
     def test_bootstrap_empty_jsonl_creates_db_without_prefix(self, temp_dir):

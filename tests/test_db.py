@@ -1,6 +1,7 @@
 """Tests for seeds database layer."""
 
 import os
+import re
 import sqlite3
 import tempfile
 
@@ -283,34 +284,51 @@ class TestSeedHierarchy:
 
 
 class TestNextId:
-    """Tests for sequential ID generation."""
+    """Tests for next_id's base36 hash-ID generation (see seeds-199, seeds-mlj).
+
+    Format/grandfathering/adaptive-length coverage lives in
+    tests/test_hash_ids.py; these focus on DB-level concerns next_id()
+    shares with the rest of this module (prefix handling, coexistence with
+    pre-existing legacy-shaped IDs, and the child-exclusion filter).
+    """
 
     def test_next_id_empty_db(self, db):
-        """Verify next_id returns 1 for empty database."""
-        assert db.next_id() == "seeds-1"
+        """Verify next_id returns a hash ID for an empty database."""
+        assert re.match(r"^seeds-[0-9a-z]{3,8}$", db.next_id())
 
-    def test_next_id_increments(self, db):
-        """Verify next_id increments from existing sequential IDs."""
+    def test_next_id_avoids_existing_sequential_ids(self, db):
+        """Verify next_id never collides with pre-existing sequential IDs."""
         db.create_seed(Seed(id="seeds-1", title="First"))
         db.create_seed(Seed(id="seeds-2", title="Second"))
-        assert db.next_id() == "seeds-3"
+        new_id = db.next_id()
+        assert new_id not in {"seeds-1", "seeds-2"}
 
-    def test_next_id_ignores_hex_ids(self, db):
-        """Verify next_id ignores hex-hash IDs when computing max."""
+    def test_next_id_avoids_existing_hex_ids(self, db):
+        """Verify next_id coexists with legacy hex-hash IDs without colliding."""
         db.create_seed(Seed(id="seed-a1b2c3d4", title="Old hex"))
         db.create_seed(Seed(id="seeds-5", title="Sequential"))
-        assert db.next_id() == "seeds-6"
+        new_id = db.next_id()
+        assert new_id not in {"seed-a1b2c3d4", "seeds-5"}
 
-    def test_next_id_ignores_children(self, db):
-        """Verify next_id ignores child IDs (e.g., seeds-1.1)."""
+    def test_next_id_ignores_children_for_adaptive_length(self, db):
+        """Verify child IDs don't count toward the top-level adaptive length.
+
+        A single top-level seed plus one of its children should still yield
+        the minimum (3-char) suffix length — the child must not push the
+        top-level count to 2.
+        """
         db.create_seed(Seed(id="seeds-1", title="Parent"))
         db.create_seed(Seed(id="seeds-1.1", title="Child"))
-        assert db.next_id() == "seeds-2"
+        new_id = db.next_id()
+        assert new_id != "seeds-1.1"
+        assert len(new_id.split("-", 1)[1]) == 3
 
     def test_next_id_custom_prefix(self, db):
         """Verify next_id works with custom prefix."""
         db.create_seed(Seed(id="myproject-1", title="First"))
-        assert db.next_id("myproject") == "myproject-2"
+        new_id = db.next_id("myproject")
+        assert re.match(r"^myproject-[0-9a-z]{3,8}$", new_id)
+        assert new_id != "myproject-1"
 
 
 class TestMigrateToSequentialIds:
@@ -1182,9 +1200,12 @@ class TestPrefixConfig:
     def test_next_id_uses_configured_prefix(self, db):
         """next_id() reads the configured prefix when no arg given."""
         db.set_prefix("myproj")
-        assert db.next_id() == "myproj-1"
-        db.create_seed(Seed(id="myproj-1", title="First"))
-        assert db.next_id() == "myproj-2"
+        id1 = db.next_id()
+        assert re.match(r"^myproj-[0-9a-z]{3,8}$", id1)
+        db.create_seed(Seed(id=id1, title="First"))
+        id2 = db.next_id()
+        assert re.match(r"^myproj-[0-9a-z]{3,8}$", id2)
+        assert id2 != id1
 
 
 class TestRecoverPrefixFromId:
