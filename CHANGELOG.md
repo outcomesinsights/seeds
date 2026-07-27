@@ -6,6 +6,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-07-27
+
+This release makes seeds installable with **Nix**, and finishes the base36 ID
+transition that 0.3.5 began by removing the one command that could undo it.
+
+`flake.nix` means `nix run github:outcomesinsights/seeds` works with no
+install at all, and Nix users can pin seeds as a flake input instead of
+hand-writing a derivation. It also exposes an `overlays.default` for
+home-manager configs, a `devShells.default` giving contributors a pinned
+Python + uv + ruff toolchain, and a `checks.default` that runs the test
+suite. Tests deliberately live in `checks` rather than gating the package,
+so consumers building from source don't pay for a full pytest run. A CI job
+builds the flake on every push — an untested flake is a broken promise.
+
+The headline fix is a data-integrity bug in `rename-prefix`. It decided which
+IDs to rename with a numeric-only shape test written when every ID was
+sequential. Base36 includes `0-9`, so a hash like `seeds-060` parsed as a
+number and was renamed while `seeds-k3n7` was skipped — same scheme, opposite
+outcome, decided by the random content of the hash. On a real database that
+left a **split-prefix state**: some seeds renamed, hash-ID seeds stranded
+under the old prefix, while the configured prefix reported the new one. Both
+schemes are now renamed, and body references were taught base36 too.
+
+**Breaking:** `seeds migrate-ids` is gone, with no deprecation shim. It
+migrated hash IDs *to* sequential — backwards since 0.3.5 made base36 hash
+IDs the standard. Because it detected work by testing whether an ID parsed
+as a number, every base36 ID read as un-migrated, and a single one was enough
+to renumber an **entire** database from 1. The migration was one-time, that
+transition has concluded, and the command could now only do harm.
+
+### Added
+
+- Add flake so seeds is installable via Nix ([fa8dbb8](https://github.com/outcomesinsights/seeds/commit/fa8dbb872ed69bb177d523ba7d66634e110b087d))
+
+### Fixed
+
+- Rename-prefix must rename base36 hash IDs, not just numeric ones ([16b814d](https://github.com/outcomesinsights/seeds/commit/16b814d5bdcbde5592e894e59c181376020e5901))
+- Drop x86_64-darwin, which nixpkgs 26.11 removed ([86790ae](https://github.com/outcomesinsights/seeds/commit/86790aee13806184dad6ff7a2f4f21ee4501eedd))
+
+### Removed
+
+- **Breaking:** remove migrate-ids and migrate_to_sequential_ids ([5cab711](https://github.com/outcomesinsights/seeds/commit/5cab7115832e2c100b458ea152aef9f0d8b8e75c))
+
+### Tooling
+
+- Add nix job so the flake can't silently rot ([1426a9f](https://github.com/outcomesinsights/seeds/commit/1426a9f5e173e90067043475f82130e7906f9232))
+
 ## [0.3.5] - 2026-07-17
 
 This release changes how new seed IDs are minted: from a sequential counter
