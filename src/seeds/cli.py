@@ -1287,38 +1287,6 @@ def serve(host: str, port: int, debug: bool) -> None:
     run_server(host=host, port=port, debug=debug)
 
 
-@main.command("migrate-ids")
-@pass_context
-def migrate_ids(ctx: Context) -> None:
-    """Migrate hex-hash IDs to sequential IDs (one-time migration)."""
-    db = ctx.get_db()
-
-    import shutil
-
-    # Back up the database first
-    backup_path = db.path.with_suffix(".db.bak")
-    shutil.copy2(db.path, backup_path)
-    click.echo(f"Backed up database to {backup_path}")
-
-    id_map = db.migrate_to_sequential_ids()
-
-    if not id_map:
-        click.echo("No migration needed (already using sequential IDs).")
-        # Remove backup since we didn't change anything
-        backup_path.unlink(missing_ok=True)
-        return
-
-    click.echo(f"Migrated {len(id_map)} seeds to sequential IDs:")
-    for old_id, new_id in sorted(id_map.items(), key=lambda x: x[1]):
-        click.echo(f"  {old_id} → {new_id}")
-
-    # Re-export JSONL
-    from seeds.export import export_to_jsonl
-
-    output_path = export_to_jsonl(db)
-    click.echo(f"\nRe-exported to {output_path}")
-
-
 @main.command("rename-prefix")
 @click.argument("new_prefix")
 @click.option(

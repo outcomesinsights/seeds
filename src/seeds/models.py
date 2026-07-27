@@ -358,23 +358,6 @@ def iter_id_ref_snippets(
     return pairs
 
 
-def parse_sequential_id(seed_id: str) -> int | None:
-    """Extract the sequential number from a seed ID like 'seeds-42'.
-
-    Returns None if the ID is not a sequential format (e.g., hex hash IDs).
-    Only parses top-level IDs, not children (seeds-42.1 returns None).
-    """
-    if "." in seed_id:
-        return None
-    parts = seed_id.rsplit("-", 1)
-    if len(parts) != 2:
-        return None
-    try:
-        return int(parts[1])
-    except ValueError:
-        return None
-
-
 def get_parent_id(seed_id: str) -> str | None:
     """Extract parent ID from a hierarchical seed ID.
 

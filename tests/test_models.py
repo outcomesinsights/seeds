@@ -15,7 +15,6 @@ from seeds.models import (
     get_parent_id,
     is_valid_prefix,
     iter_id_ref_snippets,
-    parse_sequential_id,
     parse_since,
     rewrite_id_refs,
     sanitize_prefix,
@@ -85,29 +84,6 @@ class TestGenerateId:
         """Verify generated IDs are unique."""
         ids = [generate_id() for _ in range(100)]
         assert len(set(ids)) == 100  # All unique
-
-
-class TestParseSequentialId:
-    """Tests for parse_sequential_id."""
-
-    def test_parse_simple_sequential(self):
-        """Verify parsing sequential IDs."""
-        assert parse_sequential_id("seeds-1") == 1
-        assert parse_sequential_id("seeds-42") == 42
-        assert parse_sequential_id("seeds-999") == 999
-
-    def test_parse_hex_returns_none(self):
-        """Verify hex IDs return None."""
-        assert parse_sequential_id("seed-a1b2c3d4") is None
-        assert parse_sequential_id("seeds-086a609d") is None
-
-    def test_parse_child_returns_none(self):
-        """Verify child IDs return None (not top-level)."""
-        assert parse_sequential_id("seeds-42.1") is None
-
-    def test_parse_no_dash(self):
-        """Verify IDs without dashes return None."""
-        assert parse_sequential_id("seeds") is None
 
 
 class TestGetParentId:
