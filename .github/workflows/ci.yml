@@ -29,3 +29,24 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --dev
       - run: uv run pytest --cov=seeds --cov-report=term-missing
+
+  # A flake that silently rots is worse than no flake: once the README documents
+  # `nix run github:outcomesinsights/seeds`, that path has to keep working, and
+  # nothing else in CI exercises it. This job is also the only thing that notices
+  # when a dependency floor in pyproject.toml outruns what nixpkgs-unstable ships.
+  nix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Enables the nix-command and flakes experimental features by default, so
+      # the steps below need no --extra-experimental-features.
+      - uses: DeterminateSystems/nix-installer-action@main
+      # `flake check` — not `build` — because the pytest suite hangs off
+      # checks.default; packages.default deliberately keeps doCheck off.
+      #
+      # Native x86_64-linux only, on purpose. --all-systems would widen this to
+      # the other three systems the flake declares, but it fails at EVALUATION:
+      # nixpkgs 26.11 dropped x86_64-darwin. Emulation/remote builders are not
+      # worth it here, so CI covers the system the runner actually is.
+      - run: nix flake check --print-build-logs
+      - run: nix run . -- --version
