@@ -44,9 +44,12 @@ jobs:
       # `flake check` — not `build` — because the pytest suite hangs off
       # checks.default; packages.default deliberately keeps doCheck off.
       #
-      # Native x86_64-linux only, on purpose. --all-systems would widen this to
-      # the other three systems the flake declares, but it fails at EVALUATION:
-      # nixpkgs 26.11 dropped x86_64-darwin. Emulation/remote builders are not
-      # worth it here, so CI covers the system the runner actually is.
-      - run: nix flake check --print-build-logs
+      # --all-systems EVALUATES every system the flake declares, but only BUILDS
+      # the runner's own (x86_64-linux) — nix skips derivations it cannot build
+      # here, and we deliberately add no emulation or remote builders. So the
+      # aarch64 systems get evaluation coverage only, and the pytest suite runs
+      # once, natively. That is not a gap: the failure this guards against
+      # (seeds-808, nixpkgs 26.11 dropping x86_64-darwin) was an evaluation-time
+      # error, which is exactly what bare `flake check` missed and this catches.
+      - run: nix flake check --all-systems --print-build-logs
       - run: nix run . -- --version
