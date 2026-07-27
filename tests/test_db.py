@@ -1351,7 +1351,7 @@ class TestRenamePrefix:
             db.rename_prefix("myproj")
 
     def test_rename_does_not_touch_seeds_text_id(self, db):
-        """IDs like 'seeds-experiment' (non-numeric tail) are not renamed."""
+        """IDs like 'seeds-experiment' (too long to be a hash) aren't renamed."""
         db.set_prefix("seeds")
         db.create_seed(Seed(id="seeds-7", title="numeric"))
         db.create_seed(Seed(id="seeds-experiment", title="text-suffix"))
@@ -1360,6 +1360,45 @@ class TestRenamePrefix:
 
         assert id_map == {"seeds-7": "myproj-7"}
         assert db.get_seed("seeds-experiment") is not None
+
+    def test_rename_covers_both_id_schemes(self, db):
+        """Hash IDs and grandfathered sequential IDs are renamed alike.
+
+        Regression for seeds-skc: the old numeric-tail check renamed
+        'seeds-060' (an all-digit base36 hash) but skipped 'seeds-k3n7',
+        so behavior depended on the random content of a minted hash.
+        """
+        db.set_prefix("seeds")
+        db.create_seed(Seed(id="seeds-112", title="grandfathered sequential"))
+        db.create_seed(Seed(id="seeds-060", title="all-digit hash"))
+        db.create_seed(Seed(id="seeds-k3n7", title="alphanumeric hash"))
+        db.create_seed(Seed(id="seeds-k3n7.1", title="child of a hash ID"))
+
+        id_map, _ = db.rename_prefix("myproj")
+
+        assert id_map == {
+            "seeds-112": "myproj-112",
+            "seeds-060": "myproj-060",
+            "seeds-k3n7": "myproj-k3n7",
+            "seeds-k3n7.1": "myproj-k3n7.1",
+        }
+        for old_id, new_id in id_map.items():
+            assert db.get_seed(old_id) is None
+            assert db.get_seed(new_id) is not None
+        assert db.get_prefix() == "myproj"
+
+    def test_rename_rewrites_relationships_for_hash_ids(self, db):
+        """Relationships between hash-ID seeds survive the rename."""
+        db.set_prefix("seeds")
+        db.create_seed(Seed(id="seeds-k3n7", title="A"))
+        db.create_seed(Seed(id="seeds-060", title="B"))
+        db.create_relationship("seeds-k3n7", "seeds-060", RelationType.RELATES_TO)
+
+        db.rename_prefix("myproj")
+
+        rels = db.get_relationships("myproj-k3n7", direction="outbound")
+        assert len(rels) == 1
+        assert rels[0].target_id == "myproj-060"
 
 
 class TestRenamePrefixBodyRewrites:
@@ -1426,6 +1465,50 @@ class TestRenamePrefixBodyRewrites:
         assert body_changes == []
         seed = db.get_seed("myproj-1")
         assert seed.content == "The seeds-related code and seeds-experiment."
+
+    def test_rewrites_hash_id_refs(self, db):
+        """References to hash IDs are rewritten, so renaming doesn't strand them."""
+        db.set_prefix("seeds")
+        db.create_seed(Seed(id="seeds-k3n7", title="hash target"))
+        db.create_seed(Seed(id="seeds-2", title="sequential target"))
+        db.create_seed(
+            Seed(id="seeds-1", title="hub", content="See seeds-k3n7 and seeds-2.")
+        )
+
+        _, body_changes = db.rename_prefix("myproj")
+
+        assert db.get_seed("myproj-1").content == "See myproj-k3n7 and myproj-2."
+        assert len(body_changes) == 2
+
+    def test_rewrites_refs_to_hash_children(self, db):
+        """A child of a hash ID is rewritten by way of its parent."""
+        db.set_prefix("seeds")
+        db.create_seed(Seed(id="seeds-k3n7", title="hash parent"))
+        db.create_seed(Seed(id="seeds-k3n7.1", title="child"))
+        db.create_seed(
+            Seed(id="seeds-1", title="hub", content="blocked by seeds-k3n7.1")
+        )
+
+        db.rename_prefix("myproj")
+
+        assert db.get_seed("myproj-1").content == "blocked by myproj-k3n7.1"
+
+    def test_leaves_hash_shaped_prose_alone(self, db):
+        """A hash-shaped token that isn't a real ID stays put.
+
+        'seeds-fix' is valid base36 of hash length, so only checking the
+        database can tell it apart from a genuine reference.
+        """
+        db.set_prefix("seeds")
+        db.create_seed(Seed(id="seeds-k3n7", title="real hash seed"))
+        db.create_seed(
+            Seed(id="seeds-1", title="hub", content="the seeds-fix branch, seeds-k3n7")
+        )
+
+        _, body_changes = db.rename_prefix("myproj")
+
+        assert db.get_seed("myproj-1").content == "the seeds-fix branch, myproj-k3n7"
+        assert len(body_changes) == 1
 
     def test_rewrites_child_id_refs(self, db):
         """Child references like seeds-7.1 are rewritten with their suffix."""

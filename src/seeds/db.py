@@ -7,7 +7,7 @@ import os
 import re
 import sqlite3
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Container
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +19,7 @@ from seeds.idgen import (
     DEFAULT_MIN_HASH_LENGTH,
     compute_adaptive_length,
     generate_hash_id,
+    is_hash_suffix,
 )
 from seeds.models import (
     DEFAULT_PREFIX,
@@ -992,6 +993,11 @@ class Database:
         not match ``old_prefix`` are left untouched, so this is safe to run
         on databases containing legacy hex IDs alongside prefixed ones.
 
+        Both ID schemes are renamed: base36 hash IDs (``seeds-k3n7``, the
+        current scheme) and grandfathered sequential IDs (``seeds-112``).
+        They routinely coexist in one database, and leaving either behind
+        would strand seeds under the old prefix.
+
         When ``dry_run`` is True, no writes happen — the return value
         reports what *would* change, including snippet previews for every
         body reference. Useful for ``seeds rename-prefix --dry-run``.
@@ -1020,6 +1026,7 @@ class Database:
         rows = conn.execute("SELECT id FROM seeds").fetchall()
 
         old_lead = f"{old_prefix}-"
+        _, min_hash_len, max_hash_len = self.get_id_length_config()
         id_map: dict[str, str] = {}
         for row in rows:
             sid = row["id"]
@@ -1027,11 +1034,17 @@ class Database:
             top = sid.split(".", 1)[0]
             if not top.startswith(old_lead):
                 continue
-            # Confirm the segment after the prefix is purely numeric so we
-            # don't accidentally rename something like 'seeds-experiment'.
-            try:
-                int(top[len(old_lead) :])
-            except ValueError:
+            # Confirm the segment after the prefix is an ID this project mints
+            # — either a base36 hash (seeds-199, the current scheme) or a
+            # grandfathered sequential number — so we don't accidentally
+            # rename something like 'seeds-experiment'. Checking only for a
+            # numeric tail (as this did before seeds-skc) renamed hash IDs
+            # non-deterministically: 'seeds-060' is a legitimate hash but
+            # parses as a number, while 'seeds-k3n7' does not.
+            suffix = top[len(old_lead) :]
+            if not (
+                suffix.isdigit() or is_hash_suffix(suffix, min_hash_len, max_hash_len)
+            ):
                 continue
             new_id = f"{new_prefix}{sid[len(old_prefix) :]}"
             id_map[sid] = new_id
@@ -1042,8 +1055,12 @@ class Database:
         # itself unless ``dry_run`` is True.
         body_changes: list[BodyRefChange] = []
         if rewrite_bodies:
+            # Hash-ID references in text can only be told from ordinary prose
+            # by checking them against real IDs, so hand over the top-level
+            # IDs being renamed (children are judged by their parent).
+            known_ids = {sid.split(".", 1)[0] for sid in id_map}
             body_changes = self._apply_body_id_rewrites(
-                old_prefix, new_prefix, dry_run=dry_run
+                old_prefix, new_prefix, dry_run=dry_run, known_ids=known_ids
             )
 
         if not id_map:
@@ -1108,12 +1125,20 @@ class Database:
         return id_map, body_changes
 
     def _apply_body_id_rewrites(
-        self, old_prefix: str, new_prefix: str, dry_run: bool = False
+        self,
+        old_prefix: str,
+        new_prefix: str,
+        dry_run: bool = False,
+        known_ids: Container[str] = frozenset(),
     ) -> list[BodyRefChange]:
         """Rewrite ID references in seed text fields (title/content/resolution).
 
         Always computes the list of changes (with snippet previews) so callers
         can preview the result. Performs the writes unless ``dry_run`` is True.
+
+        ``known_ids`` lists the top-level IDs being renamed; hash-ID references
+        are rewritten only when they name one of them, since a base36 hash is
+        indistinguishable from a word like ``seeds-related`` by shape alone.
         """
         conn = self._get_conn()
         rows = conn.execute(
@@ -1126,9 +1151,13 @@ class Database:
             content = row["content"] or ""
             resolution = row["resolution"] or ""
 
-            new_title, c1 = rewrite_id_refs(title, old_prefix, new_prefix)
-            new_content, c2 = rewrite_id_refs(content, old_prefix, new_prefix)
-            new_resolution, c3 = rewrite_id_refs(resolution, old_prefix, new_prefix)
+            new_title, c1 = rewrite_id_refs(title, old_prefix, new_prefix, known_ids)
+            new_content, c2 = rewrite_id_refs(
+                content, old_prefix, new_prefix, known_ids
+            )
+            new_resolution, c3 = rewrite_id_refs(
+                resolution, old_prefix, new_prefix, known_ids
+            )
 
             if c1 == 0 and c2 == 0 and c3 == 0:
                 continue
@@ -1139,7 +1168,7 @@ class Database:
                 ("resolution", resolution),
             ):
                 for old_snip, new_snip in iter_id_ref_snippets(
-                    original, old_prefix, new_prefix
+                    original, old_prefix, new_prefix, known_ids=known_ids
                 ):
                     changes.append(
                         BodyRefChange(

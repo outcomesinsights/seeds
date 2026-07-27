@@ -5,6 +5,7 @@ from seeds.idgen import (
     compute_adaptive_length,
     encode_base36,
     generate_hash_id,
+    is_hash_suffix,
 )
 
 
@@ -95,3 +96,40 @@ class TestComputeAdaptiveLength:
 
     def test_1000_items_bumps_to_five(self):
         assert compute_adaptive_length(1000) == 5
+
+
+class TestIsHashSuffix:
+    """Tests for is_hash_suffix (the shape check rename-prefix relies on)."""
+
+    def test_alphanumeric_suffix(self):
+        assert is_hash_suffix("k3n7")
+
+    def test_all_digit_suffix_is_still_a_hash(self):
+        """'060' is a legitimate base36 hash — base36 includes 0-9."""
+        assert is_hash_suffix("060")
+
+    def test_all_letter_suffix(self):
+        assert is_hash_suffix("abc")
+
+    def test_too_short(self):
+        assert not is_hash_suffix("k3")
+
+    def test_too_long(self):
+        assert not is_hash_suffix("experiment")
+
+    def test_uppercase_rejected(self):
+        assert not is_hash_suffix("K3N7")
+
+    def test_non_base36_char_rejected(self):
+        assert not is_hash_suffix("k3n-7")
+
+    def test_honors_custom_bounds(self):
+        assert is_hash_suffix("ab", min_length=2, max_length=2)
+        assert not is_hash_suffix("abc", min_length=2, max_length=2)
+
+    def test_every_generated_id_has_a_hash_suffix(self):
+        """Whatever generate_hash_id emits must pass the shape check."""
+        for length in range(3, 9):
+            for nonce in range(50):
+                suffix = generate_hash_id("seeds", "t", 1, nonce, length).split("-")[1]
+                assert is_hash_suffix(suffix), suffix

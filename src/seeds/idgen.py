@@ -44,6 +44,24 @@ def generate_hash_id(
     return f"{prefix}-{encode_base36(digest[:num_bytes], length)}"
 
 
+def is_hash_suffix(
+    suffix: str,
+    min_length: int = DEFAULT_MIN_HASH_LENGTH,
+    max_length: int = DEFAULT_MAX_HASH_LENGTH,
+) -> bool:
+    """Return True when `suffix` has the shape of a base36 hash ID suffix.
+
+    That means: base36 characters only, with a length inside the configured
+    adaptive-length window. Note that all-digit suffixes such as '060' are a
+    perfectly ordinary hash (base36 includes 0-9), which is exactly why hash
+    IDs can never be told apart from grandfathered sequential IDs by shape
+    alone — callers that care about both schemes must accept both.
+    """
+    if not (min_length <= len(suffix) <= max_length):
+        return False
+    return all(c in BASE36_ALPHABET for c in suffix)
+
+
 def collision_probability(num_items: int, length: int) -> float:
     """Birthday-paradox P(collision) ≈ 1 - e^(-n²/2N), N = 36**length."""
     total = 36.0**length
