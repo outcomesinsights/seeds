@@ -49,3 +49,7 @@ claude_stuff/
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+
+# Nix build outputs (flake.nix / flake.lock are tracked; `result` symlinks are not)
+result
+result-*
