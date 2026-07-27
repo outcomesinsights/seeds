@@ -6,10 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.3.6] - 2026-07-27
+## [0.4.0] - 2026-07-27
 
 This release makes seeds installable with **Nix**, and finishes the base36 ID
 transition that 0.3.5 began by removing the one command that could undo it.
+
+The minor version moves for the first time since 0.3.0. The 0.x convention
+here is that features ship as patch bumps, so `0.4.0` is a deliberate signal
+rather than a routine increment: a command has been **removed**, and anyone
+scripting against `seeds migrate-ids` will break.
 
 `flake.nix` means `nix run github:outcomesinsights/seeds` works with no
 install at all, and Nix users can pin seeds as a flake input instead of
@@ -52,6 +57,7 @@ transition has concluded, and the command could now only do harm.
 ### Tooling
 
 - Add nix job so the flake can't silently rot ([1426a9f](https://github.com/outcomesinsights/seeds/commit/1426a9f5e173e90067043475f82130e7906f9232))
+- Don't let `--all-systems` attempt cross-arch builds ([70151c7](https://github.com/outcomesinsights/seeds/commit/70151c74e078eaff1dc8ffc3496f45d65ade4587))
 
 ## [0.3.5] - 2026-07-17
 
