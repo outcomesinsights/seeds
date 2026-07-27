@@ -6,10 +6,19 @@
   outputs =
     { self, nixpkgs }:
     let
+      # x86_64-darwin is deliberately ABSENT — do not "restore" it. nixpkgs 26.11
+      # dropped the platform outright, so `nixpkgs.legacyPackages.x86_64-darwin`
+      # throws at EVALUATION time; no builder or emulation can work around that.
+      # Declaring a platform the flake cannot even evaluate is worse than not
+      # declaring it: Intel-Mac users following the README's `nix run` would hit a
+      # hard error instead of a clean "unsupported system". They can still
+      # `uv tool install seeds`. Reinstating it would mean pinning a second
+      # nixpkgs input on the 26.05-darwin release branch (itself EOL end-of-2026)
+      # plus per-system nixpkgs selection — rejected as not worth the carrying
+      # cost. See seeds-808; this reverses the list set in seeds-0y4.
       systems = [
         "x86_64-linux"
         "aarch64-linux"
-        "x86_64-darwin"
         "aarch64-darwin"
       ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
