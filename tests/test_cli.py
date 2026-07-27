@@ -31,6 +31,16 @@ def _extract_created_id(output: str) -> str:
     return match.group(1)
 
 
+def _swap_prefix(seed_id: str, new_prefix: str, old_prefix: str = "seeds") -> str:
+    """Return `seed_id` with its prefix replaced: 'seeds-k3n7' -> 'demo-k3n7'.
+
+    Lets a test name the post-rename ID of a seed whose suffix was minted by
+    next_id() and is therefore unpredictable.
+    """
+    assert seed_id.startswith(f"{old_prefix}-"), seed_id
+    return f"{new_prefix}{seed_id[len(old_prefix) :]}"
+
+
 def _extract_jot_id(output: str) -> str:
     """Pull the seed ID out of a 'jot' command's leading '<id>: <thought>' line."""
     match = re.match(r"(\S+):", output)
@@ -255,9 +265,12 @@ class TestRenamePrefixCommand:
         assert result.exit_code == 0
         assert "Rewrote 1 ID reference" in result.output
 
-        # The hub's own ID is a hash ID, so it's untouched by rename-prefix
-        # itself — only the "seeds-1" reference inside its content changes.
-        result = cli_runner.invoke(main, ["show", hub_id])
+        # The hub's own hash ID is renamed along with everything else under
+        # the old prefix, and the "seeds-1" reference inside its content is
+        # rewritten too.
+        new_hub_id = _swap_prefix(hub_id, "demo")
+        result = cli_runner.invoke(main, ["show", new_hub_id])
+        assert result.exit_code == 0
         assert "see demo-1" in result.output
 
     def test_rename_prefix_no_rewrite_bodies(self, cli_runner, initialized_env):
@@ -276,7 +289,11 @@ class TestRenamePrefixCommand:
         assert result.exit_code == 0
         assert "body" not in result.output.lower()
 
-        result = cli_runner.invoke(main, ["show", hub_id])
+        # The hub itself is renamed (its ID carries the prefix); only its
+        # body text is left alone.
+        new_hub_id = _swap_prefix(hub_id, "demo")
+        result = cli_runner.invoke(main, ["show", new_hub_id])
+        assert result.exit_code == 0
         # Reference is now stale — the seeds-1 in body wasn't rewritten.
         assert "see seeds-1" in result.output
 
@@ -285,16 +302,19 @@ class TestRenamePrefixCommand:
         db = Database()
         db.create_seed(Seed(id="seeds-1", title="target"))
         db.close()
-        cli_runner.invoke(
+        create_result = cli_runner.invoke(
             main, ["create", "--title", "hub", "--content", "see seeds-1"]
         )
+        hub_id = _extract_created_id(create_result.output)
 
         result = cli_runner.invoke(main, ["rename-prefix", "demo", "--dry-run"])
         assert result.exit_code == 0
         assert "DRY RUN" in result.output
-        assert "Would rename 1 IDs" in result.output
+        # Both the planted sequential ID and the hub's hash ID are reported.
+        assert "Would rename 2 IDs" in result.output
         assert "Would rewrite 1 ID reference" in result.output
         assert "seeds-1 → demo-1" in result.output
+        assert f"{hub_id} → {_swap_prefix(hub_id, 'demo')}" in result.output
         assert "see seeds-1" in result.output  # old snippet
         assert "see demo-1" in result.output  # new snippet
         assert "Run without --dry-run" in result.output
@@ -305,6 +325,69 @@ class TestRenamePrefixCommand:
         assert db.get_seed("seeds-1") is not None
         assert db.get_seed("demo-1") is None
         db.close()
+
+    def test_rename_prefix_then_show_covers_both_id_shapes(
+        self, cli_runner, initialized_env
+    ):
+        """rename-prefix + show work identically for every ID shape (seeds-skc).
+
+        The three suffixes below are planted rather than minted so the case is
+        deterministic. Before seeds-skc, rename-prefix classified IDs with
+        ``int(suffix)``: 'seeds-060' (an all-digit base36 hash) was renamed
+        while 'seeds-k3n7' was not, so whether the suite passed depended on
+        which hash next_id() happened to emit.
+        """
+        db = Database()
+        db.create_seed(Seed(id="seeds-112", title="grandfathered sequential"))
+        db.create_seed(Seed(id="seeds-060", title="all-digit base36 hash"))
+        db.create_seed(Seed(id="seeds-k3n7", title="alphanumeric base36 hash"))
+        db.create_seed(Seed(id="seeds-k3n7.1", title="child of a hash ID"))
+        db.close()
+
+        result = cli_runner.invoke(main, ["rename-prefix", "demo"])
+        assert result.exit_code == 0
+        for old_id in ("seeds-112", "seeds-060", "seeds-k3n7", "seeds-k3n7.1"):
+            assert f"{old_id} → {_swap_prefix(old_id, 'demo')}" in result.output
+        assert "Renamed 4 IDs" in result.output
+
+        # Every new ID resolves through show; no old ID survives.
+        for old_id in ("seeds-112", "seeds-060", "seeds-k3n7", "seeds-k3n7.1"):
+            new_id = _swap_prefix(old_id, "demo")
+            found = cli_runner.invoke(main, ["show", new_id])
+            assert found.exit_code == 0, f"show {new_id} failed: {found.output}"
+            gone = cli_runner.invoke(main, ["show", old_id])
+            assert gone.exit_code == 1
+            assert "not found" in gone.output
+
+    def test_rename_prefix_rewrites_body_refs_for_both_id_shapes(
+        self, cli_runner, initialized_env
+    ):
+        """Body refs to hash IDs are rewritten too, so they don't go stale.
+
+        Renaming a hash ID without rewriting references to it would strand
+        every mention of it in another seed's text.
+        """
+        db = Database()
+        db.create_seed(Seed(id="seeds-112", title="sequential target"))
+        db.create_seed(Seed(id="seeds-k3n7", title="hash target"))
+        db.create_seed(
+            Seed(
+                id="seeds-abc1",
+                title="hub",
+                content="see seeds-112 and seeds-k3n7 (seeds-related work)",
+            )
+        )
+        db.close()
+
+        result = cli_runner.invoke(main, ["rename-prefix", "demo"])
+        assert result.exit_code == 0
+        assert "Rewrote 2 ID reference" in result.output
+
+        result = cli_runner.invoke(main, ["show", "demo-abc1"])
+        assert result.exit_code == 0
+        assert "see demo-112 and demo-k3n7" in result.output
+        # 'seeds-related' is base36-shaped but isn't a seed, so it's prose.
+        assert "seeds-related work" in result.output
 
 
 class TestJotCommand:

@@ -6,6 +6,7 @@ import hashlib
 import os
 import re
 import time
+from collections.abc import Container
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -88,21 +89,56 @@ def is_valid_prefix(value: str) -> bool:
 
 
 def _id_ref_pattern(old_prefix: str) -> re.Pattern[str]:
-    """Compile the regex that matches whole-word seed-ID references."""
+    """Compile the regex that matches whole-word seed-ID-shaped tokens.
+
+    The suffix is a base36 token so this spans both ID schemes — base36 hash
+    IDs (``seeds-k3n7``) and grandfathered sequential ones (``seeds-112``) —
+    with an optional dotted child path. Because a base36 token also matches
+    ordinary words, every match must be confirmed by :func:`_is_id_ref`.
+    """
     return re.compile(
-        rf"(?<![a-zA-Z0-9-]){re.escape(old_prefix)}-(\d+(?:\.\d+)*)(?![a-zA-Z0-9-])"
+        rf"(?<![a-zA-Z0-9-]){re.escape(old_prefix)}-([0-9a-z]+(?:\.\d+)*)"
+        r"(?![a-zA-Z0-9-])"
     )
 
 
-def rewrite_id_refs(text: str, old_prefix: str, new_prefix: str) -> tuple[str, int]:
+def _is_id_ref(suffix: str, old_prefix: str, known_ids: Container[str]) -> bool:
+    """Decide whether a matched ``<old_prefix>-<suffix>`` token is a real ID ref.
+
+    A purely numeric suffix is always treated as a reference: that is the
+    grandfathered sequential scheme, and matching it unconditionally keeps
+    references to since-deleted seeds rewritable.
+
+    A hash-shaped suffix counts only when the ID is in ``known_ids``. No
+    heuristic can separate a base36 hash from an English word by shape
+    ('seeds-related' is valid base36), so membership in the database is the
+    only sound test. ``known_ids`` holds top-level IDs; a child reference is
+    judged by its parent.
+    """
+    top = suffix.split(".", 1)[0]
+    if top.isdigit():
+        return True
+    return f"{old_prefix}-{top}" in known_ids
+
+
+def rewrite_id_refs(
+    text: str,
+    old_prefix: str,
+    new_prefix: str,
+    known_ids: Container[str] = frozenset(),
+) -> tuple[str, int]:
     """Rewrite seed-ID references inside a body of text.
 
-    Matches occurrences of ``<old_prefix>-<digits>`` (with optional
+    Matches occurrences of ``<old_prefix>-<suffix>`` (with optional
     ``.digits`` children) that are NOT part of a longer identifier — i.e.,
     the character before is not [a-zA-Z0-9-] (or start of string) and the
     character after is not [a-zA-Z0-9-] (or end). This catches references
     like ``see seeds-7`` and ``[seeds-7](url)`` while leaving compound
     tokens like ``seeds-related`` or ``foo-seeds-7-bar`` untouched.
+
+    Numeric suffixes always count as references. Hash-ID references such as
+    ``seeds-k3n7`` are rewritten only when listed in ``known_ids`` (the
+    top-level IDs present in the database) — see :func:`_is_id_ref`.
 
     Returns the rewritten text and the number of substitutions made.
     """
@@ -112,6 +148,8 @@ def rewrite_id_refs(text: str, old_prefix: str, new_prefix: str) -> tuple[str, i
 
     def replace(m: re.Match[str]) -> str:
         nonlocal count
+        if not _is_id_ref(m.group(1), old_prefix, known_ids):
+            return m.group(0)
         count += 1
         return f"{new_prefix}-{m.group(1)}"
 
@@ -258,33 +296,50 @@ def tokenize_for_suggest(text: str) -> list[str]:
     return [t for t in tokens if len(t) >= 2 and t not in _SUGGEST_STOPWORDS]
 
 
-def find_id_refs(text: str, prefix: str) -> list[str]:
+def find_id_refs(
+    text: str, prefix: str, known_ids: Container[str] = frozenset()
+) -> list[str]:
     """Return sorted, de-duplicated whole-word seed-ID references in ``text``.
 
-    Uses the same word-boundary rules as :func:`rewrite_id_refs`, so it matches
+    Uses the same matching rules as :func:`rewrite_id_refs`, so it matches
     ``seeds-7`` and ``seeds-12.1`` while leaving compounds like ``seeds-related``
-    or ``foo-seeds-7-bar`` alone. Returns ``[]`` for empty input.
+    or ``foo-seeds-7-bar`` alone. Hash-ID references are found only when listed
+    in ``known_ids``. Returns ``[]`` for empty input.
     """
     if not text:
         return []
     pattern = _id_ref_pattern(prefix)
-    return sorted({m.group(0) for m in pattern.finditer(text)})
+    return sorted(
+        {
+            m.group(0)
+            for m in pattern.finditer(text)
+            if _is_id_ref(m.group(1), prefix, known_ids)
+        }
+    )
 
 
 def iter_id_ref_snippets(
-    text: str, old_prefix: str, new_prefix: str, ctx: int = 30
+    text: str,
+    old_prefix: str,
+    new_prefix: str,
+    ctx: int = 30,
+    known_ids: Container[str] = frozenset(),
 ) -> list[tuple[str, str]]:
     """List ``(old_snippet, new_snippet)`` pairs for each ID reference change.
 
     Each snippet includes up to ``ctx`` characters of surrounding context.
     Newlines in the context are collapsed to spaces so previews fit on one
-    line. Returns an empty list when the text contains no matches.
+    line. Hash-ID references are included only when listed in ``known_ids``,
+    matching :func:`rewrite_id_refs`. Returns an empty list when the text
+    contains no matches.
     """
     if not text:
         return []
     pattern = _id_ref_pattern(old_prefix)
     pairs: list[tuple[str, str]] = []
     for m in pattern.finditer(text):
+        if not _is_id_ref(m.group(1), old_prefix, known_ids):
+            continue
         start, end = m.span()
         ctx_start = max(0, start - ctx)
         ctx_end = min(len(text), end + ctx)

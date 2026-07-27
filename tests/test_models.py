@@ -328,6 +328,46 @@ class TestRewriteIdRefs:
         assert text == "see different-7 here"
         assert count == 1
 
+    def test_hash_ref_needs_known_ids(self):
+        """Without known_ids a hash-shaped token is indistinguishable from prose."""
+        text, count = rewrite_id_refs("see seeds-k3n7", "seeds", "myproj")
+        assert text == "see seeds-k3n7"
+        assert count == 0
+
+    def test_hash_ref_rewritten_when_known(self):
+        text, count = rewrite_id_refs(
+            "see seeds-k3n7", "seeds", "myproj", {"seeds-k3n7"}
+        )
+        assert text == "see myproj-k3n7"
+        assert count == 1
+
+    def test_known_ids_does_not_widen_prose(self):
+        """Only the listed IDs are rewritten; other base36 words stay put."""
+        text, count = rewrite_id_refs(
+            "the seeds-related seeds-k3n7 work", "seeds", "myproj", {"seeds-k3n7"}
+        )
+        assert text == "the seeds-related myproj-k3n7 work"
+        assert count == 1
+
+    def test_hash_child_ref_judged_by_parent(self):
+        text, count = rewrite_id_refs(
+            "see seeds-k3n7.1", "seeds", "myproj", {"seeds-k3n7"}
+        )
+        assert text == "see myproj-k3n7.1"
+        assert count == 1
+
+    def test_numeric_ref_does_not_need_known_ids(self):
+        """Sequential refs are rewritten even for since-deleted seeds."""
+        text, count = rewrite_id_refs("see seeds-7", "seeds", "myproj", {"seeds-k3n7"})
+        assert text == "see myproj-7"
+        assert count == 1
+
+    def test_all_digit_hash_ref_is_rewritten(self):
+        """'seeds-060' parses as a number, so it rewrites either way."""
+        text, count = rewrite_id_refs("see seeds-060", "seeds", "myproj")
+        assert text == "see myproj-060"
+        assert count == 1
+
 
 class TestIterIdRefSnippets:
     """Tests for iter_id_ref_snippets."""
@@ -363,6 +403,12 @@ class TestIterIdRefSnippets:
         assert "\n" not in pairs[0][0]
         assert "\n" not in pairs[0][1]
 
+    def test_hash_refs_need_known_ids(self):
+        assert iter_id_ref_snippets("see seeds-k3n7 now", "seeds", "myproj") == []
+        assert iter_id_ref_snippets(
+            "see seeds-k3n7 now", "seeds", "myproj", known_ids={"seeds-k3n7"}
+        ) == [("see seeds-k3n7 now", "see myproj-k3n7 now")]
+
 
 class TestFindIdRefs:
     """Tests for find_id_refs helper."""
@@ -395,6 +441,10 @@ class TestFindIdRefs:
 
     def test_wrong_prefix_not_matched(self):
         assert find_id_refs("see csc-7", "seeds") == []
+
+    def test_hash_refs_need_known_ids(self):
+        assert find_id_refs("see seeds-k3n7", "seeds") == []
+        assert find_id_refs("see seeds-k3n7", "seeds", {"seeds-k3n7"}) == ["seeds-k3n7"]
 
 
 class TestParseSince:
