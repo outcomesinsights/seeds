@@ -609,6 +609,29 @@ class TestSuggestCommand:
         assert "compare" in payload[0]["tags"]
         assert isinstance(payload[0]["score"], (int, float))
 
+    def test_suggest_json_is_compact(self, cli_runner, initialized_env):
+        """--json emits compact JSON: no indentation, no separator padding.
+
+        This output is piped into agents, so whitespace is tokens the model
+        pays for. Guards against a regression to `indent=2` (seeds-d773).
+        """
+        cli_runner.invoke(main, ["create", "-t", "Venn diagram", "--tags", "venn"])
+        result = cli_runner.invoke(main, ["suggest", "venn diagram", "--json"])
+        assert result.exit_code == 0
+
+        body = result.output.rstrip("\n")
+        # One line: no indentation and no pretty-print line breaks.
+        assert "\n" not in body
+        # json.dumps keeps ", " / ": " padding unless separators is set.
+        assert ", " not in body
+        assert '": ' not in body
+        # Still real JSON with the same shape.
+        import json as _json
+
+        payload = _json.loads(body)
+        assert isinstance(payload, list)
+        assert payload[0]["title"] == "Venn diagram"
+
     def test_suggest_limit_caps_results(self, cli_runner, initialized_env):
         for i in range(5):
             cli_runner.invoke(main, ["create", "-t", f"Venn diagram {i}"])

@@ -440,7 +440,12 @@ def format_seed_detail(
     is_flag=True,
     help="Restrict to non-terminal seeds (default includes resolved/abandoned)",
 )
-@click.option("--json", "as_json", is_flag=True, help="Emit JSON for agent piping")
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Emit compact JSON for agent piping (pipe through jq to read it)",
+)
 @pass_context
 def suggest(
     ctx: Context, text: str, limit: int, open_only: bool, as_json: bool
@@ -469,7 +474,11 @@ def suggest(
             }
             for r in results
         ]
-        click.echo(_json.dumps(payload, indent=2))
+        # Compact, not pretty: this output exists to be piped into an agent,
+        # and indentation is tokens the model pays for. `separators` matters
+        # too — dropping `indent` alone still leaves ", " and ": " padding.
+        # Humans: pipe through `jq`. (seeds-d773)
+        click.echo(_json.dumps(payload, separators=(",", ":")))
         return
 
     if not results:
