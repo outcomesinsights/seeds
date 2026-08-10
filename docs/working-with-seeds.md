@@ -361,6 +361,13 @@ A few small habits keep the seed database healthy.
 
 - **Sync at end of session.** `seeds sync --flush-only` writes the JSONL
   export so the day's deliberation is git-trackable. Commit it.
+- **If a sync refuses, read what it names.** The export rewrites the JSONL
+  wholesale from the database, so it stops rather than destroy a record the
+  database has never seen — a merge conflict you resolved in the file, a hand
+  edit, or a peer's seed that no import absorbed. Fold the content in
+  (`seeds update <id> -a '<text from disk>'`, or `seeds import` for a record
+  the database lacks entirely) and re-run. `--allow-divergence` skips the
+  check and destroys that content; it is not a shortcut past the message.
 - **Triage `captured` seeds occasionally.** Once a week or so, ask the
   agent to walk the captured list and either promote, defer, or abandon
   each one. Things shouldn't sit in captured for months.

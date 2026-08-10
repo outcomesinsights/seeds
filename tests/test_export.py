@@ -4,12 +4,17 @@ import json
 import re
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from seeds.db import Database
 from seeds.export import (
     FUTURE_TIMESTAMP_TOLERANCE,
+    DivergentExportError,
     ImportResult,
     RefusedRecord,
+    content_is_covered,
     export_to_jsonl,
+    find_divergence,
     import_from_jsonl,
     import_lines,
     seed_to_dict,
@@ -181,6 +186,296 @@ class TestExportToJsonl:
         data_a = json.loads(lines[0])  # seed-a (sorted first)
         assert len(data_a["relationships"]) == 1
         assert data_a["relationships"][0]["target_id"] == "seed-b"
+
+
+def _write_records(path, records):
+    """Write JSONL records to `path`, returning the path."""
+    path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records))
+    return path
+
+
+def _record(seed_id, content, updated_at=None, **overrides):
+    """A minimal v2 JSONL record, ready to be mutated by a test."""
+    stamp = (updated_at or now_utc()).isoformat()
+    data = {
+        "format_version": 2,
+        "id": seed_id,
+        "title": f"Title for {seed_id}",
+        "content": content,
+        "status": "captured",
+        "seed_type": "idea",
+        "tags": [],
+        "created_at": stamp,
+        "updated_at": stamp,
+        "resolved_at": None,
+        "resolution": "",
+        "relationships": [],
+    }
+    data.update(overrides)
+    return data
+
+
+class TestContentIsCovered:
+    """The append-prefix heuristic that separates 'DB is ahead' from 'diverged'."""
+
+    def test_identical_content_is_covered(self):
+        assert content_is_covered("same body", "same body")
+
+    def test_appended_content_is_covered(self):
+        """The normal editing verb: `seeds update -a` appends to the body."""
+        assert content_is_covered("original\n\nappended later", "original")
+
+    def test_empty_on_disk_is_covered(self):
+        """A seed jotted with no body, then filled in, must not trip the check."""
+        assert content_is_covered("body added after the first sync", "")
+
+    def test_divergent_content_is_not_covered(self):
+        assert not content_is_covered("DESKTOP edit", "LAPTOP edit")
+
+    def test_truncated_db_content_is_not_covered(self):
+        """The disk holding MORE than the DB is the loss case, not an append."""
+        assert not content_is_covered("original", "original\n\nappended on a peer")
+
+    def test_prepended_content_is_not_covered(self):
+        """An in-place rewrite that keeps the old body but not at the front."""
+        assert not content_is_covered("Header:\noriginal", "original")
+
+    def test_replaced_content_is_not_covered(self):
+        """`seeds update -c --replace` breaks the prefix property, deliberately.
+
+        A replace is exactly when the operator should be sure, so a
+        replace-derived divergence refuses like any other; the escape hatch
+        covers the case where the discard was intended.
+        """
+        assert not content_is_covered("brand new body", "the body it replaced")
+
+    def test_leading_whitespace_does_not_trip_the_check(self):
+        """`seeds update -a` strips the COMBINED body (cli.py).
+
+        So appending to a body with leading whitespace yields a result that is
+        not a literal prefix of it, even though no text was lost.
+        """
+        assert content_is_covered("original\n\nappended", "  original")
+
+    def test_stripped_fallback_still_catches_real_loss(self):
+        """The whitespace tolerance must not become a hole for missing text."""
+        assert not content_is_covered("  original  ", "original and then some")
+
+
+class TestFindDivergence:
+    """What `export_to_jsonl` would destroy if it rewrote the file."""
+
+    def test_missing_file_has_no_divergence(self, db, temp_dir):
+        assert find_divergence(db, temp_dir / "absent.jsonl") == []
+
+    def test_empty_file_has_no_divergence(self, db, temp_dir):
+        path = temp_dir / "out.jsonl"
+        path.write_text("")
+        assert find_divergence(db, path) == []
+
+    def test_matching_file_has_no_divergence(self, db, temp_dir):
+        db.create_seed(Seed(id="seed-a", title="A", content="body"))
+        path = export_to_jsonl(db, temp_dir / "out.jsonl")
+        assert find_divergence(db, path) == []
+
+    def test_db_ahead_by_an_append_has_no_divergence(self, db, temp_dir):
+        seed = Seed(id="seed-a", title="A", content="body")
+        db.create_seed(seed)
+        path = export_to_jsonl(db, temp_dir / "out.jsonl")
+
+        seed.content = "body\n\nmore deliberation"
+        db.update_seed(seed)
+        assert find_divergence(db, path) == []
+
+    def test_db_only_seeds_are_not_divergence(self, db, temp_dir):
+        """Records the export ADDS are not loss; only what it removes is."""
+        db.create_seed(Seed(id="seed-a", title="A", content="body"))
+        path = export_to_jsonl(db, temp_dir / "out.jsonl")
+        db.create_seed(Seed(id="seed-b", title="B", content="new"))
+        assert find_divergence(db, path) == []
+
+    def test_divergent_content_is_reported(self, db, temp_dir):
+        db.create_seed(Seed(id="seed-a", title="A", content="DESKTOP body"))
+        path = _write_records(
+            temp_dir / "out.jsonl", [_record("seed-a", "LAPTOP body")]
+        )
+
+        divergences = find_divergence(db, path)
+        assert len(divergences) == 1
+        assert divergences[0].seed_id == "seed-a"
+        assert divergences[0].kind == "content"
+        assert "LAPTOP body" in divergences[0].on_disk
+        assert "DESKTOP body" in divergences[0].in_db
+
+    def test_record_absent_from_db_is_reported(self, db, temp_dir):
+        """A peer's new seed arriving via git pull, before any import ran."""
+        db.create_seed(Seed(id="seed-a", title="A", content="mine"))
+        path = _write_records(
+            temp_dir / "out.jsonl",
+            [_record("seed-a", "mine"), _record("seed-peer", "theirs")],
+        )
+
+        divergences = find_divergence(db, path)
+        assert [d.seed_id for d in divergences] == ["seed-peer"]
+        assert divergences[0].kind == "missing"
+
+    def test_unparseable_line_is_reported_not_raised(self, db, temp_dir):
+        """Conflict markers must refuse the overwrite, not crash the export."""
+        path = temp_dir / "out.jsonl"
+        path.write_text("<<<<<<< HEAD\n")
+
+        divergences = find_divergence(db, path)
+        assert len(divergences) == 1
+        assert divergences[0].kind == "unreadable"
+        assert "line 1" in divergences[0].detail
+
+    def test_record_without_id_is_reported(self, db, temp_dir):
+        path = temp_dir / "out.jsonl"
+        path.write_text('{"title": "no id here"}\n')
+
+        divergences = find_divergence(db, path)
+        assert len(divergences) == 1
+        assert divergences[0].kind == "unreadable"
+
+    def test_duplicate_ids_are_judged_line_by_line(self, db, temp_dir):
+        """A botched merge can leave two lines for one seed; check both."""
+        db.create_seed(Seed(id="seed-a", title="A", content="kept"))
+        path = _write_records(
+            temp_dir / "out.jsonl",
+            [_record("seed-a", "kept"), _record("seed-a", "the other side")],
+        )
+
+        divergences = find_divergence(db, path)
+        assert len(divergences) == 1
+        assert divergences[0].kind == "content"
+
+    def test_blank_lines_are_ignored(self, db, temp_dir):
+        db.create_seed(Seed(id="seed-a", title="A", content="body"))
+        path = export_to_jsonl(db, temp_dir / "out.jsonl")
+        path.write_text(path.read_text() + "\n\n")
+        assert find_divergence(db, path) == []
+
+    def test_detection_ignores_updated_at_when_file_is_older(self, db, temp_dir):
+        """Divergence is a CONTENT question; the file's timestamp is irrelevant."""
+        db.create_seed(Seed(id="seed-a", title="A", content="DESKTOP body"))
+        old = now_utc() - timedelta(days=365)
+        path = _write_records(
+            temp_dir / "out.jsonl", [_record("seed-a", "LAPTOP body", updated_at=old)]
+        )
+        assert [d.kind for d in find_divergence(db, path)] == ["content"]
+
+    def test_detection_ignores_updated_at_when_file_is_newer(self, db, temp_dir):
+        """Same divergence, opposite timestamp ordering, same refusal."""
+        db.create_seed(Seed(id="seed-a", title="A", content="DESKTOP body"))
+        newer = now_utc() + timedelta(minutes=1)
+        path = _write_records(
+            temp_dir / "out.jsonl",
+            [_record("seed-a", "LAPTOP body", updated_at=newer)],
+        )
+        assert [d.kind for d in find_divergence(db, path)] == ["content"]
+
+    def test_title_and_tag_changes_are_not_divergence(self, db, temp_dir):
+        """Replacement is the normal verb for working state; only body is guarded."""
+        db.create_seed(Seed(id="seed-a", title="A", content="body", tags=["x"]))
+        path = _write_records(
+            temp_dir / "out.jsonl",
+            [_record("seed-a", "body", title="a different title", tags=["y", "z"])],
+        )
+        assert find_divergence(db, path) == []
+
+
+class TestExportRefusesDivergence:
+    """`export_to_jsonl` must not destroy what the database never accounted for."""
+
+    def test_export_refuses_and_leaves_file_byte_identical(self, db, temp_dir):
+        db.create_seed(Seed(id="seed-a", title="A", content="DESKTOP body"))
+        path = _write_records(
+            temp_dir / "out.jsonl", [_record("seed-a", "LAPTOP body")]
+        )
+        before = path.read_bytes()
+
+        with pytest.raises(DivergentExportError) as excinfo:
+            export_to_jsonl(db, path)
+
+        assert path.read_bytes() == before
+        assert [d.seed_id for d in excinfo.value.divergences] == ["seed-a"]
+        assert excinfo.value.output_path == path
+
+    def test_export_refuses_to_delete_a_record_absent_from_the_db(self, db, temp_dir):
+        db.create_seed(Seed(id="seed-a", title="A", content="mine"))
+        path = _write_records(
+            temp_dir / "out.jsonl",
+            [_record("seed-a", "mine"), _record("seed-peer", "theirs")],
+        )
+        before = path.read_bytes()
+
+        with pytest.raises(DivergentExportError):
+            export_to_jsonl(db, path)
+        assert path.read_bytes() == before
+
+    def test_allow_divergence_permits_the_overwrite(self, db, temp_dir):
+        db.create_seed(Seed(id="seed-a", title="A", content="DESKTOP body"))
+        path = _write_records(
+            temp_dir / "out.jsonl", [_record("seed-a", "LAPTOP body")]
+        )
+
+        export_to_jsonl(db, path, allow_divergence=True)
+
+        records = [json.loads(line) for line in path.read_text().splitlines()]
+        assert [r["content"] for r in records] == ["DESKTOP body"]
+
+    def test_normal_flush_after_append_still_succeeds(self, db, temp_dir):
+        """The everyday case: export, append, export again. No refusal."""
+        seed = Seed(id="seed-a", title="A", content="original")
+        db.create_seed(seed)
+        path = export_to_jsonl(db, temp_dir / "out.jsonl")
+
+        seed.content = "original\n\nappended"
+        db.update_seed(seed)
+        export_to_jsonl(db, path)
+
+        records = [json.loads(line) for line in path.read_text().splitlines()]
+        assert records[0]["content"] == "original\n\nappended"
+
+    def test_full_roundtrip_on_multi_seed_db_is_a_noop(self, db, temp_dir):
+        """export -> import -> export over an untouched file must not trip."""
+        for i in range(5):
+            db.create_seed(Seed(id=f"seed-{i}", title=f"T{i}", content=f"body {i}"))
+        db.create_relationship("seed-0", "seed-1", RelationType.RELATES_TO)
+        path = export_to_jsonl(db, temp_dir / "out.jsonl")
+        first = path.read_bytes()
+
+        result = import_from_jsonl(db, path)
+        assert result.updated == 0
+        assert result.refused == []
+
+        export_to_jsonl(db, path)
+        assert path.read_bytes() == first
+
+    def test_refused_import_record_is_not_then_erased_by_the_export(self, db, temp_dir):
+        """The seam with seeds-agk.1: a refused record stays refused, and stays.
+
+        `import_records` declines a future-dated record outright, so nothing
+        about it reaches the DB. Without the divergence guard the very next
+        export would delete it from the file, quietly undoing the refusal.
+        """
+        db.create_seed(Seed(id="seed-a", title="A", content="mine"))
+        far_future = now_utc() + FUTURE_TIMESTAMP_TOLERANCE + timedelta(hours=1)
+        path = _write_records(
+            temp_dir / "out.jsonl",
+            [
+                _record("seed-a", "mine"),
+                _record("seed-poison", "theirs", updated_at=far_future),
+            ],
+        )
+
+        result = import_from_jsonl(db, path)
+        assert [r.seed_id for r in result.refused] == ["seed-poison"]
+
+        with pytest.raises(DivergentExportError) as excinfo:
+            export_to_jsonl(db, path)
+        assert [d.seed_id for d in excinfo.value.divergences] == ["seed-poison"]
+        assert "seed-poison" in path.read_text()
 
 
 class TestImportV1:

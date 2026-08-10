@@ -5,7 +5,7 @@ import os
 import re
 import subprocess
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -2015,6 +2015,210 @@ class TestSyncCommand:
         assert result.exit_code == 0
         assert "Exported" in result.output
         assert "Imported:" not in result.output
+
+
+def _divert_on_disk(jsonl_path, seed_id, content, updated_at=None):
+    """Rewrite one record's body (and optionally its timestamp) in place.
+
+    Stands in for the ways divergent content really arrives: a human resolving
+    a JSONL merge conflict in favour of the other machine, a hand edit, or a
+    peer's export landing via git pull.
+    """
+    records = [json.loads(line) for line in jsonl_path.read_text().splitlines() if line]
+    for record in records:
+        if record["id"] == seed_id:
+            record["content"] = content
+            if updated_at is not None:
+                record["updated_at"] = updated_at
+    jsonl_path.write_text(
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
+    )
+
+
+class TestSyncRefusesDivergence:
+    """sync must not overwrite JSONL content the database never accounted for.
+
+    The reproduction these guard: machine B appends and pushes; machine A
+    appends later without pulling; A pulls, hits a JSONL conflict, and a human
+    resolves it in favour of B; A runs `seeds sync`. The import correctly skips
+    B's line (A's DB row is newer), and the export used to overwrite the file
+    with A's version — destroying B's deliberation on disk without it ever
+    having reached any database.
+    """
+
+    def _diverge(self, cli_runner, env, updated_at=None):
+        """Put a body on disk that the DB has never seen; return (path, sha)."""
+        db = Database()
+        db.create_seed(Seed(id="seed-div", title="Contested", content="DESKTOP body"))
+        db.close()
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        jsonl_path = env / SEEDS_DIR / "seeds.jsonl"
+        _divert_on_disk(jsonl_path, "seed-div", "LAPTOP body", updated_at)
+        return jsonl_path, jsonl_path.read_bytes()
+
+    def test_sync_refuses_and_leaves_the_file_byte_identical(
+        self, cli_runner, env_with_seeds
+    ):
+        jsonl_path, before = self._diverge(cli_runner, env_with_seeds)
+
+        result = cli_runner.invoke(main, ["sync"])
+
+        assert result.exit_code == 1
+        assert jsonl_path.read_bytes() == before
+        assert "seed-div" in result.output
+        assert "refusing to overwrite" in result.output
+        assert "LAPTOP body" in result.output
+
+    def test_refusal_says_how_to_proceed(self, cli_runner, env_with_seeds):
+        """An unactionable refusal is just a different way to lose the content."""
+        self._diverge(cli_runner, env_with_seeds)
+
+        result = cli_runner.invoke(main, ["sync"])
+
+        assert "seeds update <id> -a" in result.output
+        assert "seeds sync --allow-divergence" in result.output
+        assert "byte-for-byte unchanged" in result.output
+
+    def test_flush_only_is_covered_by_the_same_check(self, cli_runner, env_with_seeds):
+        """Skipping the import does not make the overwrite less destructive."""
+        jsonl_path, before = self._diverge(cli_runner, env_with_seeds)
+
+        result = cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        assert result.exit_code == 1
+        assert jsonl_path.read_bytes() == before
+        assert "seed-div" in result.output
+
+    def test_refusal_fires_when_the_on_disk_record_is_older(
+        self, cli_runner, env_with_seeds
+    ):
+        """Detection is by content; the file's updated_at plays no part."""
+        jsonl_path, before = self._diverge(
+            cli_runner, env_with_seeds, updated_at="2020-01-01T00:00:00+00:00"
+        )
+
+        result = cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        assert result.exit_code == 1
+        assert jsonl_path.read_bytes() == before
+
+    def test_refusal_fires_when_the_on_disk_record_is_newer(
+        self, cli_runner, env_with_seeds
+    ):
+        """Same divergence with the timestamp ordering inverted; same refusal.
+
+        Under `--flush-only` no import runs, so the fresher on-disk record is
+        never absorbed and overwriting it would still destroy it. (Under a full
+        `sync` the import absorbs it first, which is why that path proceeds:
+        nothing is lost once the database holds the content.)
+        """
+        newer = (datetime.now(timezone.utc) + timedelta(minutes=1)).isoformat()
+        jsonl_path, before = self._diverge(cli_runner, env_with_seeds, updated_at=newer)
+
+        result = cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        assert result.exit_code == 1
+        assert jsonl_path.read_bytes() == before
+
+    def test_full_sync_absorbs_a_newer_record_instead_of_refusing(
+        self, cli_runner, env_with_seeds
+    ):
+        """The import is the resolution when it can be: absorb, then export."""
+        newer = (datetime.now(timezone.utc) + timedelta(minutes=1)).isoformat()
+        jsonl_path, _ = self._diverge(cli_runner, env_with_seeds, updated_at=newer)
+
+        result = cli_runner.invoke(main, ["sync"])
+
+        assert result.exit_code == 0
+        assert "LAPTOP body" in jsonl_path.read_text()
+
+    def test_peer_seed_absent_from_the_db_is_not_deleted(
+        self, cli_runner, env_with_seeds
+    ):
+        """A peer's brand new seed arrives via git pull; a flush must not eat it."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
+        peer = json.loads(jsonl_path.read_text().splitlines()[0])
+        peer["id"] = "seed-peer"
+        peer["content"] = "PEER: arrived via git pull"
+        jsonl_path.write_text(
+            jsonl_path.read_text() + json.dumps(peer, ensure_ascii=False) + "\n"
+        )
+        before = jsonl_path.read_bytes()
+
+        result = cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        assert result.exit_code == 1
+        assert jsonl_path.read_bytes() == before
+        assert "seed-peer" in result.output
+        assert "seeds import" in result.output
+
+    def test_allow_divergence_permits_the_overwrite(self, cli_runner, env_with_seeds):
+        """The escape hatch is explicit, and using it does overwrite."""
+        jsonl_path, before = self._diverge(cli_runner, env_with_seeds)
+
+        result = cli_runner.invoke(main, ["sync", "--allow-divergence"])
+
+        assert result.exit_code == 0
+        assert jsonl_path.read_bytes() != before
+        assert "DESKTOP body" in jsonl_path.read_text()
+        assert "LAPTOP body" not in jsonl_path.read_text()
+
+    def test_allow_divergence_is_documented_in_help(self, cli_runner):
+        result = cli_runner.invoke(main, ["sync", "--help"])
+        assert result.exit_code == 0
+        assert "--allow-divergence" in result.output
+
+    def test_normal_append_cycle_is_silent(self, cli_runner, env_with_seeds):
+        """The everyday case: create, sync, append, sync. No warning, no prompt."""
+        create = cli_runner.invoke(main, ["create", "-t", "Normal", "-c", "original"])
+        seed_id = _extract_created_id(create.output)
+
+        first = cli_runner.invoke(main, ["sync"])
+        assert first.exit_code == 0
+
+        cli_runner.invoke(main, ["update", seed_id, "-a", "appended later"])
+        second = cli_runner.invoke(main, ["sync"])
+
+        assert second.exit_code == 0
+        assert "refusing" not in second.output
+        assert "diverg" not in second.output.lower()
+
+        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
+        record = next(
+            json.loads(line)
+            for line in jsonl_path.read_text().splitlines()
+            if json.loads(line)["id"] == seed_id
+        )
+        assert record["content"] == "original\n\nappended later"
+
+    def test_repeated_flush_only_is_a_noop(self, cli_runner, env_with_seeds):
+        """--flush-only is used constantly; it must not become noisy."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
+        first = jsonl_path.read_bytes()
+
+        for _ in range(3):
+            result = cli_runner.invoke(main, ["sync", "--flush-only"])
+            assert result.exit_code == 0
+        assert jsonl_path.read_bytes() == first
+
+    def test_unresolved_conflict_markers_refuse_rather_than_crash(
+        self, cli_runner, env_with_seeds
+    ):
+        """A file git left mid-conflict is the purest 'DB never saw this'."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
+        jsonl_path.write_text("<<<<<<< HEAD\n" + jsonl_path.read_text())
+        before = jsonl_path.read_bytes()
+
+        result = cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        assert result.exit_code == 1
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+        assert jsonl_path.read_bytes() == before
+        assert "not valid JSON" in result.output
 
 
 class TestPrimeCommand:
