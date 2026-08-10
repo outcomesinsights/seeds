@@ -6,6 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-10
+
+This release is about one thing: **seeds now refuses to destroy deliberation
+rather than doing it silently.** Four commands that previously succeeded can
+now exit non-zero — every one of them at a moment where the old behaviour lost
+work without saying so. That is why the minor version moves.
+
+The headline is `seeds sync`. It imports, then rewrote the JSONL wholesale from
+the database **without ever reading the file it was about to overwrite**. So a
+routine sync could erase deliberation that was on disk and never in any
+database — no clock skew required. The clearest case: machine B appends and
+pushes; machine A appends later without pulling; a human resolves the git
+conflict *in B's favour*; A runs `sync`; the import correctly skips B's line
+and the export then overwrites the file with A's version. B's text is gone and
+the human's explicit resolution is reverted, reported as `1 skipped` — which is
+what every *unchanged* seed prints. The export now reads the file first and
+refuses on divergence.
+
+Timestamps were the second half. Records carried their `updated_at` verbatim
+from the file, so a future-dated record became **permanently** authoritative:
+every later local edit stamps `now`, which is *earlier*, so the poisoned record
+out-ranked real work forever and each import destroyed whatever had been typed
+since. Records dated beyond a small skew tolerance are now refused outright, and
+a timezone-naive timestamp no longer aborts an import mid-file.
+
+`seeds update -c` got the same treatment at a smaller scale: one character from
+`-a`, it replaced a seed's whole body with no warning. It now refuses once a
+seed has accumulated deliberation, unless you mean it.
+
+### Breaking
+
+- **`seeds sync` / `sync --flush-only` refuse to overwrite divergent JSONL.** Pass `--allow-divergence` to discard the on-disk content deliberately ([bfb518e](https://github.com/outcomesinsights/seeds/commit/bfb518ec98804e9af3d197ebef601fc985ba64cf))
+- **`seeds import` refuses records dated more than 5 minutes in the future.** They are reported, and the database is left unchanged ([0a867dd](https://github.com/outcomesinsights/seeds/commit/0a867dd01ef44d43602b94353497d66b5db607e7))
+- **`seeds update -c` refuses on a seed that has been edited.** Use `-a` to append, or `--replace` to discard on purpose. Note `--replace` does not erase anything — the old body survives in git history ([03f3af3](https://github.com/outcomesinsights/seeds/commit/03f3af324be5acbef88200edad0dc5b5e8102327))
+- **`seeds create` / `update` now reject unknown base36 ID references.** Hash-shaped references like `seeds-zq4x` were previously invisible to the hallucinated-ID check, which is the scheme every new ID uses. `--allow-unknown-refs` still overrides ([fd778ed](https://github.com/outcomesinsights/seeds/commit/fd778edd3632d058ef3a4556aa3e20c9eaab7b8a))
+
+### Added
+
+- `--add-tag` / `--remove-tag` on `seeds update`, both repeatable. Removing a tag a seed does not carry is a silent no-op reporting the count, so a typo shows as "0 removed" rather than failing mid-batch. Wholesale `--tags` is unchanged ([d7d678b](https://github.com/outcomesinsights/seeds/commit/d7d678b3d41751f19d5268ae9f34d3b03ea08c2c))
+
+### Fixed
+
+- Bead IDs count as known references in seed bodies. Beads share the `seeds-` prefix, so every legitimate bead citation previously failed seed creation and had to be worked around with `--allow-unknown-refs` ([e2f7b64](https://github.com/outcomesinsights/seeds/commit/e2f7b6472feac64ee0df4471d6c94421bddaf075))
+
+### Changed
+
+- `seeds suggest --json` emits compact JSON. The flag's purpose is agent piping, where indentation is tokens the model pays for — 21% smaller on a live query. Pipe through `jq` to read it ([c20d7db](https://github.com/outcomesinsights/seeds/commit/c20d7db32e5a84e093cad24e9f34265c83feff0f))
+
 ## [0.4.0] - 2026-07-27
 
 This release makes seeds installable with **Nix**, and finishes the base36 ID
