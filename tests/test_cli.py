@@ -1572,6 +1572,94 @@ class TestBeadRefValidation:
         assert "seeds-99999" in decoy.output
 
 
+class TestBase36RefValidation:
+    """Hash-shaped references are checked too. See bead seeds-819.
+
+    Before this, ``find_id_refs`` discarded every non-numeric token before it
+    was looked up, so a body citing a base36 ID that never existed sailed
+    through — the exact failure the check was built to catch, against the
+    scheme every new ID now uses.
+    """
+
+    ALLOWLISTED_BODY = (
+        "the seeds-marketplace plugin, seeds-cli on PyPI, a seeds-native "
+        "workflow, the seeds-tool itself, seeds-generated output, "
+        "seeds-level concerns, seeds-like tools, and the seeds-side of it"
+    )
+
+    def test_create_rejects_hallucinated_hash_ref(self, cli_runner, initialized_env):
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Test", "-c", "see seeds-zq4x"]
+        )
+        assert result.exit_code != 0, result.output
+        assert "unknown IDs" in result.output
+        assert "seeds-zq4x" in result.output
+
+    def test_create_rejects_hallucinated_hash_ref_in_title(
+        self, cli_runner, initialized_env
+    ):
+        result = cli_runner.invoke(main, ["create", "-t", "Follow-up to seeds-zq4x"])
+        assert result.exit_code != 0, result.output
+        assert "seeds-zq4x" in result.output
+
+    def test_update_rejects_hallucinated_hash_ref(self, cli_runner, env_with_seeds):
+        result = cli_runner.invoke(
+            main, ["update", "seed-test1", "--append", "see seeds-zq4x"]
+        )
+        assert result.exit_code != 0, result.output
+        assert "seeds-zq4x" in result.output
+
+    def test_allow_unknown_refs_still_overrides(self, cli_runner, initialized_env):
+        result = cli_runner.invoke(
+            main,
+            ["create", "-t", "Test", "-c", "see seeds-zq4x", "--allow-unknown-refs"],
+        )
+        assert result.exit_code == 0, result.output
+        assert "Created seed" in result.output
+
+    def test_allowlisted_prose_terms_accepted(self, cli_runner, initialized_env):
+        """All eight measured domain terms pass without an override."""
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Test", "-c", self.ALLOWLISTED_BODY]
+        )
+        assert result.exit_code == 0, result.output
+        assert "Created seed" in result.output
+
+    def test_real_hash_seed_ref_accepted(self, cli_runner, initialized_env):
+        """A base36 ID that does exist is a reference, not a hallucination."""
+        first = cli_runner.invoke(main, ["jot", "First seed"])
+        first_id = _extract_jot_id(first.output)
+        assert not first_id.split("-", 1)[1].isdigit(), first_id
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Second", "-c", f"follow-up to {first_id}"]
+        )
+        assert result.exit_code == 0, result.output
+
+    def test_real_bead_ref_accepted(self, cli_runner, initialized_env):
+        """Bead lookup (seeds-90o) still short-circuits the stricter check."""
+        _write_beads_export(initialized_env, '{"_type":"issue","id":"seeds-230"}\n')
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Test", "-c", "promoted from seeds-230"]
+        )
+        assert result.exit_code == 0, result.output
+
+    def test_hash_shaped_bead_ref_accepted(self, cli_runner, initialized_env):
+        """Beads mint base36 IDs too; those were invisible before seeds-819."""
+        _write_beads_export(initialized_env, '{"_type":"issue","id":"seeds-90o"}\n')
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Test", "-c", "tracked as seeds-90o"]
+        )
+        assert result.exit_code == 0, result.output
+
+    def test_error_names_the_allowlist(self, cli_runner, initialized_env):
+        """The failure has to say exactly what to add. See bead seeds-819."""
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Test", "-c", "a seeds-idiosyncratic phrase"]
+        )
+        assert result.exit_code != 0, result.output
+        assert "PROSE_REF_ALLOWLIST" in result.output
+
+
 class TestQuestionCommands:
     """Tests for question-related commands (question-seeds + relationships)."""
 

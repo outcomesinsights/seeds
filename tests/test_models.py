@@ -5,14 +5,16 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from seeds.models import (
+    PROSE_REF_ALLOWLIST,
     Relationship,
     RelationType,
     Seed,
     SeedStatus,
     SeedType,
-    find_id_refs,
+    find_id_ref_candidates,
     generate_id,
     get_parent_id,
+    is_allowlisted_prose,
     is_valid_prefix,
     iter_id_ref_snippets,
     parse_since,
@@ -420,41 +422,84 @@ class TestIterIdRefSnippets:
         ) == [("see seeds-k3n7 now", "see myproj-k3n7 now")]
 
 
-class TestFindIdRefs:
-    """Tests for find_id_refs helper."""
+class TestFindIdRefCandidates:
+    """Tests for find_id_ref_candidates helper.
+
+    Extraction only — every whole-word token is returned regardless of shape,
+    and the caller (``_validate_id_refs``) decides what it means.
+    """
 
     def test_empty_text(self):
-        assert find_id_refs("", "seeds") == []
+        assert find_id_ref_candidates("", "seeds") == []
 
     def test_single_ref(self):
-        assert find_id_refs("see seeds-7", "seeds") == ["seeds-7"]
+        assert find_id_ref_candidates("see seeds-7", "seeds") == ["seeds-7"]
 
     def test_multiple_unique_refs(self):
-        assert find_id_refs("seeds-7 and seeds-12 also seeds-3", "seeds") == [
+        assert find_id_ref_candidates("seeds-7 and seeds-12 also seeds-3", "seeds") == [
             "seeds-12",
             "seeds-3",
             "seeds-7",
         ]
 
     def test_dedupes_repeated(self):
-        assert find_id_refs("seeds-7 seeds-7 seeds-7", "seeds") == ["seeds-7"]
+        assert find_id_ref_candidates("seeds-7 seeds-7 seeds-7", "seeds") == ["seeds-7"]
 
     def test_child_ids(self):
-        assert find_id_refs("see seeds-7.1 and seeds-12.3.4", "seeds") == [
+        assert find_id_ref_candidates("see seeds-7.1 and seeds-12.3.4", "seeds") == [
             "seeds-12.3.4",
             "seeds-7.1",
         ]
 
-    def test_ignores_compound_words(self):
-        assert find_id_refs("the seeds-related work", "seeds") == []
-        assert find_id_refs("foo-seeds-7-bar", "seeds") == []
+    def test_ignores_tokens_inside_longer_identifiers(self):
+        assert find_id_ref_candidates("foo-seeds-7-bar", "seeds") == []
+        assert find_id_ref_candidates("the seeds-related-work", "seeds") == []
 
     def test_wrong_prefix_not_matched(self):
-        assert find_id_refs("see csc-7", "seeds") == []
+        assert find_id_ref_candidates("see csc-7", "seeds") == []
 
-    def test_hash_refs_need_known_ids(self):
-        assert find_id_refs("see seeds-k3n7", "seeds") == []
-        assert find_id_refs("see seeds-k3n7", "seeds", {"seeds-k3n7"}) == ["seeds-k3n7"]
+    def test_hash_shaped_tokens_are_candidates(self):
+        """The point of seeds-819: a base36 token now reaches the caller."""
+        assert find_id_ref_candidates("see seeds-k3n7", "seeds") == ["seeds-k3n7"]
+
+    def test_word_shaped_tokens_are_candidates(self):
+        """No judgment happens here; 'related' is valid base36 like any word."""
+        assert find_id_ref_candidates("the seeds-related work", "seeds") == [
+            "seeds-related"
+        ]
+
+
+class TestIsAllowlistedProse:
+    """Tests for the prose allowlist that keeps domain vocabulary out of the net."""
+
+    def test_allowlisted_suffix(self):
+        assert is_allowlisted_prose("seeds-marketplace", "seeds")
+
+    def test_unlisted_suffix(self):
+        assert not is_allowlisted_prose("seeds-zq4x", "seeds")
+
+    def test_stored_bare_so_other_prefixes_benefit(self):
+        assert is_allowlisted_prose("csc-native", "csc")
+
+    def test_child_path_is_never_prose(self):
+        assert not is_allowlisted_prose("seeds-cli.1", "seeds")
+
+    def test_seeded_terms_present(self):
+        """The eight measured terms from seeds-6hj5 stay on the list."""
+        assert {
+            "marketplace",
+            "cli",
+            "native",
+            "tool",
+            "generated",
+            "level",
+            "like",
+            "side",
+        } <= PROSE_REF_ALLOWLIST
+
+    def test_entries_are_bare_suffixes(self):
+        """Prefixed entries would silently never match; catch that early."""
+        assert all("-" not in entry for entry in PROSE_REF_ALLOWLIST)
 
 
 class TestParseSince:

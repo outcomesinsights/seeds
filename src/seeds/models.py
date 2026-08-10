@@ -296,26 +296,72 @@ def tokenize_for_suggest(text: str) -> list[str]:
     return [t for t in tokens if len(t) >= 2 and t not in _SUGGEST_STOPWORDS]
 
 
-def find_id_refs(
-    text: str, prefix: str, known_ids: Container[str] = frozenset()
-) -> list[str]:
-    """Return sorted, de-duplicated whole-word seed-ID references in ``text``.
+# Suffixes that match the ID shape but are prose, never references.
+#
+# ``<prefix>-<word>`` is ordinary English — "a seeds-native workflow", "the
+# seeds-marketplace repo" — and no rule of shape separates it from a base36
+# hash ID: ``seeds-like`` is valid base36. Rather than guess, the reference
+# validator enumerates the exceptions. A candidate token that names neither a
+# seed nor a bead is still accepted when its suffix appears here; everything
+# else is reported as a hallucinated ID.
+#
+# Stored as bare suffixes rather than whole ``seeds-…`` tokens so the
+# vocabulary carries over to projects with another prefix (``csc-native``).
+#
+# To add: when the validator rejects a token you know is prose, put its suffix
+# here with a note. Only word-shaped tokens belong — an ID-shaped one quoted as
+# an example (``seeds-k3n``) is not prose, and allowlisting it would blind the
+# check to that ID forever. Revisit whether this should become per-project
+# config only if the list grows past ~20 entries (bead seeds-819).
+PROSE_REF_ALLOWLIST = frozenset(
+    {
+        # Measured across the seeds project's own corpus (seed seeds-6hj5).
+        "cli",  # `seeds-cli`, the PyPI name under consideration
+        "generated",
+        "level",
+        "like",
+        "marketplace",  # `seeds-marketplace`, the Claude Code plugin marketplace
+        "native",
+        "side",
+        "tool",
+        # Found by the pre-ship sweep of the same corpus (bead seeds-819).
+        "experiment",  # "`seeds-experiment`-style IDs"
+        "recent",  # the `seeds recent` primitive, written `seeds-recent`
+        "specific",  # "a seeds-specific phrase"
+        "sweep",  # the proposed `/seeds-sweep` slash command
+        "whatever",  # placeholder standing in for any ID, in a quoted discussion
+    }
+)
 
-    Uses the same matching rules as :func:`rewrite_id_refs`, so it matches
-    ``seeds-7`` and ``seeds-12.1`` while leaving compounds like ``seeds-related``
-    or ``foo-seeds-7-bar`` alone. Hash-ID references are found only when listed
-    in ``known_ids``. Returns ``[]`` for empty input.
+
+def is_allowlisted_prose(ref: str, prefix: str) -> bool:
+    """Return True when ``ref`` is known prose rather than an ID reference.
+
+    ``ref`` is a whole ``<prefix>-<suffix>`` token as produced by
+    :func:`find_id_ref_candidates`; its suffix is matched against
+    :data:`PROSE_REF_ALLOWLIST`. A dotted child path never matches — a child
+    reference is an ID by construction.
+    """
+    assert ref.startswith(f"{prefix}-"), ref
+    return ref[len(prefix) + 1 :] in PROSE_REF_ALLOWLIST
+
+
+def find_id_ref_candidates(text: str, prefix: str) -> list[str]:
+    """Return sorted, de-duplicated ``<prefix>-…`` tokens that *might* be ID refs.
+
+    Pure extraction: the regex delimits tokens and passes no judgment on them.
+    It cannot — ``seeds-like`` is simultaneously an English word and a valid
+    base36 hash — so every whole-word match is returned and the caller decides
+    whether each names a real seed, a real bead, allowlisted prose
+    (:data:`PROSE_REF_ALLOWLIST`), or nothing at all. Tokens buried inside a
+    longer identifier (``foo-seeds-7-bar``) are still excluded, since their
+    surrounding characters rule them out on shape alone.
+
+    Returns ``[]`` for empty input.
     """
     if not text:
         return []
-    pattern = _id_ref_pattern(prefix)
-    return sorted(
-        {
-            m.group(0)
-            for m in pattern.finditer(text)
-            if _is_id_ref(m.group(1), prefix, known_ids)
-        }
-    )
+    return sorted({m.group(0) for m in _id_ref_pattern(prefix).finditer(text)})
 
 
 def iter_id_ref_snippets(
