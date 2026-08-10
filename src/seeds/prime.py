@@ -79,6 +79,8 @@ Seeds should capture the **journey**, not just conclusions. When investigating:
 - `seeds abandon <id> --reason="..."` - Abandon with reason
 - `seeds update <id> --append="..."` - Add to content
 - `seeds update <id> --content="..."` - REPLACES the whole body; refused once a seed has been edited (use `--append`, or `--replace` to discard deliberately)
+- `seeds update <id> --add-tag=foo --remove-tag=bar` - Edit tags one at a time, leaving every other tag in place (both repeatable; removing a tag the seed lacks is a no-op reported as "0 removed")
+- `seeds update <id> --tags=foo,bar` - REPLACES the whole tag set; cannot be combined with `--add-tag`/`--remove-tag`
 - `seeds answer <seed-id> "..."` - Answer a question-seed
 
 ### Viewing
