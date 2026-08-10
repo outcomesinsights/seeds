@@ -15,17 +15,21 @@ class TestNextIdHashFormat:
     """New top-level IDs are beads-style base36 hashes, not sequential."""
 
     def test_new_top_level_id_is_hash_not_sequential(self, db):
-        """A freshly minted ID matches the hash shape and isn't purely numeric.
+        """Freshly minted IDs have the hash shape, and none is a counter value.
 
-        Sampling several independent candidates (instead of asserting on a
-        single one) avoids flakiness from the small chance that one random
-        base36 string happens to contain only digits.
+        Digit-ness is deliberately not the test: an all-digit suffix like
+        '060' is a perfectly ordinary base36 hash (seeds-skc), so asserting a
+        minted ID isn't purely numeric only samples the randomness — it fails
+        ~3% of the time per ID and says nothing when it passes (seeds-oaw).
+        What separates the schemes deterministically is width: a sequential
+        minter against an empty store hands out 'seeds-1'..'seeds-20', while
+        every hash suffix is at least three base36 characters wide.
         """
         ids = [db.next_id(seed_text=f"thought {i}") for i in range(20)]
         for seed_id in ids:
             assert HASH_ID_RE.match(seed_id), seed_id
-        suffixes = [sid.split("-", 1)[1] for sid in ids]
-        assert any(not suffix.isdigit() for suffix in suffixes)
+        sequential = {f"seeds-{i}" for i in range(1, len(ids) + 1)}
+        assert not sequential & set(ids), sorted(sequential & set(ids))
 
     def test_two_rapid_creates_differ(self, db):
         """Back-to-back creates (no delay) mint distinct IDs."""
