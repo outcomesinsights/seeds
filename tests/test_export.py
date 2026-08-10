@@ -6,7 +6,9 @@ from datetime import datetime, timedelta, timezone
 
 from seeds.db import Database
 from seeds.export import (
+    FUTURE_TIMESTAMP_TOLERANCE,
     ImportResult,
+    RefusedRecord,
     export_to_jsonl,
     import_from_jsonl,
     import_lines,
@@ -17,6 +19,7 @@ from seeds.models import (
     Seed,
     SeedStatus,
     SeedType,
+    now_utc,
 )
 
 
@@ -834,9 +837,292 @@ class TestImportLastWriteWins:
         assert db.get_seed("seed-2").title == "Two"
 
     def test_import_result_total(self):
-        """ImportResult.total sums created/updated/skipped."""
+        """ImportResult.total sums created/updated/skipped/refused."""
         assert ImportResult(created=2, updated=1, skipped=3).total == 6
         assert ImportResult().total == 0
+        assert (
+            ImportResult(
+                created=1,
+                refused=[RefusedRecord("seed-x", "2030-01-01T00:00:00+00:00", "why")],
+            ).total
+            == 2
+        )
+
+
+class TestImportUntrustworthyTimestamps:
+    """Import must not trust a record's ``updated_at`` blindly.
+
+    Two defects covered here (bead seeds-agk.1):
+    a future-dated record poisons a seed permanently, and a timezone-naive
+    ``updated_at`` used to abort the import mid-file with a TypeError.
+    """
+
+    def test_future_dated_record_is_refused(self, db, temp_dir):
+        """A record dated far in the future is refused; the DB row is unchanged."""
+        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        db.create_seed(
+            Seed(
+                id="seed-f",
+                title="Real title",
+                content="real body",
+                created_at=base,
+                updated_at=base,
+            )
+        )
+
+        forged = "2030-01-01T00:00:00+00:00"
+        record = _v2_record(
+            "seed-f", title="Forged title", updated_at=forged, content="POISON"
+        )
+        input_path = temp_dir / "future.jsonl"
+        input_path.write_text(json.dumps(record) + "\n")
+
+        result = import_from_jsonl(db, input_path)
+
+        assert result.created == 0
+        assert result.updated == 0
+        assert result.skipped == 0
+        assert len(result.refused) == 1
+        # The refusal names the seed and quotes the timestamp the file claimed.
+        assert result.refused[0].seed_id == "seed-f"
+        assert result.refused[0].claimed_updated_at == forged
+
+        seed = db.get_seed("seed-f")
+        assert seed.title == "Real title"
+        assert seed.content == "real body"
+        assert seed.updated_at == base
+
+    def test_future_dated_record_is_not_created(self, db, temp_dir):
+        """A refused record with an unseen ID is not inserted either.
+
+        Creating it would plant the poisoned timestamp rather than reject it.
+        """
+        record = _v2_record(
+            "seed-new", title="From the future", updated_at="2030-01-01T00:00:00+00:00"
+        )
+        input_path = temp_dir / "future-new.jsonl"
+        input_path.write_text(json.dumps(record) + "\n")
+
+        result = import_from_jsonl(db, input_path)
+
+        assert result.created == 0
+        assert len(result.refused) == 1
+        assert db.get_seed("seed-new") is None
+
+    def test_refused_record_applies_nothing_not_even_edges(self, db, temp_dir):
+        """A refused record's relationships are not asserted.
+
+        Skipped records still backfill edges, but a refused record is untrusted
+        wholesale — none of it reaches the DB.
+        """
+        db.create_seed(Seed(id="seed-a", title="A"))
+        db.create_seed(Seed(id="seed-b", title="B"))
+
+        record = _v2_record(
+            "seed-a",
+            title="A from the future",
+            updated_at="2030-06-01T00:00:00+00:00",
+            relationships=[
+                {
+                    "target_id": "seed-b",
+                    "rel_type": "relates-to",
+                    "created_at": "2030-06-01T00:00:00+00:00",
+                }
+            ],
+        )
+        input_path = temp_dir / "future-rel.jsonl"
+        input_path.write_text(json.dumps(record) + "\n")
+
+        result = import_from_jsonl(db, input_path)
+
+        assert len(result.refused) == 1
+        assert db.get_relationships("seed-a", direction="outbound") == []
+
+    def test_future_dated_v1_record_is_refused(self, db, temp_dir):
+        """The refusal is format-agnostic — legacy v1 records are checked too."""
+        record = {
+            "id": "seed-v1",
+            "title": "Legacy from the future",
+            "content": "",
+            "status": "captured",
+            "seed_type": "idea",
+            "created_at": "2030-01-01T00:00:00+00:00",
+            "updated_at": "2030-01-01T00:00:00+00:00",
+            "related_to": [],
+            "questions": [],
+        }
+        input_path = temp_dir / "v1-future.jsonl"
+        input_path.write_text(json.dumps(record) + "\n")
+
+        result = import_from_jsonl(db, input_path)
+
+        assert result.created == 0
+        assert len(result.refused) == 1
+        assert db.get_seed("seed-v1") is None
+
+    def test_poisoning_sequence_preserves_local_work(self, db, temp_dir):
+        """The full reproduction: a local edit is no longer destroyed on re-import.
+
+        Before the fix this sequence lost "MY REAL WORK": the forged 2030
+        record won the comparison, and every later legitimate edit stamped
+        ``now_utc()`` — earlier than 2030 — so the same unchanged file kept
+        winning forever.
+        """
+        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        db.create_seed(
+            Seed(
+                id="seed-p",
+                title="Seed P",
+                content="original body",
+                created_at=base,
+                updated_at=base,
+            )
+        )
+
+        forged = _v2_record(
+            "seed-p",
+            title="Seed P",
+            updated_at="2030-01-01T00:00:00+00:00",
+            content="POISONED BODY FROM THE FILE",
+        )
+        input_path = temp_dir / "poison.jsonl"
+        input_path.write_text(json.dumps(forged) + "\n")
+
+        # 1. The forged record is refused, so the body is never poisoned.
+        first = import_from_jsonl(db, input_path)
+        assert len(first.refused) == 1
+        assert db.get_seed("seed-p").content == "original body"
+
+        # 2. A legitimate local append lands in the DB.
+        seed = db.get_seed("seed-p")
+        seed.content = seed.content + "\n\nMY REAL WORK"
+        db.update_seed(seed)
+        assert "MY REAL WORK" in db.get_seed("seed-p").content
+
+        # 3. Re-importing the SAME unchanged file leaves the append intact.
+        second = import_from_jsonl(db, input_path)
+        assert len(second.refused) == 1
+        assert second.updated == 0
+        assert "MY REAL WORK" in db.get_seed("seed-p").content
+        assert "POISONED" not in db.get_seed("seed-p").content
+
+    def test_tolerance_is_not_zero(self):
+        """Clock skew is real; a zero tolerance would reject honest records."""
+        assert FUTURE_TIMESTAMP_TOLERANCE.total_seconds() > 0
+
+    def test_record_within_skew_tolerance_still_imports(self, db, temp_dir):
+        """A slightly-ahead record (ordinary clock skew) imports normally."""
+        db.create_seed(Seed(id="seed-s", title="Old", updated_at=now_utc()))
+
+        slightly_ahead = now_utc() + FUTURE_TIMESTAMP_TOLERANCE / 2
+        record = _v2_record(
+            "seed-s", title="Slightly ahead", updated_at=slightly_ahead.isoformat()
+        )
+        input_path = temp_dir / "skew.jsonl"
+        input_path.write_text(json.dumps(record) + "\n")
+
+        result = import_from_jsonl(db, input_path)
+
+        assert result.refused == []
+        assert result.updated == 1
+        assert db.get_seed("seed-s").title == "Slightly ahead"
+
+    def test_naive_updated_at_does_not_abort_the_import(self, db, temp_dir):
+        """A timezone-naive updated_at neither raises nor stops later records.
+
+        Before the fix this raised
+        ``TypeError: can't compare offset-naive and offset-aware datetimes``
+        and left the import partially applied, with no summary.
+        """
+        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        for sid in ("seed-1", "seed-2", "seed-3"):
+            db.create_seed(
+                Seed(id=sid, title=f"old {sid}", created_at=base, updated_at=base)
+            )
+
+        newer = base + timedelta(days=1)
+        records = [
+            _v2_record("seed-1", title="new 1", updated_at=newer.isoformat()),
+            # Middle record has no timezone offset at all.
+            _v2_record(
+                "seed-2",
+                title="new 2",
+                updated_at=newer.replace(tzinfo=None).isoformat(),
+            ),
+            _v2_record("seed-3", title="new 3", updated_at=newer.isoformat()),
+        ]
+        input_path = temp_dir / "naive.jsonl"
+        input_path.write_text("".join(json.dumps(r) + "\n" for r in records))
+
+        result = import_from_jsonl(db, input_path)
+
+        # All three processed — including the one AFTER the naive record.
+        assert result.total == 3
+        assert result.updated == 3
+        assert result.refused == []
+        assert db.get_seed("seed-1").title == "new 1"
+        assert db.get_seed("seed-2").title == "new 2"
+        assert db.get_seed("seed-3").title == "new 3"
+
+    def test_naive_updated_at_is_read_as_utc(self, db, temp_dir):
+        """Naive input is interpreted as UTC, matching ``parse_since``.
+
+        The naive value here equals the DB's UTC timestamp, so reading it as
+        UTC makes it not-newer and the record is skipped — the same outcome an
+        explicit ``+00:00`` would produce.
+        """
+        ts = datetime(2025, 3, 3, 9, 0, 0, tzinfo=timezone.utc)
+        db.create_seed(
+            Seed(id="seed-n", title="Original", created_at=ts, updated_at=ts)
+        )
+
+        record = _v2_record(
+            "seed-n", title="Changed", updated_at=ts.replace(tzinfo=None).isoformat()
+        )
+        input_path = temp_dir / "naive-equal.jsonl"
+        input_path.write_text(json.dumps(record) + "\n")
+
+        result = import_from_jsonl(db, input_path)
+
+        assert result.skipped == 1
+        assert result.updated == 0
+        assert db.get_seed("seed-n").title == "Original"
+
+    def test_naive_stored_timestamp_is_normalized_to_utc(self, db, temp_dir):
+        """A naive record that wins is stored timezone-aware, not naive."""
+        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        db.create_seed(Seed(id="seed-w", title="Old", created_at=base, updated_at=base))
+
+        newer = base + timedelta(days=2)
+        record = _v2_record(
+            "seed-w", title="New", updated_at=newer.replace(tzinfo=None).isoformat()
+        )
+        input_path = temp_dir / "naive-newer.jsonl"
+        input_path.write_text(json.dumps(record) + "\n")
+
+        result = import_from_jsonl(db, input_path)
+
+        assert result.updated == 1
+        stored = db.get_seed("seed-w")
+        assert stored.title == "New"
+        assert stored.updated_at == newer
+        assert stored.updated_at.tzinfo is not None
+
+    def test_normal_import_reports_no_refusals(self, db, temp_dir):
+        """Well-formed records are unaffected: nothing refused, counts unchanged."""
+        db2 = Database(path=temp_dir / "src" / ".seeds" / "seeds.db")
+        db2.init()
+        db2.create_seed(Seed(id="seed-a", title="A"))
+        db2.create_seed(Seed(id="seed-b", title="B"))
+        db2.create_relationship("seed-a", "seed-b", RelationType.RELATES_TO)
+        export_path = temp_dir / "clean.jsonl"
+        export_to_jsonl(db2, export_path)
+
+        result = import_from_jsonl(db, export_path)
+
+        assert result.refused == []
+        assert result.created == 2
+        assert result.total == 2
 
 
 class TestImportBootstrap:

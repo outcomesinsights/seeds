@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -15,9 +15,36 @@ from seeds.models import (
     Seed,
     SeedStatus,
     SeedType,
+    now_utc,
 )
 
 JSONL_FILE = "seeds.jsonl"
+
+# How far ahead of local time a record's ``updated_at`` may be and still be
+# imported. Machines really do disagree about the time, so zero tolerance would
+# reject legitimate records from a slightly-fast peer; a few minutes covers
+# ordinary skew without covering a corrupt or forged timestamp.
+#
+# Anything further ahead is refused, because importing it poisons the seed
+# permanently: the import picks a winner by comparing ``updated_at``, but a
+# later legitimate local edit stamps ``now_utc()`` (db.update_seed), which is
+# EARLIER than a future date. The seed's timestamp moves backward, the file's
+# record keeps out-ranking every subsequent edit, and each re-import of that
+# same unchanged file destroys whatever was written since.
+FUTURE_TIMESTAMP_TOLERANCE = timedelta(minutes=5)
+
+
+@dataclass(frozen=True)
+class RefusedRecord:
+    """A record the import declined to apply, and why.
+
+    ``claimed_updated_at`` is the raw string the file asserted, reported
+    verbatim so the operator can see exactly what is wrong upstream.
+    """
+
+    seed_id: str
+    claimed_updated_at: str
+    reason: str
 
 
 @dataclass
@@ -30,16 +57,20 @@ class ImportResult:
     - ``skipped``: records left untouched — an existing seed whose JSONL
       ``updated_at`` was not newer than the DB's (stale or identical), or a
       legacy v1 collision (v1 import is create-only).
+    - ``refused``: records rejected outright without touching the DB at all
+      (not even their relationships), because their ``updated_at`` is further
+      ahead of local time than :data:`FUTURE_TIMESTAMP_TOLERANCE` allows.
     """
 
     created: int = 0
     updated: int = 0
     skipped: int = 0
+    refused: list[RefusedRecord] = field(default_factory=list)
 
     @property
     def total(self) -> int:
-        """Total records processed (created + updated + skipped)."""
-        return self.created + self.updated + self.skipped
+        """Total records processed (created + updated + skipped + refused)."""
+        return self.created + self.updated + self.skipped + len(self.refused)
 
 
 def _datetime_to_str(dt: datetime | None) -> str | None:
@@ -47,6 +78,63 @@ def _datetime_to_str(dt: datetime | None) -> str | None:
     if dt is None:
         return None
     return dt.isoformat()
+
+
+def _parse_timestamp(value: str) -> datetime:
+    """Parse an ISO timestamp from a JSONL record; treat a naive one as UTC.
+
+    Records are supposed to carry timezone-aware timestamps, but a hand-edited
+    or third-party-generated file can drop the offset. A naive value used to
+    reach the last-write-wins comparison as-is and raise
+    ``TypeError: can't compare offset-naive and offset-aware datetimes``,
+    aborting the import mid-file with the records before it already committed
+    and no summary printed.
+
+    Chosen resolution: interpret naive input as UTC rather than rejecting the
+    record. Reasons:
+
+    - It is what seeds already does elsewhere for naive ISO input
+      (``parse_since`` in models.py), so the file format has one rule, not two.
+    - It never loses the record. Dropping a timezone is a transcription slip,
+      not evidence that the content is wrong.
+    - It composes safely with the future-timestamp refusal below. If the naive
+      value was really a *local* wall clock from a machine east of UTC,
+      reading it as UTC places it in the future, where the refusal catches it;
+      west of UTC it reads as older than it is and simply loses the
+      last-write-wins comparison. Neither direction can silently overwrite a
+      fresher DB row.
+    """
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _optional_timestamp(value: str | None) -> datetime | None:
+    """Parse an optional ISO timestamp field (``None``/empty stays ``None``)."""
+    if not value:
+        return None
+    return _parse_timestamp(value)
+
+
+def _refusal_for(data: dict[str, Any], now: datetime) -> RefusedRecord | None:
+    """Return a :class:`RefusedRecord` if this record's timestamp is untrustworthy.
+
+    Applies to every record regardless of format version: the claim being
+    checked is the file's ``updated_at``, which both the v1 and v2 importers
+    write into the DB verbatim.
+    """
+    claimed = data["updated_at"]
+    if _parse_timestamp(claimed) <= now + FUTURE_TIMESTAMP_TOLERANCE:
+        return None
+    return RefusedRecord(
+        seed_id=data["id"],
+        claimed_updated_at=claimed,
+        reason=(
+            f"updated_at is more than {FUTURE_TIMESTAMP_TOLERANCE} ahead of "
+            f"now ({now.isoformat()})"
+        ),
+    )
 
 
 def seed_to_dict(seed: Seed, db: Database) -> dict[str, Any]:
@@ -124,13 +212,9 @@ def _import_v1_record(db: Database, data: dict[str, Any]) -> str:
         status=SeedStatus(data["status"]),
         seed_type=SeedType(data["seed_type"]),
         tags=data.get("tags", []),
-        created_at=datetime.fromisoformat(data["created_at"]),
-        updated_at=datetime.fromisoformat(data["updated_at"]),
-        resolved_at=(
-            datetime.fromisoformat(data["resolved_at"])
-            if data.get("resolved_at")
-            else None
-        ),
+        created_at=_parse_timestamp(data["created_at"]),
+        updated_at=_parse_timestamp(data["updated_at"]),
+        resolved_at=_optional_timestamp(data.get("resolved_at")),
         resolution=data.get("resolution", ""),
     )
     db.create_seed(seed)
@@ -152,20 +236,16 @@ def _import_v1_record(db: Database, data: dict[str, Any]) -> str:
             seed_status = SeedStatus.CAPTURED
 
         q_seed_id = db.next_id()
-        resolved_at = (
-            datetime.fromisoformat(q_data["answered_at"])
-            if q_data.get("answered_at")
-            else None
-        )
+        q_created_at = _parse_timestamp(q_data["created_at"])
         q_seed = Seed(
             id=q_seed_id,
             title=q_data["text"],
             content=q_data.get("answer") or "",
             status=seed_status,
             seed_type=SeedType.QUESTION,
-            created_at=datetime.fromisoformat(q_data["created_at"]),
-            updated_at=datetime.fromisoformat(q_data["created_at"]),
-            resolved_at=resolved_at,
+            created_at=q_created_at,
+            updated_at=q_created_at,
+            resolved_at=_optional_timestamp(q_data.get("answered_at")),
         )
         db.create_seed(q_seed)
         db.create_relationship(q_seed_id, data["id"], RelationType.QUESTIONS)
@@ -182,13 +262,9 @@ def _seed_from_v2(data: dict[str, Any]) -> Seed:
         status=SeedStatus(data["status"]),
         seed_type=SeedType(data["seed_type"]),
         tags=data.get("tags", []),
-        created_at=datetime.fromisoformat(data["created_at"]),
-        updated_at=datetime.fromisoformat(data["updated_at"]),
-        resolved_at=(
-            datetime.fromisoformat(data["resolved_at"])
-            if data.get("resolved_at")
-            else None
-        ),
+        created_at=_parse_timestamp(data["created_at"]),
+        updated_at=_parse_timestamp(data["updated_at"]),
+        resolved_at=_optional_timestamp(data.get("resolved_at")),
         resolution=data.get("resolution", ""),
     )
 
@@ -202,11 +278,7 @@ def _assert_v2_relationships(db: Database, data: dict[str, Any]) -> None:
     """
     for rel_data in data.get("relationships", []):
         rel_type = RelationType(rel_data["rel_type"])
-        created_at = (
-            datetime.fromisoformat(rel_data["created_at"])
-            if rel_data.get("created_at")
-            else None
-        )
+        created_at = _optional_timestamp(rel_data.get("created_at"))
         db.create_relationship(data["id"], rel_data["target_id"], rel_type, created_at)
 
 
@@ -289,6 +361,13 @@ def import_records(
     else is treated as legacy v1) and applies it via the matching importer.
     Tallies the per-record outcomes into an :class:`ImportResult`.
 
+    A record whose ``updated_at`` is further ahead of local time than
+    :data:`FUTURE_TIMESTAMP_TOLERANCE` is refused before either importer sees
+    it — nothing about it reaches the DB, not even its relationships — and is
+    recorded in ``result.refused`` for the caller to report. Every record is
+    compared against a single ``now`` captured once, so a long import cannot
+    change its mind partway through.
+
     When ``bootstrap`` is True and the database file does not yet exist, the
     schema is created and the project prefix is recovered from the first
     record's ID before importing (fresh-clone rehydration). ``records`` is
@@ -300,8 +379,14 @@ def import_records(
         records = list(records)
         _bootstrap_db_if_absent(db, records)
 
+    now = now_utc()
     result = ImportResult()
     for data in records:
+        refusal = _refusal_for(data, now)
+        if refusal is not None:
+            result.refused.append(refusal)
+            continue
+
         if data.get("format_version") == 2:
             outcome = _import_v2_record(db, data)
         else:
@@ -350,8 +435,9 @@ def import_from_jsonl(
             initialized projects are unaffected.
 
     Returns:
-        An :class:`ImportResult` with created/updated/skipped counts. A missing
-        file yields an empty result (all-zero counts).
+        An :class:`ImportResult` with created/updated/skipped counts plus any
+        records refused for an untrustworthy ``updated_at``. A missing file
+        yields an empty result (all-zero counts).
     """
     if input_path is None:
         input_path = Path.cwd() / SEEDS_DIR / JSONL_FILE

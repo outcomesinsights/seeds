@@ -1,9 +1,11 @@
 """Tests for seeds CLI commands."""
 
+import json
 import os
 import re
 import subprocess
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -1875,6 +1877,62 @@ class TestImportCommand:
         result = cli_runner.invoke(main, ["import", str(jsonl_path)])
         assert result.exit_code == 0
         assert "Imported: 4 created" in result.output
+
+    def test_import_reports_refused_future_dated_record(
+        self, cli_runner, env_with_seeds
+    ):
+        """A future-dated record is refused and the output names the seed."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
+
+        forged = []
+        for line in jsonl_path.read_text().splitlines():
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            if record["id"] == "seed-test2":
+                record["updated_at"] = "2030-01-01T00:00:00+00:00"
+                record["title"] = "POISONED TITLE"
+            forged.append(json.dumps(record))
+        jsonl_path.write_text("\n".join(forged) + "\n")
+
+        result = cli_runner.invoke(main, ["import"])
+
+        assert result.exit_code == 0
+        # The refusal is counted, named, and quotes the claimed timestamp.
+        assert "1 refused" in result.output
+        assert "seed-test2" in result.output
+        assert "2030-01-01T00:00:00+00:00" in result.output
+        # The other three records still imported (no mid-file abort).
+        assert "3 skipped" in result.output
+        # And the DB row was left alone.
+        show = cli_runner.invoke(main, ["show", "seed-test2"])
+        assert "POISONED TITLE" not in show.output
+
+    def test_import_survives_timezone_naive_timestamp(self, cli_runner, env_with_seeds):
+        """A naive updated_at does not abort the import; the summary still prints."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
+
+        forged = []
+        for line in jsonl_path.read_text().splitlines():
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            if record["id"] == "seed-test2":
+                naive = datetime.fromisoformat(record["updated_at"]).replace(
+                    tzinfo=None
+                )
+                record["updated_at"] = naive.isoformat()
+            forged.append(json.dumps(record))
+        jsonl_path.write_text("\n".join(forged) + "\n")
+
+        result = cli_runner.invoke(main, ["import"])
+
+        assert result.exit_code == 0
+        assert result.exception is None
+        # All four records accounted for — nothing aborted partway.
+        assert "Imported: 0 created, 0 updated, 4 skipped" in result.output
 
 
 class TestSyncCommand:
