@@ -1250,11 +1250,27 @@ def tree(ctx: Context, seed_id: str) -> None:
 
 
 def _format_import_summary(result: ImportResult) -> str:
-    """One-line created/updated/skipped summary shared by import and sync."""
-    return (
+    """Created/updated/skipped summary shared by import and sync.
+
+    Stays a single unchanged line when nothing was refused. Refusals are the
+    exception, and each one names the seed and the timestamp the file claimed
+    — a future-dated record means something is wrong upstream and the operator
+    has to be able to go find it.
+    """
+    summary = (
         f"Imported: {result.created} created, "
         f"{result.updated} updated, {result.skipped} skipped"
     )
+    if not result.refused:
+        return summary
+
+    lines = [f"{summary}, {len(result.refused)} refused"]
+    lines.append("Refused (untrustworthy timestamp — DB left unchanged):")
+    lines.extend(
+        f"  {rec.seed_id}: claimed updated_at {rec.claimed_updated_at} — {rec.reason}"
+        for rec in result.refused
+    )
+    return "\n".join(lines)
 
 
 @main.command("import")
