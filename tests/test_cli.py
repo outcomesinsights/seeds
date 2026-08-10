@@ -1131,6 +1131,230 @@ class TestUpdateContentGuard:
         db.close()
 
 
+class TestUpdateTagEdits:
+    """Tests for 'update --add-tag/--remove-tag' (see bead seeds-3ps).
+
+    The point of these flags is that changing one tag stops being a
+    read-modify-write whose write nobody checks -- so most of what is asserted
+    here is that the tags nobody named came through untouched and in order.
+    """
+
+    def _create(self, cli_runner, tags="alpha,beta,gamma"):
+        """Create a tagged seed via the CLI and return its minted ID."""
+        result = cli_runner.invoke(
+            main, ["create", "--title", "Tagged seed", "--tags", tags]
+        )
+        assert result.exit_code == 0, result.output
+        return _extract_created_id(result.output)
+
+    def _tags_of(self, seed_id):
+        db = Database()
+        try:
+            return db.get_seed(seed_id).tags
+        finally:
+            db.close()
+
+    def test_add_tag_keeps_every_existing_tag(self, cli_runner, initialized_env):
+        """--add-tag appends without disturbing what was already there."""
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(main, ["update", seed_id, "--add-tag", "delta"])
+        assert result.exit_code == 0, result.output
+        assert self._tags_of(seed_id) == ["alpha", "beta", "gamma", "delta"]
+
+        shown = cli_runner.invoke(main, ["show", seed_id])
+        assert "Tags: alpha, beta, gamma, delta" in shown.output
+
+    def test_add_tag_is_repeatable(self, cli_runner, initialized_env):
+        """Two --add-tag flags in one call add both, in the order given."""
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--add-tag", "delta", "--add-tag", "epsilon"]
+        )
+        assert result.exit_code == 0, result.output
+        assert self._tags_of(seed_id) == [
+            "alpha",
+            "beta",
+            "gamma",
+            "delta",
+            "epsilon",
+        ]
+
+    def test_add_tag_already_present_does_not_duplicate(
+        self, cli_runner, initialized_env
+    ):
+        """Adding a tag the seed carries is a no-op, not a second copy."""
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(main, ["update", seed_id, "--add-tag", "beta"])
+        assert result.exit_code == 0, result.output
+        assert self._tags_of(seed_id) == ["alpha", "beta", "gamma"]
+        assert "0 added" in result.output
+
+    def test_remove_tag_removes_only_that_tag(self, cli_runner, initialized_env):
+        """--remove-tag takes out one tag and leaves the others in place."""
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(main, ["update", seed_id, "--remove-tag", "beta"])
+        assert result.exit_code == 0, result.output
+        assert self._tags_of(seed_id) == ["alpha", "gamma"]
+
+    def test_remove_tag_is_repeatable(self, cli_runner, initialized_env):
+        """Two --remove-tag flags in one call remove both."""
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--remove-tag", "alpha", "--remove-tag", "gamma"]
+        )
+        assert result.exit_code == 0, result.output
+        assert self._tags_of(seed_id) == ["beta"]
+
+    def test_remove_absent_tag_is_a_silent_no_op(self, cli_runner, initialized_env):
+        """A typo'd tag exits 0, changes nothing, and reports 0 removed.
+
+        Locked decision: erroring would abort an agent's batch mid-loop, so the
+        count is the signal instead.
+        """
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(main, ["update", seed_id, "--remove-tag", "nope"])
+        assert result.exit_code == 0, result.output
+        assert result.stderr == ""
+        assert "0 removed" in result.output
+        assert self._tags_of(seed_id) == ["alpha", "beta", "gamma"]
+
+    def test_no_op_removal_does_not_touch_updated_at(self, cli_runner, initialized_env):
+        """A request that matched nothing must not count as an edit.
+
+        Otherwise a typo would silently arm the --content guard on a seed
+        nobody actually changed.
+        """
+        seed_id = self._create(cli_runner)
+        db = Database()
+        before = db.get_seed(seed_id).updated_at
+        db.close()
+
+        assert (
+            cli_runner.invoke(
+                main, ["update", seed_id, "--remove-tag", "nope"]
+            ).exit_code
+            == 0
+        )
+
+        db = Database()
+        assert db.get_seed(seed_id).updated_at == before
+        db.close()
+
+    def test_add_and_remove_compose_in_one_invocation(
+        self, cli_runner, initialized_env
+    ):
+        """The two flags work together: swap one tag for another in one call."""
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(
+            main,
+            ["update", seed_id, "--remove-tag", "beta", "--add-tag", "delta"],
+        )
+        assert result.exit_code == 0, result.output
+        assert self._tags_of(seed_id) == ["alpha", "gamma", "delta"]
+        assert "1 added, 1 removed" in result.output
+
+    def test_untouched_tags_keep_their_authored_order(
+        self, cli_runner, initialized_env
+    ):
+        """Surviving tags are not re-sorted -- that would churn the JSONL diff."""
+        seed_id = self._create(cli_runner, tags="zebra,apple,mango")
+
+        result = cli_runner.invoke(
+            main,
+            ["update", seed_id, "--remove-tag", "apple", "--add-tag", "banana"],
+        )
+        assert result.exit_code == 0, result.output
+        assert self._tags_of(seed_id) == ["zebra", "mango", "banana"]
+
+    def test_tag_edits_work_on_an_edited_seed(self, cli_runner, initialized_env):
+        """Tag edits are not content replacement, so the -c guard stays out.
+
+        Landed alongside the guard from bead seeds-884; this is the case that
+        matters, since every seed worth re-tagging has been edited.
+        """
+        seed_id = self._create(cli_runner)
+        assert cli_runner.invoke(main, ["update", seed_id, "-a", "more"]).exit_code == 0
+
+        result = cli_runner.invoke(
+            main,
+            ["update", seed_id, "--add-tag", "delta", "--remove-tag", "alpha"],
+        )
+        assert result.exit_code == 0, result.output
+        assert result.stderr == ""
+        assert self._tags_of(seed_id) == ["beta", "gamma", "delta"]
+
+    def test_tags_with_add_tag_is_refused(self, cli_runner, initialized_env):
+        """Mixing wholesale replacement with an edit is ambiguous: reject it."""
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--tags", "x,y", "--add-tag", "delta"]
+        )
+        assert result.exit_code != 0
+        assert "--add-tag" in result.stderr
+        assert self._tags_of(seed_id) == ["alpha", "beta", "gamma"]
+
+    def test_tags_with_remove_tag_is_refused(self, cli_runner, initialized_env):
+        """Same rejection for the removal side of the pair."""
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--tags", "x,y", "--remove-tag", "alpha"]
+        )
+        assert result.exit_code != 0
+        assert "--remove-tag" in result.stderr
+        assert self._tags_of(seed_id) == ["alpha", "beta", "gamma"]
+
+    def test_same_tag_added_and_removed_is_refused(self, cli_runner, initialized_env):
+        """No precedence rule for add-vs-remove of one tag: name the conflict."""
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--add-tag", "beta", "--remove-tag", "beta"]
+        )
+        assert result.exit_code != 0
+        assert "beta" in result.stderr
+        assert self._tags_of(seed_id) == ["alpha", "beta", "gamma"]
+
+    def test_help_documents_the_tags_combination_rule(self, cli_runner):
+        """The chosen behavior is discoverable from --help, not just the code."""
+        result = cli_runner.invoke(main, ["update", "--help"])
+        assert result.exit_code == 0
+        # Collapse click's line wrapping so the assertion is about the wording,
+        # not about where the terminal width happened to break it.
+        unwrapped = " ".join(result.output.split())
+        assert "--add-tag" in unwrapped
+        assert "--remove-tag" in unwrapped
+        assert "cannot be combined with --tags" in unwrapped
+        assert "cannot be mixed in one command" in unwrapped
+
+    def test_wholesale_tags_still_replaces(self, cli_runner, initialized_env):
+        """--tags is untouched by this bead: it still resets the whole set."""
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(main, ["update", seed_id, "--tags", "only,these"])
+        assert result.exit_code == 0, result.output
+        assert self._tags_of(seed_id) == ["only", "these"]
+
+    def test_tags_are_stripped_and_blanks_ignored(self, cli_runner, initialized_env):
+        """Whitespace is trimmed like --tags does; an empty tag adds nothing."""
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--add-tag", "  delta  ", "--add-tag", "   "]
+        )
+        assert result.exit_code == 0, result.output
+        assert self._tags_of(seed_id) == ["alpha", "beta", "gamma", "delta"]
+        assert "1 added" in result.output
+
+
 class TestIdRefValidation:
     """Tests for seed-ID cross-reference validation on create/update.
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Callable
 
@@ -139,6 +140,74 @@ def _guard_content_replacement(seed: Seed) -> None:
         err=True,
     )
     sys.exit(1)
+
+
+def _clean_tags(raw: Sequence[str]) -> list[str]:
+    """Strip and de-duplicate requested tags, preserving the order given.
+
+    Blanks are dropped rather than rejected: ``--add-tag ''`` then shows up as
+    "0 added" like any other request that changed nothing.
+    """
+    return list(dict.fromkeys(t.strip() for t in raw if t.strip()))
+
+
+def _reject_ambiguous_tag_flags(
+    tags: str | None, add: Sequence[str], remove: Sequence[str]
+) -> None:
+    """Refuse tag flag combinations whose intent cannot be read off the command.
+
+    Two shapes are ambiguous and both exit non-zero before anything is written:
+    ``--tags`` (which replaces the whole set) alongside either additive flag,
+    and the same tag passed to both ``--add-tag`` and ``--remove-tag``. Picking
+    a precedence order for either would just make the surprise silent, which is
+    the failure this pair of flags exists to remove.
+    """
+    if tags is not None and (add or remove):
+        click.echo(
+            "Error: --tags replaces the whole tag set, so combining it with "
+            "--add-tag/--remove-tag is ambiguous.",
+            err=True,
+        )
+        click.echo("  Reset the set, or edit it -- run them as two commands.", err=True)
+        sys.exit(1)
+
+    both = [t for t in _clean_tags(add) if t in set(_clean_tags(remove))]
+    if both:
+        click.echo(
+            "Error: tag(s) passed to both --add-tag and --remove-tag: "
+            + ", ".join(both),
+            err=True,
+        )
+        sys.exit(1)
+
+
+def _apply_tag_edits(seed: Seed, add: Sequence[str], remove: Sequence[str]) -> str:
+    """Add/remove individual tags in place; return a report of what happened.
+
+    Removals run first and additions append to the tail, so tags the command
+    did not name keep their authored positions -- re-sorting would churn the
+    ``.seeds/seeds.jsonl`` diff of every touched seed for no reason.
+
+    Naming a tag the seed does not carry (or one it already has) is a silent
+    no-op, per the locked decision on this command: with an agent driving a
+    batch, erroring mid-loop is worse than finishing. The counts are what
+    actually happened, so a typo lands as "0 removed" rather than vanishing.
+    """
+    to_add = _clean_tags(add)
+    to_remove = _clean_tags(remove)
+
+    removed = sum(1 for t in to_remove if t in seed.tags)
+    if to_remove:
+        drop = set(to_remove)
+        seed.tags = [t for t in seed.tags if t not in drop]
+
+    added = 0
+    for tag in to_add:
+        if tag not in seed.tags:
+            seed.tags.append(tag)
+            added += 1
+
+    return f"Tags: {added} added, {removed} removed"
 
 
 def require_init(f: Callable[..., Any]) -> Callable[..., Any]:
@@ -846,6 +915,24 @@ def trellis(
     help="New content (replaces existing; refused once a seed has been edited)",
 )
 @click.option("--tags", help="New tags (comma-separated, replaces existing)")
+@click.option(
+    "--add-tag",
+    "add_tags",
+    multiple=True,
+    help=(
+        "Add one tag, keeping the rest (repeatable; no-op if already present; "
+        "cannot be combined with --tags)"
+    ),
+)
+@click.option(
+    "--remove-tag",
+    "remove_tags",
+    multiple=True,
+    help=(
+        "Remove one tag, keeping the rest (repeatable; silent no-op if the "
+        "seed does not carry it; cannot be combined with --tags)"
+    ),
+)
 @click.option("--append", "-a", "append_text", help="Append to content")
 @click.option(
     "--replace",
@@ -868,6 +955,8 @@ def update(
     title: str | None,
     content: str | None,
     tags: str | None,
+    add_tags: tuple[str, ...],
+    remove_tags: tuple[str, ...],
     append_text: str | None,
     replace: bool,
     allow_unknown_refs: bool,
@@ -878,11 +967,19 @@ def update(
     been edited since it was created; use --append to add to the deliberation,
     or --replace to discard it deliberately. --title and --tags carry no such
     guard: tags are working state whose normal verb is replacement.
+
+    Tags can be set wholesale with --tags or edited one at a time with
+    --add-tag/--remove-tag, which compose with each other and leave every other
+    tag untouched and in place. The two styles cannot be mixed in one command,
+    and neither can adding and removing the same tag: both are refused rather
+    than resolved by a precedence rule. Removing a tag the seed does not carry
+    is a silent no-op reported as "0 removed".
     """
     db = ctx.get_db()
     seed = get_seed_or_exit(db, seed_id)
 
     _validate_id_refs(db, [title, content, append_text], allow_unknown_refs)
+    _reject_ambiguous_tag_flags(tags, add_tags, remove_tags)
 
     if content is not None and not replace:
         _guard_content_replacement(seed)
@@ -905,12 +1002,22 @@ def update(
         seed.tags = [t.strip() for t in tags.split(",")] if tags else []
         changed = True
 
+    tag_report = None
+    if add_tags or remove_tags:
+        before = list(seed.tags)
+        tag_report = _apply_tag_edits(seed, add_tags, remove_tags)
+        # A request that matched nothing leaves updated_at alone, so it cannot
+        # arm the --content guard on a seed nobody actually edited.
+        changed = changed or seed.tags != before
+
     if not changed:
-        click.echo("No changes specified.")
+        click.echo(tag_report or "No changes specified.")
         return
 
     db.update_seed(seed)
     click.echo(f"Updated {seed_id}")
+    if tag_report:
+        click.echo(f"  {tag_report}")
 
 
 # --- Question commands ---
