@@ -1088,6 +1088,117 @@ class TestIdRefValidation:
         assert "seeds-99999" in result.output
 
 
+def _write_beads_export(project_root: Path, text: str) -> Path:
+    """Write a .beads/issues.jsonl beside the project's .seeds directory."""
+    path = project_root / ".beads" / "issues.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+class TestBeadRefValidation:
+    """Bead IDs count as known references. See bead seeds-90o.
+
+    seeds and beads share a project prefix, so citing a real bead in a seed
+    body used to read as a hallucinated seed ID and hard-fail creation.
+    """
+
+    def test_create_accepts_bead_ref(self, cli_runner, initialized_env):
+        _write_beads_export(
+            initialized_env,
+            '{"_type":"issue","id":"seeds-230","title":"A real bead"}\n',
+        )
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Test", "-c", "promoted from seeds-230"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "Created seed" in result.output
+
+    def test_update_accepts_bead_ref(self, cli_runner, env_with_seeds):
+        _write_beads_export(env_with_seeds, '{"_type":"issue","id":"seeds-230"}\n')
+        result = cli_runner.invoke(
+            main, ["update", "seed-test1", "--append", "tracked as seeds-230"]
+        )
+        assert result.exit_code == 0, result.output
+
+    def test_create_still_rejects_id_in_neither(self, cli_runner, initialized_env):
+        """The check is narrowed, not disabled."""
+        _write_beads_export(initialized_env, '{"_type":"issue","id":"seeds-230"}\n')
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Test", "-c", "see seeds-99999"]
+        )
+        assert result.exit_code != 0
+        assert "seeds-99999" in result.output
+
+    def test_create_works_with_no_beads_dir(self, cli_runner, initialized_env):
+        """Beads is optional: a project with no .beads/ is the normal case."""
+        assert not (initialized_env / ".beads").exists()
+        result = cli_runner.invoke(main, ["create", "-t", "Test", "-c", "plain body"])
+        assert result.exit_code == 0, result.output
+        assert "Error" not in result.output
+        assert "Warning" not in result.output
+
+    def test_update_works_with_no_beads_dir(self, cli_runner, env_with_seeds):
+        assert not (env_with_seeds / ".beads").exists()
+        result = cli_runner.invoke(
+            main, ["update", "seed-test1", "--append", "see seed-test2"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "Error" not in result.output
+        assert "Warning" not in result.output
+
+    def test_create_survives_corrupt_beads_export(self, cli_runner, initialized_env):
+        """A broken export degrades to 'no bead IDs known', it does not crash."""
+        _write_beads_export(initialized_env, "not json\n")
+        result = cli_runner.invoke(main, ["create", "-t", "Test", "-c", "plain body"])
+        assert result.exit_code == 0, result.output
+        assert "Created seed" in result.output
+
+    def test_corrupt_beads_export_does_not_whitelist_refs(
+        self, cli_runner, initialized_env
+    ):
+        _write_beads_export(initialized_env, "not json\n")
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Test", "-c", "see seeds-99999"]
+        )
+        assert result.exit_code != 0
+        assert "seeds-99999" in result.output
+
+    def test_beads_export_resolved_from_seeds_dir_not_cwd(self, cli_runner, tmp_path):
+        """With SEEDS_DIR pointing elsewhere, the export follows the seeds dir.
+
+        cwd holds a decoy .beads/ that must be ignored; the one beside the
+        real seeds directory is what counts.
+        """
+        project = tmp_path / "project"
+        (project / ".seeds").mkdir(parents=True)
+        _write_beads_export(project, '{"_type":"issue","id":"seeds-230"}\n')
+
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        _write_beads_export(elsewhere, '{"_type":"issue","id":"seeds-99999"}\n')
+
+        original_cwd = os.getcwd()
+        os.chdir(elsewhere)
+        try:
+            with patch("seeds.db.SEEDS_DIR", str(project / ".seeds")):
+                db = Database()
+                db.init(prefix="seeds")
+                db.close()
+                good = cli_runner.invoke(
+                    main, ["create", "-t", "Test", "-c", "see seeds-230"]
+                )
+                decoy = cli_runner.invoke(
+                    main, ["create", "-t", "Test", "-c", "see seeds-99999"]
+                )
+        finally:
+            os.chdir(original_cwd)
+
+        assert good.exit_code == 0, good.output
+        assert decoy.exit_code != 0
+        assert "seeds-99999" in decoy.output
+
+
 class TestQuestionCommands:
     """Tests for question-related commands (question-seeds + relationships)."""
 
