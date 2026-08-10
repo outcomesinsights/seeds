@@ -38,9 +38,18 @@ repos:
         pass_filenames: false
         always_run: true
 
-      # --- pre-push: run the same checks CI runs, so CI on remote is the
-      # last line of defense, not the first. Matches the lint+test jobs in
-      # .github/workflows/ci.yml (modulo the Python-version matrix).
+      # --- pre-push: run the same checks CI runs, so CI on remote is the last
+      # line of defense, not the first. Covers ALL THREE jobs in
+      # .github/workflows/ci.yml — lint, test (all four Python versions), and
+      # nix. Measured ~79s on titan for the full stage.
+      #
+      # The single deliberate exception: CI passes --cov to pytest, this does
+      # not. There is no fail-under anywhere, so coverage is report-only and
+      # gates nothing; running it here would cost time and change no outcome.
+      #
+      # If you add a step to ci.yml, add it here too — the contract this
+      # section exists to uphold is "if pre-push passes, CI passes," and it is
+      # only worth anything while it stays literally true.
       - id: mypy-pre-push
         name: mypy (strict)
         entry: uv run mypy src/
@@ -68,6 +77,35 @@ repos:
       - id: pytest-pre-push
         name: pytest (full suite)
         entry: uv run pytest
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+
+      # ci.yml runs pytest across 3.10-3.13; the hook above only exercises the
+      # local interpreter. Cover the rest here so "pre-push passed" actually
+      # implies "CI will pass" — otherwise three of the four supported versions
+      # are unverified until billed CI minutes discover the problem.
+      # Measured on titan: ~29s for the three. 3.13 is deliberately omitted;
+      # it is the local interpreter and is already covered above.
+      - id: pytest-matrix-pre-push
+        name: pytest (3.10, 3.11, 3.12)
+        entry: bash -c 'for v in 3.10 3.11 3.12; do echo "--- python $v ---"; uv run --python "$v" --no-sync pytest -q || exit 1; done'
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+
+      # Mirrors the `nix` job in ci.yml verbatim. Flakes are enabled globally
+      # in nix.conf here, so no --extra-experimental-features — same as CI; a
+      # misconfigured local nix should fail loudly rather than be papered over.
+      #
+      # Skips cleanly when nix is absent: this repo is public, and a
+      # contributor without nix must not be blocked from pushing. Measured
+      # ~7s warm; the first run after a flake.lock change is much slower.
+      - id: nix-pre-push
+        name: nix flake check (matches ci.yml nix job)
+        entry: bash -c 'command -v nix >/dev/null 2>&1 || { echo "nix not on PATH — skipping (CI still runs this job)"; exit 0; }; nix flake check --all-systems --no-build && nix flake check --print-build-logs && nix run . -- --version'
         language: system
         stages: [pre-push]
         pass_filenames: false
