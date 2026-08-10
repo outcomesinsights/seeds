@@ -58,19 +58,19 @@ The core entity. An idea at any stage of development.
 ```python
 @dataclass
 class Seed:
-    id: str                    # Hash-based with optional hierarchy, e.g., "seed-a1b2" or "seed-a1b2.1"
-    title: str                 # Brief description
-    content: str               # Full description/exploration (AI updates directly)
-    status: SeedStatus         # Lifecycle state
-    seed_type: SeedType        # Categorization
-    tags: list[str]            # Freeform; CLI suggests existing tags
+    id: str  # Hash-based with optional hierarchy, e.g., "seed-a1b2" or "seed-a1b2.1"
+    title: str  # Brief description
+    content: str  # Full description/exploration (AI updates directly)
+    status: SeedStatus  # Lifecycle state
+    seed_type: SeedType  # Categorization
+    tags: list[str]  # Freeform; CLI suggests existing tags
 
     # Timestamps
     created_at: datetime
     updated_at: datetime
 
     # Relationships
-    related_to: list[str]      # Loose coupling to other seeds
+    related_to: list[str]  # Loose coupling to other seeds
 ```
 
 **Parent-child via ID convention (like Beads):**
@@ -87,11 +87,11 @@ class Seed:
 
 ```python
 class SeedStatus(Enum):
-    CAPTURED = "captured"      # Just jotted down, unexplored
-    EXPLORING = "exploring"    # Actively being developed
-    DEFERRED = "deferred"      # Backlogged for later
-    RESOLVED = "resolved"      # Reached a conclusion
-    ABANDONED = "abandoned"    # Decided not to pursue
+    CAPTURED = "captured"  # Just jotted down, unexplored
+    EXPLORING = "exploring"  # Actively being developed
+    DEFERRED = "deferred"  # Backlogged for later
+    RESOLVED = "resolved"  # Reached a conclusion
+    ABANDONED = "abandoned"  # Decided not to pursue
 ```
 
 **Lifecycle flow:**
@@ -111,11 +111,11 @@ Any state → ABANDONED (explicit rejection)
 
 ```python
 class SeedType(Enum):
-    IDEA = "idea"              # General thought
-    QUESTION = "question"      # Something needing an answer
-    DECISION = "decision"      # A choice made
-    EXPLORATION = "exploration" # Research/investigation notes
-    CONCERN = "concern"        # Risk or worry
+    IDEA = "idea"  # General thought
+    QUESTION = "question"  # Something needing an answer
+    DECISION = "decision"  # A choice made
+    EXPLORATION = "exploration"  # Research/investigation notes
+    CONCERN = "concern"  # Risk or worry
 ```
 
 ### Question (Attached to Seeds)
@@ -124,10 +124,10 @@ class SeedType(Enum):
 @dataclass
 class Question:
     id: str
-    seed_id: str               # Parent seed
-    text: str                  # The question
-    answer: str | None         # Answer when resolved
-    status: QuestionStatus     # open | answered | deferred
+    seed_id: str  # Parent seed
+    text: str  # The question
+    answer: str | None  # Answer when resolved
+    status: QuestionStatus  # open | answered | deferred
     created_at: datetime
     answered_at: datetime | None
 ```
@@ -357,6 +357,7 @@ Hash-based IDs to prevent collisions:
 ```python
 import hashlib
 import time
+
 
 def generate_id(prefix: str = "seed") -> str:
     """Generate a short hash-based ID like 'seed-a1b2'."""
