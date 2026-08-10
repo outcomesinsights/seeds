@@ -248,8 +248,14 @@ def content_is_covered(db_content: str, disk_content: str) -> bool:
 
 
 def first_difference(db_content: str, disk_content: str) -> int:
-    """Index of the first character where the two bodies part ways."""
-    for i, (a, b) in enumerate(zip(db_content, disk_content)):
+    """Index of the first character where the two bodies part ways.
+
+    ``strict=False`` is deliberate: the two bodies routinely differ in length
+    — one being a prefix of the other is the common, benign case — so zip must
+    stop at the shorter. The fallback below reports that shared length as the
+    divergence point.
+    """
+    for i, (a, b) in enumerate(zip(db_content, disk_content, strict=False)):
         if a != b:
             return i
     return min(len(db_content), len(disk_content))

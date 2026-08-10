@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import functools
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import click
 
