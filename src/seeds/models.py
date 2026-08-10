@@ -376,6 +376,13 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# Sentinel meaning "caller supplied no updated_at". A freshly built seed mirrors
+# created_at instead of taking a second clock reading, so that a never-edited
+# seed satisfies ``updated_at == created_at`` exactly (two now_utc() calls drift
+# by microseconds, which would make has_been_edited() true for every new seed).
+UNSET_TIMESTAMP = datetime.min.replace(tzinfo=timezone.utc)
+
+
 @dataclass
 class Seed:
     """A seed is an idea at any stage of development."""
@@ -387,9 +394,14 @@ class Seed:
     seed_type: SeedType = SeedType.IDEA
     tags: list[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=now_utc)
-    updated_at: datetime = field(default_factory=now_utc)
+    updated_at: datetime = UNSET_TIMESTAMP
     resolved_at: datetime | None = None
     resolution: str = ""
+
+    def __post_init__(self) -> None:
+        """Default updated_at to created_at rather than a second clock read."""
+        if self.updated_at == UNSET_TIMESTAMP:
+            self.updated_at = self.created_at
 
     @property
     def parent_id(self) -> str | None:
@@ -399,6 +411,16 @@ class Seed:
     def is_terminal(self) -> bool:
         """Check if seed is in a terminal state (resolved or abandoned)."""
         return self.status in (SeedStatus.RESOLVED, SeedStatus.ABANDONED)
+
+    def has_been_edited(self) -> bool:
+        """Whether this seed has been written to since it was created.
+
+        Every interactive write path bumps ``updated_at`` (see
+        ``Database.update_seed``), so an untouched seed still carries its
+        creation timestamp. Used to tell a seed that has accumulated
+        deliberation from one that only ever held its original capture.
+        """
+        return self.updated_at != self.created_at
 
 
 @dataclass

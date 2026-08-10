@@ -982,6 +982,155 @@ class TestUpdateCommand:
         assert "No changes specified" in result.output
 
 
+class TestUpdateContentGuard:
+    """Tests for the --content guard against discarding deliberation.
+
+    The gate is whether the seed has been edited since creation, never how
+    much content it holds -- see the module docstring on ``update``.
+    """
+
+    def _create(self, cli_runner, content="Original capture"):
+        """Create a seed via the CLI and return its minted ID."""
+        result = cli_runner.invoke(
+            main, ["create", "--title", "Guarded seed", "--content", content]
+        )
+        assert result.exit_code == 0, result.output
+        return _extract_created_id(result.output)
+
+    def _content_of(self, seed_id):
+        db = Database()
+        try:
+            return db.get_seed(seed_id).content
+        finally:
+            db.close()
+
+    def test_virgin_seed_content_replaced_silently(self, cli_runner, initialized_env):
+        """A seed never edited since creation accepts -c with no complaint."""
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(main, ["update", seed_id, "-c", "replaced"])
+        assert result.exit_code == 0, result.output
+        assert result.stderr == ""
+        assert self._content_of(seed_id) == "replaced"
+
+        shown = cli_runner.invoke(main, ["show", seed_id])
+        assert "replaced" in shown.output
+
+    def test_edited_seed_content_refused(self, cli_runner, initialized_env):
+        """Once appended to, -c exits non-zero and changes nothing."""
+        seed_id = self._create(cli_runner)
+        assert cli_runner.invoke(main, ["update", seed_id, "-a", "more"]).exit_code == 0
+        before = self._content_of(seed_id)
+
+        result = cli_runner.invoke(main, ["update", seed_id, "-c", "wiped"])
+        assert result.exit_code != 0
+        assert self._content_of(seed_id) == before
+
+        shown = cli_runner.invoke(main, ["show", seed_id])
+        assert "wiped" not in shown.output
+        assert "Original capture" in shown.output
+
+    def test_refusal_names_append_and_replace(self, cli_runner, initialized_env):
+        """The refusal points at both the safe verb and the override."""
+        seed_id = self._create(cli_runner)
+        cli_runner.invoke(main, ["update", seed_id, "-a", "more"])
+
+        result = cli_runner.invoke(main, ["update", seed_id, "-c", "wiped"])
+        assert "--append" in result.stderr
+        assert "--replace" in result.stderr
+
+    def test_refusal_reports_character_count_and_first_line(
+        self, cli_runner, initialized_env
+    ):
+        """The refusal quantifies the loss and shows what it would discard."""
+        seed_id = self._create(cli_runner, content="First line here\nSecond line")
+        cli_runner.invoke(main, ["update", seed_id, "-a", "more"])
+
+        result = cli_runner.invoke(main, ["update", seed_id, "-c", "x"])
+        assert re.search(r"[0-9]+ char", result.stderr), result.stderr
+        assert "First line here" in result.stderr
+        assert "Second line" not in result.stderr
+
+    def test_refusal_warns_that_replace_leaves_git_history(
+        self, cli_runner, initialized_env
+    ):
+        """--replace stops the bleeding; it does not scrub git history."""
+        seed_id = self._create(cli_runner)
+        cli_runner.invoke(main, ["update", seed_id, "-a", "more"])
+
+        result = cli_runner.invoke(main, ["update", seed_id, "-c", "wiped"])
+        assert "git history" in result.stderr
+
+    def test_replace_flag_overrides_the_guard(self, cli_runner, initialized_env):
+        """--replace performs the discard the bare -c refused."""
+        seed_id = self._create(cli_runner)
+        cli_runner.invoke(main, ["update", seed_id, "-a", "more"])
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "-c", "wiped", "--replace"]
+        )
+        assert result.exit_code == 0, result.output
+        assert self._content_of(seed_id) == "wiped"
+
+    def test_guard_fires_for_any_edit_not_just_append(
+        self, cli_runner, initialized_env
+    ):
+        """The gate is updated_at, so a status change arms it too."""
+        seed_id = self._create(cli_runner)
+        assert cli_runner.invoke(main, ["explore", seed_id]).exit_code == 0
+
+        result = cli_runner.invoke(main, ["update", seed_id, "-c", "wiped"])
+        assert result.exit_code != 0
+        assert self._content_of(seed_id) == "Original capture"
+
+    def test_empty_content_seed_can_be_filled_after_an_edit(
+        self, cli_runner, initialized_env
+    ):
+        """Nothing accumulated means nothing to protect: -c just works."""
+        jotted = cli_runner.invoke(main, ["jot", "A bodyless thought"])
+        seed_id = _extract_jot_id(jotted.output)
+        assert cli_runner.invoke(main, ["explore", seed_id]).exit_code == 0
+
+        result = cli_runner.invoke(main, ["update", seed_id, "-c", "the body"])
+        assert result.exit_code == 0, result.output
+        assert self._content_of(seed_id) == "the body"
+
+    def test_append_unaffected_on_edited_seed(self, cli_runner, initialized_env):
+        """--append keeps working after the seed has deliberation in it."""
+        seed_id = self._create(cli_runner)
+        first = cli_runner.invoke(main, ["update", seed_id, "-a", "first"])
+        assert first.exit_code == 0, first.output
+
+        result = cli_runner.invoke(main, ["update", seed_id, "-a", "second"])
+        assert result.exit_code == 0, result.output
+        content = self._content_of(seed_id)
+        assert content == "Original capture\n\nfirst\n\nsecond"
+
+    def test_title_has_no_guard(self, cli_runner, initialized_env):
+        """--title stays freely replaceable on an edited seed."""
+        seed_id = self._create(cli_runner)
+        cli_runner.invoke(main, ["update", seed_id, "-a", "more"])
+
+        result = cli_runner.invoke(main, ["update", seed_id, "--title", "Renamed"])
+        assert result.exit_code == 0, result.output
+
+        db = Database()
+        assert db.get_seed(seed_id).title == "Renamed"
+        db.close()
+
+    def test_tags_have_no_guard(self, cli_runner, initialized_env):
+        """--tags replacement stays unguarded: tags are working state."""
+        seed_id = self._create(cli_runner)
+        cli_runner.invoke(main, ["update", seed_id, "-a", "more"])
+
+        result = cli_runner.invoke(main, ["update", seed_id, "--tags", "a,b"])
+        assert result.exit_code == 0, result.output
+
+        db = Database()
+        assert db.get_seed(seed_id).tags == ["a", "b"]
+        db.close()
+
+
 class TestIdRefValidation:
     """Tests for seed-ID cross-reference validation on create/update.
 

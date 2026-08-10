@@ -78,6 +78,7 @@ Seeds should capture the **journey**, not just conclusions. When investigating:
 - `seeds defer <id>` - Move to backlog
 - `seeds abandon <id> --reason="..."` - Abandon with reason
 - `seeds update <id> --append="..."` - Add to content
+- `seeds update <id> --content="..."` - REPLACES the whole body; refused once a seed has been edited (use `--append`, or `--replace` to discard deliberately)
 - `seeds answer <seed-id> "..."` - Answer a question-seed
 
 ### Viewing
