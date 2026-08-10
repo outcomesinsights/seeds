@@ -20,7 +20,8 @@ from seeds.models import (
     Seed,
     SeedStatus,
     SeedType,
-    find_id_refs,
+    find_id_ref_candidates,
+    is_allowlisted_prose,
     parse_since,
     sanitize_prefix,
 )
@@ -63,30 +64,43 @@ pass_context = click.make_pass_decorator(Context, ensure=True)
 def _validate_id_refs(
     db: Database, texts: list[str | None], allow_unknown: bool
 ) -> None:
-    """Verify any project-prefixed IDs in ``texts`` resolve to a seed or a bead.
+    """Verify every project-prefixed token in ``texts`` names something real.
 
     Catches the common failure where an agent drafts a body like
-    ``see seeds-117`` with a hallucinated ID. Exits with a clear error
-    listing the unknown IDs unless ``allow_unknown`` is true.
+    ``see seeds-117`` — or, now that IDs are base36, ``see seeds-zq4x`` — with
+    an ID that never existed. Each ``<prefix>-…`` token is a candidate, checked
+    in turn against:
 
-    Beads share the project prefix, so a reference is also accepted when it
-    names a bead in the sibling ``.beads/`` export — recording bead lineage in
-    a seed is a supported workflow, not a hallucination. Projects without
-    beads are unaffected; see :mod:`seeds.beads`.
+    1. **seed IDs** — the database;
+    2. **bead IDs** — the sibling ``.beads/`` export, since beads share the
+       project prefix and recording bead lineage in a seed is a supported
+       workflow, not a hallucination (projects without beads are unaffected;
+       see :mod:`seeds.beads`);
+    3. **prose** — :data:`~seeds.models.PROSE_REF_ALLOWLIST`, because
+       ``<prefix>-<word>`` is ordinary English ("a seeds-native workflow") and
+       no rule of shape separates it from a base36 hash.
+
+    Anything still unmatched is a hallucination: exit with an error listing it,
+    unless ``allow_unknown`` is true.
     """
     if allow_unknown:
         return
     prefix = db.get_prefix()
-    refs: set[str] = set()
+    candidates: set[str] = set()
     for text in texts:
         if not text:
             continue
-        for ref in find_id_refs(text, prefix):
-            refs.add(ref)
-    if not refs:
+        candidates.update(find_id_ref_candidates(text, prefix))
+    if not candidates:
         return
     bead_ids = load_bead_ids(db.path.parent)
-    unknown = sorted(r for r in refs if r not in bead_ids and db.get_seed(r) is None)
+    unknown = sorted(
+        ref
+        for ref in candidates
+        if db.get_seed(ref) is None
+        and ref not in bead_ids
+        and not is_allowlisted_prose(ref, prefix)
+    )
     if unknown:
         click.echo(
             "Error: seed body references unknown IDs: " + ", ".join(unknown),
@@ -94,6 +108,11 @@ def _validate_id_refs(
         )
         click.echo(
             "  Fix the references, or pass --allow-unknown-refs to override.",
+            err=True,
+        )
+        click.echo(
+            "  If one is prose rather than an ID, add its suffix to"
+            " PROSE_REF_ALLOWLIST in seeds/models.py.",
             err=True,
         )
         sys.exit(1)

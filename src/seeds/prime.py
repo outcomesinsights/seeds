@@ -70,7 +70,7 @@ Seeds should capture the **journey**, not just conclusions. When investigating:
 ### Creating
 - `seeds create --title="..." --type=idea --tags=foo,bar` - Full creation
 - `seeds create --title="..." --parent=<id>` - Create child seed
-- Bodies referencing unknown `<prefix>-N` IDs are rejected; existing seeds and beads (from a sibling `.beads/issues.jsonl`) both count as known; pass `--allow-unknown-refs` to override
+- Bodies referencing unknown `<prefix>-...` IDs are rejected, base36 hash IDs included; existing seeds, beads (from a sibling `.beads/issues.jsonl`) and a short allowlist of prose terms all count as known; pass `--allow-unknown-refs` to override
 
 ### Updating
 - `seeds explore <id>` - Start working on a seed
