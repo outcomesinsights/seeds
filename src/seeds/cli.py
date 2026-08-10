@@ -98,6 +98,49 @@ def _validate_id_refs(
         sys.exit(1)
 
 
+def _guard_content_replacement(seed: Seed) -> None:
+    """Refuse ``update --content`` when it would discard accumulated thinking.
+
+    ``-c`` sits one keystroke from ``-a`` and replaces the whole body without
+    warning, which for a deliberation store is a sharp edge pointed at the
+    thing being kept. The gate is whether deliberation *exists*, never how much
+    of it there is: a short seed refined over a week deserves more protection
+    than a long one mispasted ten seconds ago.
+
+    A seed still carrying its creation timestamp has never been added to, so
+    ``-c`` proceeds silently -- that is the botched-capture and encoding-repair
+    case. So does a seed with an empty body, where there is nothing to lose.
+    Anything else exits non-zero; ``--replace`` is the deliberate override.
+    """
+    if not seed.content.strip() or not seed.has_been_edited():
+        return
+
+    first_line = seed.content.strip().splitlines()[0]
+    if len(first_line) > 72:
+        first_line = first_line[:69] + "..."
+
+    click.echo(
+        f"Error: {seed.id} has been edited since it was created -- --content "
+        f"would discard {len(seed.content)} characters of deliberation.",
+        err=True,
+    )
+    click.echo(f"  Would discard: {first_line}", err=True)
+    click.echo(
+        f'  Add to it instead:      seeds update {seed.id} --append "..."',
+        err=True,
+    )
+    click.echo(
+        f'  Discard it on purpose:  seeds update {seed.id} --content "..." --replace',
+        err=True,
+    )
+    click.echo(
+        "  --replace does not erase anything: the old body survives in git "
+        "history (.seeds/seeds.jsonl) and needs separate scrubbing.",
+        err=True,
+    )
+    sys.exit(1)
+
+
 def require_init(f: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator to require seeds to be initialized."""
 
@@ -797,9 +840,22 @@ def trellis(
 @main.command()
 @click.argument("seed_id")
 @click.option("--title", "-t", help="New title")
-@click.option("--content", "-c", help="New content (replaces existing)")
+@click.option(
+    "--content",
+    "-c",
+    help="New content (replaces existing; refused once a seed has been edited)",
+)
 @click.option("--tags", help="New tags (comma-separated, replaces existing)")
 @click.option("--append", "-a", "append_text", help="Append to content")
+@click.option(
+    "--replace",
+    is_flag=True,
+    help=(
+        "Let --content discard content accumulated since the seed was created. "
+        "For redactions only -- and it does not finish the job: the old body "
+        "stays in git history and needs separate scrubbing."
+    ),
+)
 @click.option(
     "--allow-unknown-refs",
     is_flag=True,
@@ -813,13 +869,23 @@ def update(
     content: str | None,
     tags: str | None,
     append_text: str | None,
+    replace: bool,
     allow_unknown_refs: bool,
 ) -> None:
-    """Update a seed's fields."""
+    """Update a seed's fields.
+
+    --content replaces the body wholesale, so it is refused on a seed that has
+    been edited since it was created; use --append to add to the deliberation,
+    or --replace to discard it deliberately. --title and --tags carry no such
+    guard: tags are working state whose normal verb is replacement.
+    """
     db = ctx.get_db()
     seed = get_seed_or_exit(db, seed_id)
 
     _validate_id_refs(db, [title, content, append_text], allow_unknown_refs)
+
+    if content is not None and not replace:
+        _guard_content_replacement(seed)
 
     changed = False
 

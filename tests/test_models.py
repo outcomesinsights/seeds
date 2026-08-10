@@ -1,6 +1,6 @@
 """Tests for seeds data models."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -160,6 +160,40 @@ class TestSeed:
         for status in [SeedStatus.CAPTURED, SeedStatus.EXPLORING, SeedStatus.DEFERRED]:
             seed = Seed(id="seed-test", title="Test", status=status)
             assert seed.is_terminal() is False, f"{status} should not be terminal"
+
+    def test_new_seed_updated_at_mirrors_created_at(self):
+        """A seed built without timestamps carries one instant, not two.
+
+        Taking a second clock reading for updated_at would drift by
+        microseconds and make has_been_edited() true for every new seed.
+        """
+        seed = Seed(id="seed-test", title="Test")
+        assert seed.updated_at == seed.created_at
+
+    def test_explicit_created_at_is_mirrored_too(self):
+        """An explicit created_at with no updated_at still yields one instant."""
+        created = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        seed = Seed(id="seed-test", title="Test", created_at=created)
+        assert seed.updated_at == created
+
+    def test_explicit_updated_at_is_preserved(self):
+        """An explicitly supplied updated_at is never overwritten."""
+        created = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        updated = datetime(2026, 2, 2, tzinfo=timezone.utc)
+        seed = Seed(
+            id="seed-test", title="Test", created_at=created, updated_at=updated
+        )
+        assert seed.updated_at == updated
+
+    def test_has_been_edited_false_for_new_seed(self):
+        """A seed that has never been written to reads as unedited."""
+        assert Seed(id="seed-test", title="Test").has_been_edited() is False
+
+    def test_has_been_edited_true_once_updated_at_moves(self):
+        """Any bump of updated_at marks the seed as edited."""
+        seed = Seed(id="seed-test", title="Test")
+        seed.updated_at = seed.created_at + timedelta(seconds=1)
+        assert seed.has_been_edited() is True
 
 
 class TestRelationType:
