@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from seeds.db import SEEDS_DIR, Database, recover_prefix_from_id
 from seeds.models import (
@@ -165,18 +165,232 @@ def seed_to_dict(seed: Seed, db: Database) -> dict[str, Any]:
     }
 
 
-def export_to_jsonl(db: Database, output_path: Path | None = None) -> Path:
+# How much of a divergent body to show in the refusal. Enough to recognise
+# which deliberation is at stake; the file itself has the rest.
+EXCERPT_LIMIT = 200
+
+DivergenceKind = Literal["missing", "content", "unreadable"]
+
+
+@dataclass(frozen=True)
+class Divergence:
+    """An on-disk JSONL record the export would destroy, that the DB never saw.
+
+    - ``missing``: the record is on disk and the database has no such seed, so
+      rewriting the file from the database would simply delete it.
+    - ``content``: the seed exists in both, but the database's body does not
+      contain the on-disk body (see :func:`content_is_covered`), so overwriting
+      would drop text that only ever existed in the file.
+    - ``unreadable``: the line is not valid JSON — most often unresolved git
+      conflict markers. Nothing can be said about what it holds, which is
+      exactly why it must not be overwritten.
+
+    ``seed_id`` is the record's ``id``, or ``"<line N>"`` for an ``unreadable``
+    line where no ID could be read. Either way it locates the record.
+    """
+
+    seed_id: str
+    kind: DivergenceKind
+    detail: str
+    on_disk: str = ""
+    in_db: str = ""
+
+
+class DivergentExportError(Exception):
+    """Raised instead of overwriting JSONL records the database never saw.
+
+    Carries the full :class:`Divergence` list so the CLI can name every
+    affected seed. The file is untouched when this is raised.
+    """
+
+    def __init__(self, output_path: Path, divergences: list[Divergence]) -> None:
+        self.output_path = output_path
+        self.divergences = divergences
+        super().__init__(
+            f"{output_path} holds {len(divergences)} record(s) the database has "
+            "never seen; exporting would destroy them"
+        )
+
+
+def content_is_covered(db_content: str, disk_content: str) -> bool:
+    """Is the on-disk body fully contained in what the database is about to write?
+
+    Divergence is decided on CONTENT, never on ``updated_at``. Timestamps only
+    answer "which is newer", and they are the input already known to be
+    untrustworthy (clock skew, hand edits, merge resolutions). The question
+    that actually matters before a destructive rewrite is "does the disk hold
+    text the database has never seen", which is a content question.
+
+    A flat "content differs -> refuse" would be unusable: the database is
+    normally *ahead* of the file, which is the whole reason to flush. The test
+    that separates "ahead" from "diverged" leans on ``seeds update -a`` being
+    the normal editing verb for a seed body:
+
+    - identical bodies -> nothing to lose.
+    - the database's body **starts with** the file's -> the database is the
+      file's version plus appends; overwriting loses nothing.
+    - anything else -> the file holds text the database never had. Refuse.
+
+    Validated against this project's own JSONL history: of 42 content-changing
+    edits across 67 commits, 41 were literal appends. The single exception was
+    an in-place rewrite that prepended a header to an existing body — precisely
+    the kind of edit an operator should be told about.
+
+    The stripped fallback exists because ``seeds update -a`` strips the
+    *combined* body (cli.py), so appending to a body with leading whitespace
+    yields a result that is not a literal prefix of it even though no text was
+    lost. Whitespace is not deliberation. It cannot mask real loss: any actual
+    character present on disk and absent from the database still fails.
+    """
+    if db_content.startswith(disk_content):
+        return True
+    return db_content.strip().startswith(disk_content.strip())
+
+
+def first_difference(db_content: str, disk_content: str) -> int:
+    """Index of the first character where the two bodies part ways."""
+    for i, (a, b) in enumerate(zip(db_content, disk_content)):
+        if a != b:
+            return i
+    return min(len(db_content), len(disk_content))
+
+
+def _excerpt(text: str) -> str:
+    """One-line, quoted, length-capped rendering of a body for the refusal."""
+    if len(text) <= EXCERPT_LIMIT:
+        return repr(text)
+    return f"{text[:EXCERPT_LIMIT]!r}... (+{len(text) - EXCERPT_LIMIT} more chars)"
+
+
+def find_divergence(db: Database, output_path: Path) -> list[Divergence]:
+    """Find records in ``output_path`` that rewriting it from ``db`` would destroy.
+
+    Read-only. Returns an empty list when the file is absent or when every
+    record on disk is accounted for by the database.
+
+    Scope: whole records (present on disk, absent from the database) and the
+    ``content`` field. Title, tags, status and resolution are deliberately NOT
+    guarded — replacement is their normal verb (``seeds update --title``,
+    ``--tags``, ``seeds resolve``, ``seeds trellis`` all overwrite in place), so
+    guarding them would refuse ordinary local editing. ``content`` is the field
+    that accumulates deliberation, and the one this tool exists to not lose.
+
+    Records are checked in file order without de-duplicating IDs, so a botched
+    merge that left two lines for the same seed is judged line by line.
+    """
+    if not output_path.exists():
+        return []
+
+    in_db = {seed.id: seed.content for seed in db.list_seeds(include_terminal=True)}
+
+    divergences: list[Divergence] = []
+    with open(output_path) as f:
+        for lineno, raw in enumerate(f, start=1):
+            if not raw.strip():
+                continue
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                divergences.append(
+                    Divergence(
+                        seed_id=f"<line {lineno}>",
+                        kind="unreadable",
+                        detail=(
+                            f"line {lineno} is not valid JSON ({exc.msg}) — "
+                            "unresolved merge conflict markers are the usual cause"
+                        ),
+                        on_disk=_excerpt(raw.strip()),
+                    )
+                )
+                continue
+
+            seed_id = data.get("id")
+            if seed_id is None:
+                divergences.append(
+                    Divergence(
+                        seed_id=f"<line {lineno}>",
+                        kind="unreadable",
+                        detail=f"line {lineno} is a JSON record with no 'id' field",
+                        on_disk=_excerpt(raw.strip()),
+                    )
+                )
+                continue
+
+            if seed_id not in in_db:
+                divergences.append(
+                    Divergence(
+                        seed_id=seed_id,
+                        kind="missing",
+                        detail=(
+                            "present on disk, absent from the database — "
+                            "rewriting the file would delete this record"
+                        ),
+                        on_disk=_excerpt(data.get("content") or ""),
+                    )
+                )
+                continue
+
+            disk_content = data.get("content") or ""
+            db_content = in_db[seed_id]
+            if content_is_covered(db_content, disk_content):
+                continue
+
+            divergences.append(
+                Divergence(
+                    seed_id=seed_id,
+                    kind="content",
+                    detail=(
+                        "the database's content does not contain the on-disk "
+                        "content (they diverge at character "
+                        f"{first_difference(db_content, disk_content)})"
+                    ),
+                    on_disk=_excerpt(disk_content),
+                    in_db=_excerpt(db_content),
+                )
+            )
+
+    return divergences
+
+
+def export_to_jsonl(
+    db: Database,
+    output_path: Path | None = None,
+    *,
+    allow_divergence: bool = False,
+) -> Path:
     """Export all seeds to JSONL format (v2 with relationships).
+
+    The file is rewritten wholesale from the database, so it is checked first:
+    any record on disk that the database cannot account for
+    (:func:`find_divergence`) raises :class:`DivergentExportError` and nothing
+    is written. Refusing is deliberate — see the parent decision on seeds-agk:
+    auto-merging divergent bodies invents a resolution nobody reviews, and a
+    sidecar backup is a consolation prize for still destroying the file. The
+    JSONL is git-tracked; the operator resolves it.
+
+    Guarding is the default so no future call site can forget it. Pass
+    ``allow_divergence=True`` only where the whole-file rewrite *is* the point
+    and the divergence is self-inflicted and already reported — currently only
+    ``seeds rename-prefix``, which renumbers every ID at once.
 
     Args:
         db: Database instance
         output_path: Path to output file. If None, uses .seeds/seeds.jsonl
+        allow_divergence: Skip the guard and overwrite unconditionally.
 
     Returns:
         Path to the output file
+
+    Raises:
+        DivergentExportError: The file holds records the database never saw.
     """
     if output_path is None:
         output_path = Path.cwd() / SEEDS_DIR / JSONL_FILE
+
+    if not allow_divergence:
+        divergences = find_divergence(db, output_path)
+        if divergences:
+            raise DivergentExportError(output_path, divergences)
 
     # Get all seeds (including terminal states)
     seeds = db.list_seeds(include_terminal=True)

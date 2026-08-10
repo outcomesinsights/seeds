@@ -13,7 +13,7 @@ import click
 from seeds import __version__
 from seeds.beads import load_bead_ids
 from seeds.db import SEEDS_DIR, Database
-from seeds.export import ImportResult
+from seeds.export import DivergentExportError, ImportResult
 from seeds.models import (
     DEFAULT_PREFIX,
     RelationType,
@@ -1298,16 +1298,86 @@ def import_(ctx: Context, path: str | None) -> None:
     click.echo(_format_import_summary(result))
 
 
+def _format_divergence_error(exc: DivergentExportError) -> str:
+    """Render a refused export so the operator can act on it without guessing.
+
+    Names every affected seed, shows what each side holds, and states the two
+    ways forward. seeds did not write the on-disk content, so it cannot say
+    where it came from — it can only say that overwriting would destroy it.
+    """
+    path = exc.output_path
+    lines = [
+        f"Error: refusing to overwrite {path} — it holds content the database "
+        "has never seen.",
+        "",
+    ]
+    for div in exc.divergences:
+        lines.append(f"  {div.seed_id}: {div.detail}")
+        if div.on_disk:
+            lines.append(f"      on disk: {div.on_disk}")
+        if div.in_db:
+            lines.append(f"      in db:   {div.in_db}")
+    lines.extend(
+        [
+            "",
+            "Nothing was written; the file is byte-for-byte unchanged.",
+            "",
+            "seeds did not write that content, so it cannot tell you where it "
+            "came from —",
+            "a resolved git conflict, a hand edit, or a peer's export are the "
+            "usual sources.",
+            "",
+            "To keep it, fold it into the database, then re-run the sync:",
+            "  # see what arrived",
+            f"  git diff -- {path}",
+        ]
+    )
+    kinds = {div.kind for div in exc.divergences}
+    if "missing" in kinds:
+        lines.append("  # absorb the records the database is missing")
+        lines.append(f"  seeds import {path}")
+    if "content" in kinds:
+        lines.append("  # compare, then append the text that only exists on disk")
+        lines.append("  seeds show <id>")
+        lines.append("  seeds update <id> -a '<the text from disk>'")
+    if "unreadable" in kinds:
+        lines.append("  # unreadable lines have to be repaired in the file by hand")
+    lines.extend(
+        [
+            "",
+            "Only if that content is genuinely disposable — this destroys it:",
+            "  seeds sync --allow-divergence",
+        ]
+    )
+    return "\n".join(lines)
+
+
 @main.command()
 @click.option("--flush-only", is_flag=True, help="Only export to JSONL (no git ops)")
+@click.option(
+    "--allow-divergence",
+    is_flag=True,
+    help=(
+        "Overwrite .seeds/seeds.jsonl even when it holds records the database "
+        "cannot account for. Destroys that content. Off by default; use only "
+        "after reading what the refusal names."
+    ),
+)
 @pass_context
-def sync(ctx: Context, flush_only: bool) -> None:
+def sync(ctx: Context, flush_only: bool, allow_divergence: bool) -> None:
     """Round-trip seeds with JSONL: import (LWW) then export.
 
     The import half rehydrates any seeds present in .seeds/seeds.jsonl but
     missing or staler in the DB, without clobbering fresher DB rows or
     deleting DB-only seeds. Pass --flush-only to skip the import and export
     only (the original behaviour).
+
+    The export half rewrites the file wholesale, so it first checks that the
+    database accounts for everything already on disk and refuses rather than
+    destroying a record it has never seen — a resolved merge conflict, a hand
+    edit, or a peer's seed that no import absorbed. --flush-only gets the same
+    check: skipping the import does not make the overwrite any less
+    destructive. Pass --allow-divergence to overwrite anyway.
     """
     db = ctx.get_db()
 
@@ -1317,7 +1387,11 @@ def sync(ctx: Context, flush_only: bool) -> None:
         import_result = import_from_jsonl(db)
         click.echo(_format_import_summary(import_result))
 
-    output_path = export_to_jsonl(db)
+    try:
+        output_path = export_to_jsonl(db, allow_divergence=allow_divergence)
+    except DivergentExportError as exc:
+        click.echo(_format_divergence_error(exc), err=True)
+        sys.exit(1)
 
     # Count seeds
     seeds = db.list_seeds(include_terminal=True)
@@ -1606,7 +1680,13 @@ def rename_prefix(
 
     from seeds.export import export_to_jsonl
 
-    output_path = export_to_jsonl(db)
+    # The only sanctioned bypass of the divergence guard. A prefix rename
+    # renumbers every ID at once, so every record on disk is "absent from the
+    # database" by construction — the guard would fire on all of them and say
+    # nothing the operator has not just been shown above, ID by ID. The
+    # divergence here is self-inflicted, already reported, and the database was
+    # backed up before the rename.
+    output_path = export_to_jsonl(db, allow_divergence=True)
     click.echo(f"\nRe-exported to {output_path}")
 
 
