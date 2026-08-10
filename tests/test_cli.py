@@ -14,6 +14,7 @@ from click.testing import CliRunner
 
 from seeds.cli import main
 from seeds.db import SEEDS_DIR, Database
+from seeds.idgen import is_hash_suffix
 from seeds.models import (
     RelationType,
     Seed,
@@ -1589,6 +1590,12 @@ class TestBase36RefValidation:
         "seeds-level concerns, seeds-like tools, and the seeds-side of it"
     )
 
+    # A fixed hash-shaped ID for the reference under test. The letters in the
+    # suffix are load-bearing: they put the ref on the base36 path rather than
+    # the numeric one, and pinning them here (instead of minting an ID and
+    # hoping) is what keeps that deterministic. See bead seeds-oaw.
+    HASH_ID = "seeds-k3n7"
+
     def test_create_rejects_hallucinated_hash_ref(self, cli_runner, initialized_env):
         result = cli_runner.invoke(
             main, ["create", "-t", "Test", "-c", "see seeds-zq4x"]
@@ -1628,12 +1635,24 @@ class TestBase36RefValidation:
         assert "Created seed" in result.output
 
     def test_real_hash_seed_ref_accepted(self, cli_runner, initialized_env):
-        """A base36 ID that does exist is a reference, not a hallucination."""
-        first = cli_runner.invoke(main, ["jot", "First seed"])
-        first_id = _extract_jot_id(first.output)
-        assert not first_id.split("-", 1)[1].isdigit(), first_id
+        """A base36 ID that does exist is a reference, not a hallucination.
+
+        The referenced seed is inserted with a known ID rather than minted by
+        ``jot``. next_id() draws a random base36 suffix and base36 includes
+        0-9, so ~3% of minted IDs are all digits — which used to fail the
+        guard assertion here about one run in 33 (seeds-oaw), the same fact
+        behind seeds-skc. The subject of the test must not be random.
+        """
+        suffix = self.HASH_ID.split("-", 1)[1]
+        assert is_hash_suffix(suffix), self.HASH_ID
+        assert not suffix.isdigit(), self.HASH_ID
+
+        db = Database()
+        db.create_seed(Seed(id=self.HASH_ID, title="First seed"))
+        db.close()
+
         result = cli_runner.invoke(
-            main, ["create", "-t", "Second", "-c", f"follow-up to {first_id}"]
+            main, ["create", "-t", "Second", "-c", f"follow-up to {self.HASH_ID}"]
         )
         assert result.exit_code == 0, result.output
 
