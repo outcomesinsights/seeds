@@ -18,35 +18,9 @@ directory under test, same as test_beads.py.
 import subprocess
 from unittest.mock import patch
 
-from seeds.gitstage import _subprocess_env, staged_paths_outside
-
-
-def _git(cwd, *args):
-    """Run a git subcommand in `cwd`; raises on failure so setup errors are loud.
-
-    Strips the same GIT_DIR/GIT_INDEX_FILE/etc as staged_paths_outside itself
-    before shelling out, for the same reason: running this suite as this very
-    repo's own pre-commit `pytest` hook leaks those variables in from the real
-    commit in progress, and every one of these "throwaway repo in tmp_path"
-    setup calls would otherwise silently redirect into the real repo's index
-    instead.
-    """
-    return subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=True,
-        env=_subprocess_env(),
-    )
-
-
-def _git_init(cwd):
-    """Initialize a throwaway git repo at `cwd` with a usable local identity."""
-    _git(cwd, "init", "-q")
-    _git(cwd, "config", "user.email", "test@example.com")
-    _git(cwd, "config", "user.name", "Test")
-    _git(cwd, "config", "commit.gpgsign", "false")
+from seeds.gitstage import staged_paths_outside
+from tests.githelpers import git as _git
+from tests.githelpers import git_init as _git_init
 
 
 class TestNoCommitContext:

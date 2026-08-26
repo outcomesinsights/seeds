@@ -8,6 +8,20 @@ repos:
 
   - repo: local
     hooks:
+      # Runs first, and deliberately before pytest: on 2026-08-26 a test
+      # fixture in an agent worktree wrote core.bare=true plus a test identity
+      # into this repo's shared .git/config, and the only symptom was git
+      # refusing every command with "fatal: this operation must be run in a
+      # work tree". Nothing connected that to the config for ~20 minutes.
+      # tests/conftest.py catches the write as it happens; this catches a
+      # config already poisoned, and prints the repair. See bead seeds-p0x.
+      - id: git-config-sanity
+        name: git config sanity (not bare, no test identity)
+        entry: python3 scripts/check_git_config_sanity.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
       - id: pytest
         name: pytest
         entry: uv run pytest -x -q

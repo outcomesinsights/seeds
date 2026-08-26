@@ -14,7 +14,6 @@ from click.testing import CliRunner
 
 from seeds.cli import main
 from seeds.db import SEEDS_DIR, Database
-from seeds.gitstage import _subprocess_env
 from seeds.idgen import is_hash_suffix
 from seeds.models import (
     RelationType,
@@ -22,6 +21,8 @@ from seeds.models import (
     SeedStatus,
     SeedType,
 )
+from tests.githelpers import git as _git
+from tests.githelpers import git_init as _git_init
 
 
 def _extract_created_id(output: str) -> str:
@@ -2462,39 +2463,6 @@ class TestSyncRefusesDivergence:
         assert result.exception is None or isinstance(result.exception, SystemExit)
         assert jsonl_path.read_bytes() == before
         assert "not valid JSON" in result.output
-
-
-def _git(cwd, *args):
-    """Run a git subcommand in `cwd`; raises on failure so setup errors are loud.
-
-    Strips the same GIT_DIR/GIT_INDEX_FILE/etc as seeds.gitstage before
-    shelling out. Without that, running this suite as this very repo's own
-    pre-commit `pytest` hook leaks those variables in from the real commit in
-    progress, and every one of these "throwaway repo in tmp_path" setup calls
-    silently redirects into the real repo's index instead -- reproduced
-    directly: it is how a phantom `code.py` once ended up staged for real.
-    """
-    return subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=True,
-        env=_subprocess_env(),
-    )
-
-
-def _git_init(cwd):
-    """Initialize a throwaway git repo at `cwd` with a usable local identity.
-
-    `commit.gpgsign` is forced off locally (not globally) so a signing key
-    configured on the host can never turn a test into a hang waiting on a
-    passphrase prompt.
-    """
-    _git(cwd, "init", "-q")
-    _git(cwd, "config", "user.email", "test@example.com")
-    _git(cwd, "config", "user.name", "Test")
-    _git(cwd, "config", "commit.gpgsign", "false")
 
 
 class TestSyncGuardsMixedStage:
