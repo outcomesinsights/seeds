@@ -1746,6 +1746,122 @@ class TestQuestionCommands:
         assert "Open question?" in result.output
 
 
+class TestAnswerContentGuard:
+    """Tests for the guard against silently destroying a prior answer.
+
+    seeds-btr: `answer` assigned the body unconditionally, so re-answering an
+    already-answered question destroyed the previous answer with no warning.
+    Mirrors TestUpdateContentGuard: reuses `_guard_content_replacement`, so a
+    question that has never been answered (empty content, untouched
+    updated_at) is unaffected -- only a re-answer is guarded.
+    """
+
+    def _ask(self, cli_runner, seed_id="seed-test1"):
+        """Create a question-seed via `ask` and return its minted ID."""
+        result = cli_runner.invoke(
+            main, ["ask", "What is the answer?", "--seed", seed_id]
+        )
+        assert result.exit_code == 0, result.output
+        return result.output.split(":")[0].split()[-1]
+
+    def _content_of(self, seed_id):
+        db = Database()
+        try:
+            return db.get_seed(seed_id).content
+        finally:
+            db.close()
+
+    def test_first_answer_to_open_question_succeeds_unchanged(
+        self, cli_runner, env_with_seeds
+    ):
+        """The new guard must not touch the ordinary, unanswered-question case."""
+        q_id = self._ask(cli_runner)
+
+        result = cli_runner.invoke(main, ["answer", q_id, "42"])
+        assert result.exit_code == 0, result.output
+        assert result.stderr == ""
+        assert self._content_of(q_id) == "42"
+
+        db = Database()
+        q_seed = db.get_seed(q_id)
+        assert q_seed.status == SeedStatus.RESOLVED
+        assert q_seed.resolved_at is not None
+        db.close()
+
+    def test_bare_re_answer_is_refused_and_leaves_content_untouched(
+        self, cli_runner, env_with_seeds
+    ):
+        """The defect itself: a second bare `answer` must not destroy the first."""
+        q_id = self._ask(cli_runner)
+        first = cli_runner.invoke(main, ["answer", q_id, "the original answer"])
+        assert first.exit_code == 0, first.output
+
+        result = cli_runner.invoke(main, ["answer", q_id, "an overwriting answer"])
+        assert result.exit_code != 0
+        assert self._content_of(q_id) == "the original answer"
+
+    def test_replace_flag_overwrites_the_prior_answer(self, cli_runner, env_with_seeds):
+        """--replace performs the discard the bare re-answer refused."""
+        q_id = self._ask(cli_runner)
+        cli_runner.invoke(main, ["answer", q_id, "the original answer"])
+
+        result = cli_runner.invoke(
+            main, ["answer", q_id, "the corrected answer", "--replace"]
+        )
+        assert result.exit_code == 0, result.output
+        assert self._content_of(q_id) == "the corrected answer"
+
+    def test_append_flag_records_a_revision_alongside_the_original(
+        self, cli_runner, env_with_seeds
+    ):
+        """--append is the verb for a reversal: keep the original, add the revision."""
+        q_id = self._ask(cli_runner)
+        cli_runner.invoke(main, ["answer", q_id, "the original answer"])
+
+        result = cli_runner.invoke(
+            main, ["answer", q_id, "actually, it reversed", "--append"]
+        )
+        assert result.exit_code == 0, result.output
+        content = self._content_of(q_id)
+        assert "the original answer" in content
+        assert "actually, it reversed" in content
+
+    def test_append_and_replace_together_are_refused(self, cli_runner, env_with_seeds):
+        """The two flags are contradictory; neither should silently win."""
+        q_id = self._ask(cli_runner)
+        cli_runner.invoke(main, ["answer", q_id, "the original answer"])
+
+        result = cli_runner.invoke(
+            main, ["answer", q_id, "which one wins?", "--append", "--replace"]
+        )
+        assert result.exit_code != 0
+        assert self._content_of(q_id) == "the original answer"
+
+    def test_append_re_stamps_resolved_at(self, cli_runner, env_with_seeds):
+        """Design pick: every successful answer re-stamps resolved_at to now."""
+        q_id = self._ask(cli_runner)
+        cli_runner.invoke(main, ["answer", q_id, "the original answer"])
+        db = Database()
+        first_resolved_at = db.get_seed(q_id).resolved_at
+        db.close()
+
+        result = cli_runner.invoke(
+            main, ["answer", q_id, "a later revision", "--append"]
+        )
+        assert result.exit_code == 0, result.output
+
+        db = Database()
+        second_resolved_at = db.get_seed(q_id).resolved_at
+        db.close()
+        assert second_resolved_at > first_resolved_at
+
+    def test_answer_help_documents_both_flags(self, cli_runner):
+        result = cli_runner.invoke(main, ["answer", "--help"])
+        assert result.exit_code == 0
+        assert "--append" in result.output
+        assert "--replace" in result.output
+
+
 class TestLinkCommand:
     """Tests for 'seeds link' command."""
 
