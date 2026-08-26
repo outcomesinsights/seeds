@@ -6,7 +6,7 @@ import functools
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import click
 
@@ -118,8 +118,36 @@ def _validate_id_refs(
         sys.exit(1)
 
 
-def _guard_content_replacement(seed: Seed) -> None:
-    """Refuse ``update --content`` when it would discard accumulated thinking.
+class GuardCopy(NamedTuple):
+    """The caller-specific half of :func:`_guard_content_replacement`'s refusal.
+
+    Every field is required and there is deliberately **no default**. The
+    defect this type exists to prevent was a second caller silently inheriting
+    the first caller's prose: ``answer`` reused the guard and was handed
+    ``update``'s remediation, which told the user to pass a ``--content`` flag
+    that ``answer`` does not have. A default set to either caller's wording
+    would reintroduce exactly that, and the next caller would ship the same bug
+    again -- so adding a caller has to mean stating its own remediation.
+
+    The rule the two shipped instances of this bug share: **the remediation a
+    command prints must be a command that works for THAT command.** Assert it.
+    """
+
+    reason: str
+    """Why the seed is protected, as a predicate: "has already been answered"."""
+
+    subject: str
+    """What would do the discarding: ``--content``, or "answering again"."""
+
+    append_cmd: str
+    """A ready-to-paste command that adds to the body instead of replacing it."""
+
+    replace_cmd: str
+    """A ready-to-paste command that discards the body on purpose."""
+
+
+def _guard_content_replacement(seed: Seed, copy: GuardCopy) -> None:
+    """Refuse a wholesale body replacement that would discard accumulated thinking.
 
     ``-c`` sits one keystroke from ``-a`` and replaces the whole body without
     warning, which for a deliberation store is a sharp edge pointed at the
@@ -128,9 +156,14 @@ def _guard_content_replacement(seed: Seed) -> None:
     than a long one mispasted ten seconds ago.
 
     A seed still carrying its creation timestamp has never been added to, so
-    ``-c`` proceeds silently -- that is the botched-capture and encoding-repair
-    case. So does a seed with an empty body, where there is nothing to lose.
-    Anything else exits non-zero; ``--replace`` is the deliberate override.
+    the replacement proceeds silently -- that is the botched-capture and
+    encoding-repair case. So does a seed with an empty body, where there is
+    nothing to lose. Anything else exits non-zero; ``--replace`` is the
+    deliberate override.
+
+    The *decision* above is shared by every caller; the *prose* is not, and
+    arrives in ``copy``. See :class:`GuardCopy` for why that is mandatory
+    rather than defaulted.
     """
     if not seed.content.strip() or not seed.has_been_edited():
         return
@@ -140,19 +173,13 @@ def _guard_content_replacement(seed: Seed) -> None:
         first_line = first_line[:69] + "..."
 
     click.echo(
-        f"Error: {seed.id} has been edited since it was created -- --content "
+        f"Error: {seed.id} {copy.reason} -- {copy.subject} "
         f"would discard {len(seed.content)} characters of deliberation.",
         err=True,
     )
     click.echo(f"  Would discard: {first_line}", err=True)
-    click.echo(
-        f'  Add to it instead:      seeds update {seed.id} --append "..."',
-        err=True,
-    )
-    click.echo(
-        f'  Discard it on purpose:  seeds update {seed.id} --content "..." --replace',
-        err=True,
-    )
+    click.echo(f"  Add to it instead:      {copy.append_cmd}", err=True)
+    click.echo(f"  Discard it on purpose:  {copy.replace_cmd}", err=True)
     click.echo(
         "  --replace does not erase anything: the old body survives in git "
         "history (.seeds/seeds.jsonl) and needs separate scrubbing.",
@@ -1001,7 +1028,15 @@ def update(
     _reject_ambiguous_tag_flags(tags, add_tags, remove_tags)
 
     if content is not None and not replace:
-        _guard_content_replacement(seed)
+        _guard_content_replacement(
+            seed,
+            GuardCopy(
+                reason="has been edited since it was created",
+                subject="--content",
+                append_cmd=f'seeds update {seed.id} --append "..."',
+                replace_cmd=f'seeds update {seed.id} --content "..." --replace',
+            ),
+        )
 
     changed = False
 
@@ -1130,7 +1165,15 @@ def answer(
         sys.exit(1)
 
     if not append and not replace:
-        _guard_content_replacement(question_seed)
+        _guard_content_replacement(
+            question_seed,
+            GuardCopy(
+                reason="has already been answered",
+                subject="answering again",
+                append_cmd=f'seeds answer {question_seed.id} "..." --append',
+                replace_cmd=f'seeds answer {question_seed.id} "..." --replace',
+            ),
+        )
 
     if append:
         question_seed.content = f"{question_seed.content}\n\n{answer_text}".strip()

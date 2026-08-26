@@ -1746,6 +1746,76 @@ class TestQuestionCommands:
         assert "Open question?" in result.output
 
 
+class TestGuardCopyIsPerCaller:
+    """Every command's guard must print remediation that works for THAT command.
+
+    seeds-ijk: `_guard_content_replacement` hardcoded `update`'s prose, so once
+    `answer` reused it a guarded re-answer was told to pass a `--content` flag
+    that `answer` does not have. That is the same defect class as seeds-pfe,
+    where the divergence refusal advised an append its own prefix check could
+    never accept -- guidance describing a command other than the one it belongs
+    to. These tests pin the property both bugs lacked.
+    """
+
+    def _edited_seed(self, cli_runner):
+        """A seed that has been appended to, so the guard will fire on it."""
+        result = cli_runner.invoke(
+            main, ["create", "--title", "Guarded seed", "--content", "Original"]
+        )
+        assert result.exit_code == 0, result.output
+        seed_id = _extract_created_id(result.output)
+        assert cli_runner.invoke(main, ["update", seed_id, "-a", "more"]).exit_code == 0
+        return seed_id
+
+    def _answered_question(self, cli_runner, seed_id="seed-test1"):
+        """A question-seed that already carries an answer."""
+        asked = cli_runner.invoke(main, ["ask", "What is it?", "--seed", seed_id])
+        assert asked.exit_code == 0, asked.output
+        q_id = asked.output.split(":")[0].split()[-1]
+        assert cli_runner.invoke(main, ["answer", q_id, "first"]).exit_code == 0
+        return q_id
+
+    def test_update_guard_advises_update(self, cli_runner, initialized_env):
+        """`update`'s refusal names update, and its own --content/--append flags."""
+        seed_id = self._edited_seed(cli_runner)
+
+        result = cli_runner.invoke(main, ["update", seed_id, "-c", "wiped"])
+        assert result.exit_code != 0
+        assert f"seeds update {seed_id} --append" in result.stderr
+        assert f"seeds update {seed_id} --content" in result.stderr
+        assert "--replace" in result.stderr
+
+    def test_answer_guard_advises_answer_and_never_mentions_content(
+        self, cli_runner, env_with_seeds
+    ):
+        """`answer`'s refusal names answer -- and never a flag answer lacks.
+
+        The negative assertion is the regression this test exists for: the
+        shipped bug was the word `--content` appearing in advice to a command
+        that has no such flag.
+        """
+        q_id = self._answered_question(cli_runner)
+
+        result = cli_runner.invoke(main, ["answer", q_id, "second"])
+        assert result.exit_code != 0
+        assert f"seeds answer {q_id} " in result.stderr
+        assert "--append" in result.stderr
+        assert "--replace" in result.stderr
+        assert "--content" not in result.stderr
+        assert "seeds update" not in result.stderr
+
+    def test_answer_guard_reason_reads_as_an_answer_not_an_edit(
+        self, cli_runner, env_with_seeds
+    ):
+        """The refusal's opening clause describes answering, not editing."""
+        q_id = self._answered_question(cli_runner)
+
+        result = cli_runner.invoke(main, ["answer", q_id, "second"])
+        assert result.exit_code != 0
+        assert "has already been answered" in result.stderr
+        assert "answering again would discard" in result.stderr
+
+
 class TestAnswerContentGuard:
     """Tests for the guard against silently destroying a prior answer.
 
