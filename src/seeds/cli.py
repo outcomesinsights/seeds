@@ -1076,13 +1076,50 @@ def ask(ctx: Context, question_text: str, seed_id: str) -> None:
 @main.command()
 @click.argument("question_id")
 @click.argument("answer_text")
+@click.option(
+    "--append",
+    "-a",
+    is_flag=True,
+    help=(
+        "Append to the existing answer instead of replacing it -- use to "
+        "record a revision or reversal without discarding the prior answer."
+    ),
+)
+@click.option(
+    "--replace",
+    is_flag=True,
+    help=(
+        "Let a re-answer discard the previous answer wholesale. For a "
+        "deliberate correction only -- the old answer stays in git history "
+        "(.seeds/seeds.jsonl) and needs separate scrubbing."
+    ),
+)
 @pass_context
-def answer(ctx: Context, question_id: str, answer_text: str) -> None:
+def answer(
+    ctx: Context, question_id: str, answer_text: str, append: bool, replace: bool
+) -> None:
     """Answer a question-seed.
 
     QUESTION_ID is the ID of the question-seed to answer.
     ANSWER_TEXT is the answer (stored as seed content).
+
+    An answer is a recorded conclusion, so re-answering an already-answered
+    question is refused by default -- same guard as `update --content`, and
+    for the same reason: silently destroying a prior answer is worse than
+    refusing. Use --append to record a revision (e.g. a reversed decision)
+    alongside the original, or --replace to discard the old answer on
+    purpose. Neither flag is needed to answer an open question for the first
+    time. Every successful answer -- first, appended, or replaced --
+    re-stamps resolved_at to now, marking the moment of the latest
+    resolution.
     """
+    if append and replace:
+        click.echo(
+            "Error: --append and --replace are contradictory -- pick one.",
+            err=True,
+        )
+        sys.exit(1)
+
     db = ctx.get_db()
 
     from seeds.models import now_utc
@@ -1092,7 +1129,13 @@ def answer(ctx: Context, question_id: str, answer_text: str) -> None:
         click.echo(f"Error: Question '{question_id}' not found.", err=True)
         sys.exit(1)
 
-    question_seed.content = answer_text
+    if not append and not replace:
+        _guard_content_replacement(question_seed)
+
+    if append:
+        question_seed.content = f"{question_seed.content}\n\n{answer_text}".strip()
+    else:
+        question_seed.content = answer_text
     question_seed.status = SeedStatus.RESOLVED
     question_seed.resolved_at = now_utc()
     db.update_seed(question_seed)
@@ -1337,9 +1380,9 @@ def _format_divergence_error(exc: DivergentExportError) -> str:
         lines.append("  # absorb the records the database is missing")
         lines.append(f"  seeds import {path}")
     if "content" in kinds:
-        lines.append("  # compare, then append the text that only exists on disk")
+        lines.append("  # compare, then rebuild the body with the on-disk text first")
         lines.append("  seeds show <id>")
-        lines.append("  seeds update <id> -a '<the text from disk>'")
+        lines.append("  seeds update <id> --replace -c '<on-disk text><newer text>'")
     if "unreadable" in kinds:
         lines.append("  # unreadable lines have to be repaired in the file by hand")
     lines.extend(

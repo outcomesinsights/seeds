@@ -179,7 +179,7 @@ class Divergence:
     - ``missing``: the record is on disk and the database has no such seed, so
       rewriting the file from the database would simply delete it.
     - ``content``: the seed exists in both, but the database's body does not
-      contain the on-disk body (see :func:`content_is_covered`), so overwriting
+      begin with the on-disk body (see :func:`db_extends_disk`), so overwriting
       would drop text that only ever existed in the file.
     - ``unreadable``: the line is not valid JSON — most often unresolved git
       conflict markers. Nothing can be said about what it holds, which is
@@ -212,8 +212,8 @@ class DivergentExportError(Exception):
         )
 
 
-def content_is_covered(db_content: str, disk_content: str) -> bool:
-    """Is the on-disk body fully contained in what the database is about to write?
+def db_extends_disk(db_content: str, disk_content: str) -> bool:
+    """Does the database's content begin with the on-disk content?
 
     Divergence is decided on CONTENT, never on ``updated_at``. Timestamps only
     answer "which is newer", and they are the input already known to be
@@ -338,7 +338,7 @@ def find_divergence(db: Database, output_path: Path) -> list[Divergence]:
 
             disk_content = data.get("content") or ""
             db_content = in_db[seed_id]
-            if content_is_covered(db_content, disk_content):
+            if db_extends_disk(db_content, disk_content):
                 continue
 
             divergences.append(
@@ -346,8 +346,8 @@ def find_divergence(db: Database, output_path: Path) -> list[Divergence]:
                     seed_id=seed_id,
                     kind="content",
                     detail=(
-                        "the database's content does not contain the on-disk "
-                        "content (they diverge at character "
+                        "the database's content does not begin with the "
+                        "on-disk content (they diverge at character "
                         f"{first_difference(db_content, disk_content)})"
                     ),
                     on_disk=_excerpt(disk_content),
