@@ -1337,9 +1337,9 @@ def _format_divergence_error(exc: DivergentExportError) -> str:
         lines.append("  # absorb the records the database is missing")
         lines.append(f"  seeds import {path}")
     if "content" in kinds:
-        lines.append("  # compare, then append the text that only exists on disk")
+        lines.append("  # compare, then rebuild the body with the on-disk text first")
         lines.append("  seeds show <id>")
-        lines.append("  seeds update <id> -a '<the text from disk>'")
+        lines.append("  seeds update <id> --replace -c '<on-disk text><newer text>'")
     if "unreadable" in kinds:
         lines.append("  # unreadable lines have to be repaired in the file by hand")
     lines.extend(

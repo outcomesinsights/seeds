@@ -2095,9 +2095,46 @@ class TestSyncRefusesDivergence:
 
         result = cli_runner.invoke(main, ["sync"])
 
-        assert "seeds update <id> -a" in result.output
+        assert "seeds update <id> --replace -c" in result.output
         assert "seeds sync --allow-divergence" in result.output
         assert "byte-for-byte unchanged" in result.output
+
+    def test_the_remediation_actually_clears_the_guard(
+        self, cli_runner, env_with_seeds
+    ):
+        """seeds-pfe: the printed advice must be able to satisfy its own guard.
+
+        The refusal used to tell the operator to append the on-disk text,
+        which can never satisfy a guard that requires the database's content
+        to START WITH the disk's -- appending puts the disk text LAST, so
+        following the advice exactly reproduced the identical refusal. This
+        reproduces the divergence, confirms the CLI prints the current
+        remediation form, follows it literally with the real bodies
+        substituted in for its placeholders, and asserts the guard then
+        passes. If the guidance and the guard ever drift apart again, this
+        fails.
+        """
+        disk_content = "LAPTOP body"
+        db_content = "DESKTOP body"
+        jsonl_path, before = self._diverge(cli_runner, env_with_seeds)
+
+        refusal = cli_runner.invoke(main, ["sync"])
+        assert refusal.exit_code == 1
+        remediation = "seeds update <id> --replace -c '<on-disk text><newer text>'"
+        assert remediation in refusal.output
+
+        # Follow that printed form literally: <id> -> the real seed, and the
+        # two placeholders -> the on-disk body first, then the DB's body.
+        rebuilt = cli_runner.invoke(
+            main,
+            ["update", "seed-div", "--replace", "-c", disk_content + db_content],
+        )
+        assert rebuilt.exit_code == 0
+
+        followup = cli_runner.invoke(main, ["sync"])
+        assert followup.exit_code == 0
+        assert jsonl_path.read_bytes() != before
+        assert disk_content + db_content in jsonl_path.read_text()
 
     def test_flush_only_is_covered_by_the_same_check(self, cli_runner, env_with_seeds):
         """Skipping the import does not make the overwrite less destructive."""

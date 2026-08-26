@@ -12,7 +12,7 @@ from seeds.export import (
     DivergentExportError,
     ImportResult,
     RefusedRecord,
-    content_is_covered,
+    db_extends_disk,
     export_to_jsonl,
     find_divergence,
     import_from_jsonl,
@@ -215,30 +215,30 @@ def _record(seed_id, content, updated_at=None, **overrides):
     return data
 
 
-class TestContentIsCovered:
+class TestDbExtendsDisk:
     """The append-prefix heuristic that separates 'DB is ahead' from 'diverged'."""
 
-    def test_identical_content_is_covered(self):
-        assert content_is_covered("same body", "same body")
+    def test_identical_content_extends(self):
+        assert db_extends_disk("same body", "same body")
 
-    def test_appended_content_is_covered(self):
+    def test_appended_content_extends(self):
         """The normal editing verb: `seeds update -a` appends to the body."""
-        assert content_is_covered("original\n\nappended later", "original")
+        assert db_extends_disk("original\n\nappended later", "original")
 
     def test_empty_on_disk_is_covered(self):
         """A seed jotted with no body, then filled in, must not trip the check."""
-        assert content_is_covered("body added after the first sync", "")
+        assert db_extends_disk("body added after the first sync", "")
 
     def test_divergent_content_is_not_covered(self):
-        assert not content_is_covered("DESKTOP edit", "LAPTOP edit")
+        assert not db_extends_disk("DESKTOP edit", "LAPTOP edit")
 
     def test_truncated_db_content_is_not_covered(self):
         """The disk holding MORE than the DB is the loss case, not an append."""
-        assert not content_is_covered("original", "original\n\nappended on a peer")
+        assert not db_extends_disk("original", "original\n\nappended on a peer")
 
     def test_prepended_content_is_not_covered(self):
         """An in-place rewrite that keeps the old body but not at the front."""
-        assert not content_is_covered("Header:\noriginal", "original")
+        assert not db_extends_disk("Header:\noriginal", "original")
 
     def test_replaced_content_is_not_covered(self):
         """`seeds update -c --replace` breaks the prefix property, deliberately.
@@ -247,7 +247,7 @@ class TestContentIsCovered:
         replace-derived divergence refuses like any other; the escape hatch
         covers the case where the discard was intended.
         """
-        assert not content_is_covered("brand new body", "the body it replaced")
+        assert not db_extends_disk("brand new body", "the body it replaced")
 
     def test_leading_whitespace_does_not_trip_the_check(self):
         """`seeds update -a` strips the COMBINED body (cli.py).
@@ -255,11 +255,11 @@ class TestContentIsCovered:
         So appending to a body with leading whitespace yields a result that is
         not a literal prefix of it, even though no text was lost.
         """
-        assert content_is_covered("original\n\nappended", "  original")
+        assert db_extends_disk("original\n\nappended", "  original")
 
     def test_stripped_fallback_still_catches_real_loss(self):
         """The whitespace tolerance must not become a hole for missing text."""
-        assert not content_is_covered("  original  ", "original and then some")
+        assert not db_extends_disk("  original  ", "original and then some")
 
 
 class TestFindDivergence:
