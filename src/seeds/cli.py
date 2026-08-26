@@ -1438,6 +1438,59 @@ def _format_divergence_error(exc: DivergentExportError) -> str:
     return "\n".join(lines)
 
 
+def _detect_mixed_stage(db: Database) -> list[str] | None:
+    """Staged paths outside .seeds/ that a flush would fold into their commit.
+
+    Returns ``None`` when the guard should NOT fire: no git commit context
+    (see :func:`seeds.gitstage.staged_paths_outside`), nothing staged outside
+    .seeds/, or the flush would not change seeds.jsonl at all — a clean sync
+    has nothing pending to bake into anything. A non-empty list names the
+    staged paths and means the guard fires.
+
+    Order matters for cost, not correctness: the git query runs first only
+    because it's the cheaper way to rule the common case out (no commit in
+    progress at all).
+    """
+    from seeds.export import export_would_change
+    from seeds.gitstage import staged_paths_outside
+
+    staged = staged_paths_outside(SEEDS_DIR)
+    if not staged:
+        return None
+    if not export_would_change(db):
+        return None
+    return staged
+
+
+def _format_mixed_stage_error(staged_paths: list[str]) -> str:
+    """Render the mixed-stage refusal (seeds-ww8) with the approved wording.
+
+    The first two lines are the exact text Ryan approved verbatim. Everything
+    after names the staged paths that triggered the refusal and restates
+    --allow-mixed-stage, so the escape hatch is discoverable at the moment
+    it's needed — the bead's own point is that noisy pre-commit output makes a
+    bare warning easy to miss, which is exactly why this exits non-zero
+    instead of just printing a line.
+    """
+    lines = [
+        "seeds: refusing to flush -- the export would modify .seeds/seeds.jsonl "
+        "but staged code is unrelated.",
+        "Resolve with EITHER `git commit` the code first then re-run, OR `git "
+        "stash --keep-index` and create a dedicated `chore(seeds): ...` commit.",
+        "",
+        "Staged outside .seeds/:",
+    ]
+    lines.extend(f"  {path}" for path in staged_paths)
+    lines.extend(
+        [
+            "",
+            "Only for an intentional combined seed+code commit:",
+            "  seeds sync --allow-mixed-stage",
+        ]
+    )
+    return "\n".join(lines)
+
+
 @main.command()
 @click.option("--flush-only", is_flag=True, help="Only export to JSONL (no git ops)")
 @click.option(
@@ -1449,8 +1502,21 @@ def _format_divergence_error(exc: DivergentExportError) -> str:
         "after reading what the refusal names."
     ),
 )
+@click.option(
+    "--allow-mixed-stage",
+    is_flag=True,
+    help=(
+        "Flush even when other, unrelated files are staged for commit. Off by "
+        "default: a flush that changes .seeds/seeds.jsonl while code is staged "
+        "would otherwise bake pending seed-database changes into whatever "
+        "commit fires next. Use only for an intentional combined seed+code "
+        "commit."
+    ),
+)
 @pass_context
-def sync(ctx: Context, flush_only: bool, allow_divergence: bool) -> None:
+def sync(
+    ctx: Context, flush_only: bool, allow_divergence: bool, allow_mixed_stage: bool
+) -> None:
     """Round-trip seeds with JSONL: import (LWW) then export.
 
     The import half rehydrates any seeds present in .seeds/seeds.jsonl but
@@ -1464,6 +1530,14 @@ def sync(ctx: Context, flush_only: bool, allow_divergence: bool) -> None:
     edit, or a peer's seed that no import absorbed. --flush-only gets the same
     check: skipping the import does not make the overwrite any less
     destructive. Pass --allow-divergence to overwrite anyway.
+
+    Before writing, also refuses when the flush would change .seeds/seeds.jsonl
+    while other files are staged for commit outside .seeds/ — that combination
+    means a `git commit` right now would fold pending seed-database changes
+    into whatever commit fires next, regardless of topic (seeds-ww8). This
+    only fires inside a git working tree with something staged, and only when
+    the flush would actually change the file; a seed-only commit or a no-op
+    sync is never blocked. Pass --allow-mixed-stage to flush anyway.
     """
     db = ctx.get_db()
 
@@ -1472,6 +1546,12 @@ def sync(ctx: Context, flush_only: bool, allow_divergence: bool) -> None:
     if not flush_only:
         import_result = import_from_jsonl(db)
         click.echo(_format_import_summary(import_result))
+
+    if not allow_mixed_stage:
+        contaminating_paths = _detect_mixed_stage(db)
+        if contaminating_paths is not None:
+            click.echo(_format_mixed_stage_error(contaminating_paths), err=True)
+            sys.exit(1)
 
     try:
         output_path = export_to_jsonl(db, allow_divergence=allow_divergence)

@@ -14,6 +14,7 @@ from click.testing import CliRunner
 
 from seeds.cli import main
 from seeds.db import SEEDS_DIR, Database
+from seeds.gitstage import _subprocess_env
 from seeds.idgen import is_hash_suffix
 from seeds.models import (
     RelationType,
@@ -2461,6 +2462,209 @@ class TestSyncRefusesDivergence:
         assert result.exception is None or isinstance(result.exception, SystemExit)
         assert jsonl_path.read_bytes() == before
         assert "not valid JSON" in result.output
+
+
+def _git(cwd, *args):
+    """Run a git subcommand in `cwd`; raises on failure so setup errors are loud.
+
+    Strips the same GIT_DIR/GIT_INDEX_FILE/etc as seeds.gitstage before
+    shelling out. Without that, running this suite as this very repo's own
+    pre-commit `pytest` hook leaks those variables in from the real commit in
+    progress, and every one of these "throwaway repo in tmp_path" setup calls
+    silently redirects into the real repo's index instead -- reproduced
+    directly: it is how a phantom `code.py` once ended up staged for real.
+    """
+    return subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=True,
+        env=_subprocess_env(),
+    )
+
+
+def _git_init(cwd):
+    """Initialize a throwaway git repo at `cwd` with a usable local identity.
+
+    `commit.gpgsign` is forced off locally (not globally) so a signing key
+    configured on the host can never turn a test into a hang waiting on a
+    passphrase prompt.
+    """
+    _git(cwd, "init", "-q")
+    _git(cwd, "config", "user.email", "test@example.com")
+    _git(cwd, "config", "user.name", "Test")
+    _git(cwd, "config", "commit.gpgsign", "false")
+
+
+class TestSyncGuardsMixedStage:
+    """seeds-ww8: sync refuses to fold pending seed-db changes into someone
+    else's commit.
+
+    The reproduction: a pre-commit hook runs `seeds sync --flush-only`, which
+    rewrites .seeds/seeds.jsonl from current DB state; pre-commit then
+    re-stages whatever changed. If code for an unrelated commit is already
+    staged, the rewritten seeds.jsonl gets swept into that same commit
+    regardless of topic (surfaced in code_set_catalog commit 49c466f).
+    """
+
+    def test_contamination_on_a_fresh_repo_with_no_head_yet_refuses(
+        self, cli_runner, env_with_seeds
+    ):
+        """An initial commit (no HEAD) is not a special case for the guard.
+
+        `git diff --cached` diffs an unborn branch against the empty tree, so
+        detection has to work identically here. This is also literally the
+        first sync in the repo, so seeds.jsonl does not exist on disk yet --
+        covering that edge of export_would_change at the same time.
+        """
+        _git_init(env_with_seeds)
+        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
+        (env_with_seeds / "feature.txt").write_text("unrelated feature work\n")
+        _git(env_with_seeds, "add", "feature.txt")
+
+        result = cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        assert result.exit_code == 1
+        assert not jsonl_path.exists()
+        assert "seeds: refusing to flush" in result.output
+        assert "feature.txt" in result.output
+        assert "--allow-mixed-stage" in result.output
+
+    def test_contamination_after_an_existing_commit_refuses(
+        self, cli_runner, env_with_seeds
+    ):
+        """The steady-state case: seeds.jsonl already has history behind it."""
+        _git_init(env_with_seeds)
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        _git(env_with_seeds, "add", ".seeds/seeds.jsonl")
+        _git(env_with_seeds, "commit", "-q", "-m", "chore(seeds): initial export")
+        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
+        before = jsonl_path.read_bytes()
+
+        db = Database()
+        db.create_seed(Seed(id="seed-new", title="Not yet flushed"))
+        db.close()
+        (env_with_seeds / "feature.txt").write_text("unrelated feature work\n")
+        _git(env_with_seeds, "add", "feature.txt")
+
+        result = cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        assert result.exit_code == 1
+        assert jsonl_path.read_bytes() == before
+        assert "seeds: refusing to flush" in result.output
+        assert "feature.txt" in result.output
+
+    def test_full_sync_without_flush_only_is_also_guarded(
+        self, cli_runner, env_with_seeds
+    ):
+        """Skipping the import does not make the write any less contaminating."""
+        _git_init(env_with_seeds)
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        _git(env_with_seeds, "add", ".seeds/seeds.jsonl")
+        _git(env_with_seeds, "commit", "-q", "-m", "chore(seeds): initial export")
+        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
+        before = jsonl_path.read_bytes()
+
+        db = Database()
+        db.create_seed(Seed(id="seed-new", title="Not yet flushed"))
+        db.close()
+        (env_with_seeds / "feature.txt").write_text("unrelated feature work\n")
+        _git(env_with_seeds, "add", "feature.txt")
+
+        result = cli_runner.invoke(main, ["sync"])
+
+        assert result.exit_code == 1
+        assert jsonl_path.read_bytes() == before
+
+    def test_seed_only_stage_flows_normally(self, cli_runner, env_with_seeds):
+        """Nothing staged outside .seeds/: no friction despite a pending delta."""
+        _git_init(env_with_seeds)
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        _git(env_with_seeds, "add", ".seeds/seeds.jsonl")
+
+        db = Database()
+        db.create_seed(Seed(id="seed-new", title="Not yet flushed"))
+        db.close()
+
+        result = cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        assert result.exit_code == 0
+        assert "Exported" in result.output
+        jsonl_text = (env_with_seeds / SEEDS_DIR / "seeds.jsonl").read_text()
+        assert "seed-new" in jsonl_text
+
+    def test_no_op_sync_flows_normally_regardless_of_stage(
+        self, cli_runner, env_with_seeds
+    ):
+        """No pending db delta: harmless next to any staged code."""
+        _git_init(env_with_seeds)
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        (env_with_seeds / "feature.txt").write_text("unrelated feature work\n")
+        _git(env_with_seeds, "add", "feature.txt")
+
+        result = cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        assert result.exit_code == 0
+        assert "Exported" in result.output
+
+    def test_no_git_repo_flows_normally(self, cli_runner, env_with_seeds):
+        """No git working tree at all: the guard has no commit context to read."""
+        result = cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        assert result.exit_code == 0
+        assert "Exported" in result.output
+
+    def test_refusal_uses_the_exact_approved_wording(self, cli_runner, env_with_seeds):
+        """Pins the two lines Ryan approved verbatim (2026-08-26 design ruling).
+
+        Pre-commit output is noisy -- the ruling's whole argument against
+        warn-and-proceed is that warnings get missed there. If this wording
+        ever drifts, this is the test that has to fail.
+        """
+        _git_init(env_with_seeds)
+        (env_with_seeds / "feature.txt").write_text("unrelated feature work\n")
+        _git(env_with_seeds, "add", "feature.txt")
+
+        result = cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        lines = result.output.splitlines()
+        assert lines[0] == (
+            "seeds: refusing to flush -- the export would modify "
+            ".seeds/seeds.jsonl but staged code is unrelated."
+        )
+        assert lines[1] == (
+            "Resolve with EITHER `git commit` the code first then re-run, OR "
+            "`git stash --keep-index` and create a dedicated `chore(seeds): "
+            "...` commit."
+        )
+
+    def test_allow_mixed_stage_overrides_the_refusal(self, cli_runner, env_with_seeds):
+        """The escape hatch is explicit, and using it does flush."""
+        _git_init(env_with_seeds)
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        _git(env_with_seeds, "add", ".seeds/seeds.jsonl")
+        _git(env_with_seeds, "commit", "-q", "-m", "chore(seeds): initial export")
+
+        db = Database()
+        db.create_seed(Seed(id="seed-new", title="Not yet flushed"))
+        db.close()
+        (env_with_seeds / "feature.txt").write_text("unrelated feature work\n")
+        _git(env_with_seeds, "add", "feature.txt")
+
+        result = cli_runner.invoke(
+            main, ["sync", "--flush-only", "--allow-mixed-stage"]
+        )
+
+        assert result.exit_code == 0
+        assert "Exported" in result.output
+        jsonl_text = (env_with_seeds / SEEDS_DIR / "seeds.jsonl").read_text()
+        assert "seed-new" in jsonl_text
+
+    def test_allow_mixed_stage_is_documented_in_help(self, cli_runner):
+        result = cli_runner.invoke(main, ["sync", "--help"])
+        assert result.exit_code == 0
+        assert "--allow-mixed-stage" in result.output
 
 
 class TestPrimeCommand:

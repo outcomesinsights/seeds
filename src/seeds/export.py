@@ -358,6 +358,43 @@ def find_divergence(db: Database, output_path: Path) -> list[Divergence]:
     return divergences
 
 
+def _render_jsonl(db: Database) -> str:
+    """Serialize every seed exactly as ``export_to_jsonl`` would write them.
+
+    Shared by the writer and :func:`export_would_change` so the two can never
+    disagree about what "the same content" means.
+    """
+    seeds = db.list_seeds(include_terminal=True)
+    seeds.sort(key=lambda s: s.id)
+    return "".join(
+        json.dumps(seed_to_dict(seed, db), ensure_ascii=False) + "\n" for seed in seeds
+    )
+
+
+def export_would_change(db: Database, output_path: Path | None = None) -> bool:
+    """Would exporting ``db`` to ``output_path`` change what's on disk?
+
+    Read-only: renders the exact bytes :func:`export_to_jsonl` would write and
+    compares them to the file's current content. A missing file counts as a
+    change — there's nothing for a fresh write to be a no-op against.
+
+    Used by ``seeds sync`` (seeds-ww8) to tell an ordinary flush — nothing
+    pending, harmless next to whatever else is staged — from one that would
+    actually rewrite the file and so risks baking unrelated database changes
+    into someone else's commit.
+
+    Deliberately blind to the divergence guard: this answers "would the bytes
+    differ", not "is overwriting them safe". A divergent file renders
+    differently too, so this returns True for it as well; the safety call
+    itself stays :func:`find_divergence`'s job alone.
+    """
+    if output_path is None:
+        output_path = Path.cwd() / SEEDS_DIR / JSONL_FILE
+    if not output_path.exists():
+        return True
+    return output_path.read_text() != _render_jsonl(db)
+
+
 def export_to_jsonl(
     db: Database,
     output_path: Path | None = None,
@@ -398,17 +435,8 @@ def export_to_jsonl(
         if divergences:
             raise DivergentExportError(output_path, divergences)
 
-    # Get all seeds (including terminal states)
-    seeds = db.list_seeds(include_terminal=True)
-
-    # Sort by ID for consistent output
-    seeds.sort(key=lambda s: s.id)
-
-    # Write JSONL
     with open(output_path, "w") as f:
-        for seed in seeds:
-            data = seed_to_dict(seed, db)
-            f.write(json.dumps(data, ensure_ascii=False) + "\n")
+        f.write(_render_jsonl(db))
 
     return output_path
 
