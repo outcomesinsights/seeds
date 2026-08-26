@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -45,6 +46,14 @@ class TestSandboxEnvironment:
         env = git_env(tmp_path)
         assert env["GIT_CONFIG_GLOBAL"] == os.devnull
         assert env["GIT_CONFIG_SYSTEM"] == os.devnull
+
+    def test_home_is_redirected_into_the_sandbox(self, tmp_path):
+        """GIT_CONFIG_GLOBAL misses include.path, templateDir and helpers."""
+        env = git_env(tmp_path)
+        sandbox = str(tmp_path.resolve().parent)
+        assert env["HOME"] == sandbox
+        assert env["XDG_CONFIG_HOME"] == sandbox
+        assert env["HOME"] != os.path.expanduser("~")
 
     def test_ceiling_is_the_parent_so_only_cwd_is_searched(self, tmp_path):
         """Parent, not cwd: git searches cwd, then refuses to chdir above it."""
@@ -101,19 +110,26 @@ class TestCannotReachAnAncestorRepo:
         assert (outer / ".git" / "config").read_bytes() == before
 
     def test_host_global_config_is_not_readable(self, tmp_path):
-        """``--global`` resolves to /dev/null, so the host's identity is invisible."""
+        """``--global`` resolves to /dev/null, so the host's identity is invisible.
+
+        Skipped when the host has no global identity to leak, so the assertion
+        never passes vacuously. The host config is located by reading the file
+        rather than asking git, because every git call in this suite must go
+        through the sandbox (bead seeds-3xs) and asking git unsandboxed is
+        exactly what that forbids.
+        """
+        candidates = [
+            Path.home() / ".gitconfig",
+            Path.home() / ".config" / "git" / "config",
+        ]
+        if not any(c.exists() and "name" in c.read_text() for c in candidates):
+            pytest.skip("host has no global git identity to leak")
+
         repo = tmp_path / "repo"
         repo.mkdir()
         git_init(repo)
-        result = subprocess.run(
-            ["git", "config", "--global", "--get", "user.name"],
-            cwd=repo,
-            capture_output=True,
-            text=True,
-            env=git_env(repo),
-        )
-        assert result.returncode != 0
-        assert result.stdout.strip() == ""
+        with pytest.raises(subprocess.CalledProcessError):
+            git(repo, "config", "--global", "--get", "user.name")
 
 
 class TestSandboxStillProducesAUsableRepo:

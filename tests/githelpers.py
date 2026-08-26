@@ -66,12 +66,20 @@ def git_env(cwd: Path) -> dict[str, str]:
     that would have stopped the 2026-08-26 incident: the leak worked by git
     resolving upward to the real repo and writing its config.
     """
+    sandbox = Path(cwd).resolve().parent
     env = _subprocess_env()
     for name in _IDENTITY_ENV_VARS:
         env.pop(name, None)
-    env["GIT_CEILING_DIRECTORIES"] = str(Path(cwd).resolve().parent)
+    env["GIT_CEILING_DIRECTORIES"] = str(sandbox)
     env["GIT_CONFIG_GLOBAL"] = os.devnull
     env["GIT_CONFIG_SYSTEM"] = os.devnull
+    # GIT_CONFIG_GLOBAL covers ~/.gitconfig, but git still reads HOME for
+    # include.path chains, init.templateDir and credential helpers -- so point
+    # HOME at the sandbox too, closing the category rather than the one path.
+    # Neither knob is set globally on titan today; the lesson of seeds-p0x is
+    # that the instance is never the last one.
+    env["HOME"] = str(sandbox)
+    env["XDG_CONFIG_HOME"] = str(sandbox)
     return env
 
 
