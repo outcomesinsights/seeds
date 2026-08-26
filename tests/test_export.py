@@ -14,6 +14,7 @@ from seeds.export import (
     RefusedRecord,
     db_extends_disk,
     export_to_jsonl,
+    export_would_change,
     find_divergence,
     import_from_jsonl,
     import_lines,
@@ -186,6 +187,83 @@ class TestExportToJsonl:
         data_a = json.loads(lines[0])  # seed-a (sorted first)
         assert len(data_a["relationships"]) == 1
         assert data_a["relationships"][0]["target_id"] == "seed-b"
+
+
+class TestExportWouldChange:
+    """Tests for export_would_change (seeds-ww8's no-op detector)."""
+
+    def test_missing_file_counts_as_a_change_even_for_an_empty_db(self, db, temp_dir):
+        """Nothing on disk to be a no-op against, even with zero seeds."""
+        output_path = temp_dir / "output.jsonl"
+        assert not output_path.exists()
+
+        assert export_would_change(db, output_path) is True
+
+    def test_missing_file_with_seeds_is_a_change(self, db, temp_dir, sample_seed):
+        db.create_seed(sample_seed)
+        output_path = temp_dir / "output.jsonl"
+
+        assert export_would_change(db, output_path) is True
+
+    def test_freshly_exported_file_is_not_a_change(self, db, temp_dir, sample_seed):
+        """The everyday no-op: export, then ask again with nothing new."""
+        db.create_seed(sample_seed)
+        output_path = temp_dir / "output.jsonl"
+        export_to_jsonl(db, output_path)
+
+        assert export_would_change(db, output_path) is False
+
+    def test_freshly_exported_file_with_relationships_is_not_a_change(
+        self, db, temp_dir
+    ):
+        """Round-trips relationships too, not just scalar fields."""
+        db.create_seed(Seed(id="seed-a", title="A"))
+        db.create_seed(Seed(id="seed-b", title="B"))
+        db.create_relationship("seed-a", "seed-b", RelationType.RELATES_TO)
+        output_path = temp_dir / "output.jsonl"
+        export_to_jsonl(db, output_path)
+
+        assert export_would_change(db, output_path) is False
+
+    def test_unflushed_db_delta_is_a_change(self, db, temp_dir, sample_seed):
+        """A seed created after the last export makes the next flush real."""
+        db.create_seed(sample_seed)
+        output_path = temp_dir / "output.jsonl"
+        export_to_jsonl(db, output_path)
+
+        db.create_seed(Seed(id="seed-new", title="Not yet flushed"))
+
+        assert export_would_change(db, output_path) is True
+
+    def test_content_divergent_from_disk_is_a_change(self, db, temp_dir, sample_seed):
+        """Blind to the divergence guard's safety question -- the bytes just differ.
+
+        export_would_change only answers "would the bytes differ"; whether
+        overwriting them is SAFE is find_divergence's job. A file the export
+        would refuse to overwrite still, correctly, reads as "would change".
+        """
+        db.create_seed(sample_seed)
+        output_path = temp_dir / "output.jsonl"
+        export_to_jsonl(db, output_path)
+
+        records = [json.loads(line) for line in output_path.read_text().splitlines()]
+        records[0]["content"] = "hand-edited, never seen by the db"
+        output_path.write_text(
+            "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
+        )
+
+        assert export_would_change(db, output_path) is True
+
+    def test_defaults_to_the_project_seeds_jsonl_path(self, db, temp_dir, monkeypatch):
+        """No explicit output_path falls back to .seeds/seeds.jsonl under cwd."""
+        monkeypatch.chdir(temp_dir)
+        (temp_dir / ".seeds").mkdir(exist_ok=True)
+
+        assert export_would_change(db) is True
+
+        export_to_jsonl(db)
+
+        assert export_would_change(db) is False
 
 
 def _write_records(path, records):
