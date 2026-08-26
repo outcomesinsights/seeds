@@ -33,6 +33,10 @@
       mkSeeds =
         {
           python3Packages,
+          # `git` is needed ONLY by the test suite, never at runtime -- see
+          # nativeCheckInputs below. Threaded in as an argument because
+          # python3Packages does not reach back to the top-level package set.
+          git,
           runTests ? false,
         }:
         python3Packages.buildPythonApplication {
@@ -59,7 +63,17 @@
           # Tests are wired through checks.default, not the package: home-manager
           # consumes packages.default and should not run pytest on every rebuild.
           doCheck = runTests;
-          nativeCheckInputs = nixpkgs.lib.optionals runTests [ python3Packages.pytestCheckHook ];
+          # `git` is a TEST-only dependency, not a runtime one: src/seeds/gitstage.py
+          # shells out to git but catches OSError, so `seeds sync` degrades to
+          # "no commit context" when git is absent and never crashes. The tests,
+          # however, BUILD real repos with real git to exercise the mixed-stage
+          # guard, so the sandbox needs the binary. Without it 19 tests fail with
+          # FileNotFoundError while `nix build` and every local run stay green --
+          # which is exactly how this was found (seeds-ww8, 2026-08-26).
+          nativeCheckInputs = nixpkgs.lib.optionals runTests [
+            python3Packages.pytestCheckHook
+            git
+          ];
 
           pythonImportsCheck = [ "seeds" ];
 
@@ -73,12 +87,12 @@
     in
     {
       packages = forAllSystems (system: {
-        default = mkSeeds { inherit (nixpkgs.legacyPackages.${system}) python3Packages; };
+        default = mkSeeds { inherit (nixpkgs.legacyPackages.${system}) python3Packages git; };
       });
 
       # Consumed by ~/.config/home-manager via `overlays = [ seeds.overlays.default ];`
       overlays.default = final: _prev: {
-        seeds = mkSeeds { inherit (final) python3Packages; };
+        seeds = mkSeeds { inherit (final) python3Packages git; };
       };
 
       apps = forAllSystems (system: {
@@ -92,7 +106,7 @@
       # `nix flake check` (and CI) runs it; `nix build .#default` does not.
       checks = forAllSystems (system: {
         default = mkSeeds {
-          inherit (nixpkgs.legacyPackages.${system}) python3Packages;
+          inherit (nixpkgs.legacyPackages.${system}) python3Packages git;
           runTests = true;
         };
       });

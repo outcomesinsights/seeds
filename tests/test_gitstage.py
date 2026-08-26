@@ -16,7 +16,6 @@ directory under test, same as test_beads.py.
 """
 
 import subprocess
-from pathlib import Path
 from unittest.mock import patch
 
 from seeds.gitstage import _subprocess_env, staged_paths_outside
@@ -119,45 +118,50 @@ class TestIgnoresInheritedGitEnv:
     "true".
     """
 
+    def _decoy_repo(self, tmp_path):
+        """A real repo with real staged work, standing in for the hook's repo.
+
+        Deliberately built here rather than reusing seeds' own checkout. An
+        earlier version pointed GIT_DIR at `Path(__file__).parent.parent/.git`,
+        which works from a git clone and fails wherever the suite runs from an
+        unpacked source tree with no `.git` -- caught by `nix flake check`,
+        whose sandbox is exactly that (seeds-ww8, 2026-08-26). A test about
+        environment leakage has no business depending on how its own source
+        was obtained.
+
+        It stages a file OUTSIDE .seeds/ on purpose: if the leak being guarded
+        against were still present, staged_paths_outside would find that file
+        and return a non-empty list, so the assertion below distinguishes
+        "correctly ignored the inherited env" from "found nothing anywhere".
+        """
+        decoy = tmp_path / "decoy-repo"
+        decoy.mkdir()
+        _git_init(decoy)
+        (decoy / "staged-elsewhere.txt").write_text("work in the other repo\n")
+        _git(decoy, "add", "staged-elsewhere.txt")
+        return decoy / ".git"
+
     def test_inherited_git_dir_does_not_leak_into_an_unrelated_directory(
         self, tmp_path, monkeypatch
     ):
-        # A real, valid GIT_DIR -- this very repo's -- standing in for
-        # whatever repo happens to have this test suite as a git hook.
-        repo_root = Path(__file__).resolve().parent.parent
-        raw_git_dir = subprocess.run(
-            ["git", "rev-parse", "--git-dir"],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-        git_dir = Path(raw_git_dir)
-        if not git_dir.is_absolute():
-            git_dir = repo_root / git_dir
+        git_dir = self._decoy_repo(tmp_path)
+        unrelated = tmp_path / "unrelated"
+        unrelated.mkdir()
 
         monkeypatch.setenv("GIT_DIR", str(git_dir))
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.chdir(unrelated)
 
         assert staged_paths_outside(".seeds") is None
 
     def test_inherited_git_index_file_does_not_leak_either(self, tmp_path, monkeypatch):
         """Same leak, via the sibling variable that names the staged index."""
-        repo_root = Path(__file__).resolve().parent.parent
-        raw_git_dir = subprocess.run(
-            ["git", "rev-parse", "--git-dir"],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-        git_dir = Path(raw_git_dir)
-        if not git_dir.is_absolute():
-            git_dir = repo_root / git_dir
+        git_dir = self._decoy_repo(tmp_path)
+        unrelated = tmp_path / "unrelated"
+        unrelated.mkdir()
 
         monkeypatch.setenv("GIT_DIR", str(git_dir))
         monkeypatch.setenv("GIT_INDEX_FILE", str(git_dir / "index"))
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.chdir(unrelated)
 
         assert staged_paths_outside(".seeds") is None
 
