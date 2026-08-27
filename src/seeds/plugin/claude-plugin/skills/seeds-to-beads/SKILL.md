@@ -1,6 +1,6 @@
 ---
 name: seeds-to-beads
-description: Use when the user has reached agreement on a feature after a deliberation captured in seeds, and wants the relevant seeds turned into a set of beads (tasks) executable by a Sonnet-based agent.
+description: Use when the user has reached agreement on a feature after a deliberation captured in seeds, and wants the relevant seeds turned into a set of beads (tasks) executable by a Sonnet-based agent. Consults the user on decisions the deliberation left open before writing each bead, unless invoked with `--autonomous`.
 ---
 
 # Seeds → beads conversion
@@ -13,6 +13,41 @@ The user has deliberated a feature using seeds and now wants the agreed scope ha
 - Acceptance criteria must be mechanically checkable (file exists, command exits 0, output contains string X).
 - Set explicit dependencies between beads.
 - After creating beads, land the plane: commit unstaged work into a clean tree.
+
+## Consult before you create (default)
+
+Converting a deliberation into beads surfaces decisions the deliberation never settled. The executing agent will have to make those calls anyway — alone, in a worktree, with no one to ask. **Put the question to the user before the bead is written, not after.** A question costs a sentence; a bead that ships with a guess baked into it costs a round of rework.
+
+Ask when the decision is genuinely the user's to make:
+
+- **Scope boundary** — does this belong in this bead, in a separate bead, or out of scope entirely?
+- **Taste, UX, naming** — anything that lands on a surface a person reads: command and flag names, output wording, defaults.
+- **Something the seeds left open** — the deliberation raised it and never landed it, or two seeds point in different directions.
+- **Acceptance criteria that can't be made mechanical without picking a definition** — "works correctly" needs a *what counts as correct* before it becomes a check.
+- **Sequencing that encodes a design commitment**, not just an ordering convenience.
+
+Do not ask about:
+
+- Anything the deliberation already settled. Re-opening a locked decision is the exact failure this skill exists to prevent.
+- Bead decomposition, titles, wording, and other mechanical carving — that's your job.
+- Anything you can answer by reading the repo.
+
+How to ask:
+
+- Do the analysis pass across all the seeds first, then batch the questions into as few rounds as possible. A drip of one-at-a-time interrupts is worse than a single round of four. A second round for questions that only become askable after an earlier answer is fine.
+- Give concrete options with a recommendation, so "yeah, the first one" is a complete answer. Say what each option costs.
+- Then write the beads.
+
+What to do with the answer:
+
+- Record the ruling in the bead as a locked decision **in the user's own words**, with its rationale — the same bar as *Capturing intent* below. Getting the judgment into the bead intact was the point of asking.
+- If the answer settles something the originating seed had open, carry it back — `seeds answer <q-id> "…"`, or a note on the seed. The deliberation record shouldn't end up poorer than the beads it produced.
+
+## `--autonomous`: convert in one pass
+
+Invoked with `--autonomous` — or when the user says to just go, not to ask, or is away — make those calls yourself and create the whole set without stopping. This is the skill's prior behavior. It fits a mechanical conversion, a user who is AFK, or a case where speed matters more than precision.
+
+Autonomous is not silent. Every call you would otherwise have asked about gets recorded as an explicit assumption in the bead (`Assumed: … — the deliberation didn't settle this`), and gathered into your closing summary, so the user can overturn one without reading every bead to find it.
 
 ## Capturing intent
 

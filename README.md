@@ -147,7 +147,7 @@ This registers the bundled marketplace and installs the `seeds` plugin under the
 ### Available skills
 
 - **`seeds:feedback`** — frames the next user message as feedback on the agent's prior turn and invites the agent to follow up with its own questions, comments, or criticisms. Useful during deliberation when you want the agent to push back rather than just execute.
-- **`seeds:seeds-to-beads`** — frames the user's request as "convert these seeds into beads" and applies the agreed seeds-to-beads conversion principles (separating action from context, mechanically checkable acceptance criteria, etc.) for that one reply.
+- **`seeds:seeds-to-beads`** — frames the user's request as "convert these seeds into beads" and applies the agreed seeds-to-beads conversion principles (separating action from context, mechanically checkable acceptance criteria, etc.) for that one reply. By default it stops and asks you about decisions the deliberation left open before writing the bead that depends on them; pass `--autonomous` to convert in one pass, with each such call recorded in the bead as an explicit assumption.
 - **`seeds:trellis`** — fires when you say "trellis this" or "make this a trellis"; distills the seed's deliberation into one bounded principle and writes it into durable context via `seeds trellis`.
 
 Re-run `seeds skills install` after upgrading the seeds CLI to pick up updated skill content.
