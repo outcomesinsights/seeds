@@ -296,6 +296,71 @@ def tokenize_for_suggest(text: str) -> list[str]:
     return [t for t in tokens if len(t) >= 2 and t not in _SUGGEST_STOPWORDS]
 
 
+# A bare FTS5 term that needs no quoting: word characters, an optional trailing
+# ``*`` for a prefix query. Anything else — a hyphen above all — is punctuation
+# FTS5 parses as syntax rather than text.
+_FTS_BARE_TERM_RE = re.compile(r"^\w+\*?$", re.UNICODE)
+
+# The operator vocabulary `seeds search --help` documents, plus the two that
+# come free with it. FTS5 only treats these as operators in UPPERCASE; a
+# lowercase "and" is an ordinary word and gets quoted like any other term.
+_FTS_OPERATORS = frozenset({"AND", "OR", "NOT", "NEAR"})
+
+# Splits a query into quoted phrases, parens/commas (NEAR's punctuation), and
+# runs of non-space. The phrase alternative comes first so a quoted string is
+# taken whole, and its unterminated form is captured rather than dropped.
+_FTS_TOKEN_RE = re.compile(r'"[^"]*"\*?|"[^"]*$|[(),]|[^\s(),]+')
+
+
+def sanitize_fts_query(query: str) -> str:
+    """Make a user's search string safe to hand to FTS5 ``MATCH``.
+
+    FTS5 parses punctuation as syntax, so an ordinary hyphenated search term
+    is a syntax error rather than a search: ``seeds-to-beads`` reads as a
+    column filter and raises ``no such column: to``. Since hyphens are how
+    this project names nearly everything — tags, skills, seed IDs — the raw
+    string cannot go to MATCH unaltered.
+
+    Terms that need it are wrapped in double quotes, which makes FTS5 read
+    them as a phrase. That is not a compromise: the tokenizer splits indexed
+    text on the same punctuation, so the phrase ``"seeds-to-beads"`` matches
+    exactly the text the user typed it to find.
+
+    The operator syntax `seeds search --help` advertises survives untouched —
+    quoted "phrases", ``prefix*``, and uppercase AND/OR/NOT (plus NEAR and its
+    parens). Any other FTS5 operator is treated as literal text, which is the
+    safe direction to be wrong in: a query that finds nothing beats a
+    traceback.
+
+    Returns the empty string when nothing searchable remains (a query of pure
+    punctuation), which the caller should read as 'no results' rather than
+    passing on to MATCH.
+    """
+    out: list[str] = []
+    for token in _FTS_TOKEN_RE.findall(query):
+        if token in {"(", ")", ","} or token in _FTS_OPERATORS:
+            out.append(token)
+            continue
+        if token.startswith('"'):
+            # Already a phrase. Close an unterminated one rather than letting
+            # FTS5 raise 'unterminated string' on it.
+            if not token.rstrip("*").endswith('"') or len(token.rstrip("*")) == 1:
+                token = token.rstrip("*") + '"'
+            out.append(token)
+            continue
+        if _FTS_BARE_TERM_RE.match(token):
+            out.append(token)
+            continue
+        prefix = "*" if token.endswith("*") else ""
+        body = token[:-1] if prefix else token
+        # Nothing but punctuation — FTS5 would reject the empty phrase it
+        # produces, and it can match nothing anyway.
+        if not any(ch.isalnum() or ch == "_" for ch in body):
+            continue
+        out.append('"' + body.replace('"', '""') + '"' + prefix)
+    return " ".join(out)
+
+
 # Suffixes that match the ID shape but are prose, never references.
 #
 # ``<prefix>-<word>`` is ordinary English — "a seeds-native workflow", "the

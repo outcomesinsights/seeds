@@ -619,6 +619,64 @@ class TestSearch:
         assert len(db.search("deliberation")) == 1
         assert len(db.search("automation")) == 1
 
+    def test_search_hyphenated_term(self, db):
+        """Verify a hyphenated query searches instead of raising.
+
+        Regression: the query went to FTS5 MATCH raw, which parses '-' as
+        syntax -- 'seeds-to-beads' raised OperationalError('no such column:
+        to'). Hyphens are how this project names everything, so the crash hit
+        the most ordinary searches there are (bead seeds-k31).
+        """
+        db.create_seed(Seed(id="seed-1", title="The seeds-to-beads skill"))
+        db.create_seed(Seed(id="seed-2", title="Database optimization"))
+
+        results = db.search("seeds-to-beads")
+        assert len(results) == 1
+        assert results[0].id == "seed-1"
+
+    def test_search_hyphenated_term_in_content(self, db):
+        """Verify the same for a hyphenated term in seed content."""
+        db.create_seed(
+            Seed(id="seed-1", title="Hooks", content="Wire up pre-commit hooks")
+        )
+
+        results = db.search("pre-commit")
+        assert len(results) == 1
+        assert results[0].id == "seed-1"
+
+    def test_search_hyphenated_prefix_query(self, db):
+        """Verify a hyphenated term keeps its prefix-query semantics."""
+        db.create_seed(Seed(id="seed-1", title="Wire up pre-commit hooks"))
+        db.create_seed(Seed(id="seed-2", title="Database optimization"))
+
+        results = db.search("pre-comm*")
+        assert len(results) == 1
+        assert results[0].id == "seed-1"
+
+    def test_search_punctuation_only_returns_empty(self, db):
+        """Verify a query with nothing searchable returns [] rather than raising."""
+        db.create_seed(Seed(id="seed-1", title="Deliberation patterns"))
+
+        assert db.search("---") == []
+        assert db.search("!!!") == []
+
+    def test_search_unbalanced_quote(self, db):
+        """Verify an unterminated phrase does not reach FTS5 as a syntax error."""
+        db.create_seed(Seed(id="seed-1", title="Deliberation patterns"))
+
+        # Closed for the user rather than reaching MATCH as 'unterminated string'.
+        results = db.search('"deliberation patterns')
+        assert [s.id for s in results] == ["seed-1"]
+
+    def test_search_boolean_operators_still_work(self, db):
+        """Verify sanitizing left the documented operator syntax intact."""
+        db.create_seed(Seed(id="seed-1", title="Deliberation patterns"))
+        db.create_seed(Seed(id="seed-2", title="Workflow automation"))
+
+        assert len(db.search("deliberation OR automation")) == 2
+        assert len(db.search("deliberation AND patterns")) == 1
+        assert [s.id for s in db.search('"deliberation patterns"')] == ["seed-1"]
+
 
 class TestSuggest:
     """Tests for Database.suggest (natural-language dedup query)."""
@@ -629,6 +687,19 @@ class TestSuggest:
     def test_stopwords_only_returns_empty(self, db):
         db.create_seed(Seed(id="seed-1", title="Anything"))
         assert db.suggest("the of and to") == []
+
+    def test_hyphenated_input_still_matches(self, db):
+        """Verify hyphenated input reaches FTS5 as text, not syntax.
+
+        Regression: tokenize_for_suggest keeps hyphens, so the OR-joined query
+        was a syntax error -- and suggest's `except OperationalError: return []`
+        turned that into a silent 'no matches' for any hyphenated input rather
+        than a crash (bead seeds-k31).
+        """
+        db.create_seed(Seed(id="seed-1", title="The seeds-to-beads skill"))
+
+        results = db.suggest("does a seed about seeds-to-beads exist")
+        assert [r.seed.id for r in results] == ["seed-1"]
 
     def test_matches_by_title(self, db):
         db.create_seed(Seed(id="seed-1", title="Venn diagram for compare lens"))

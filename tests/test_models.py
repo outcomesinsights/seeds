@@ -19,6 +19,7 @@ from seeds.models import (
     iter_id_ref_snippets,
     parse_since,
     rewrite_id_refs,
+    sanitize_fts_query,
     sanitize_prefix,
     tokenize_for_suggest,
 )
@@ -626,3 +627,54 @@ class TestRelationship:
             rel_type=RelationType.QUESTIONS,
         )
         assert rel.rel_type == RelationType.QUESTIONS
+
+
+class TestSanitizeFtsQuery:
+    """Tests for sanitize_fts_query (FTS5 query escaping)."""
+
+    def test_bare_word_untouched(self):
+        assert sanitize_fts_query("deliberation") == "deliberation"
+
+    def test_hyphenated_term_is_quoted(self):
+        """The whole point: '-' is FTS5 syntax, quoting makes it text."""
+        assert sanitize_fts_query("seeds-to-beads") == '"seeds-to-beads"'
+
+    def test_prefix_query_survives(self):
+        assert sanitize_fts_query("delib*") == "delib*"
+
+    def test_hyphenated_prefix_query_keeps_its_star(self):
+        """Quote the phrase, leave the '*' outside so it stays a prefix query."""
+        assert sanitize_fts_query("pre-comm*") == '"pre-comm"*'
+
+    def test_boolean_operators_survive(self):
+        assert sanitize_fts_query("agent OR sweep") == "agent OR sweep"
+        assert sanitize_fts_query("agent AND NOT sweep") == "agent AND NOT sweep"
+
+    def test_lowercase_operators_are_words(self):
+        """FTS5 only reads uppercase as operators, so 'and' is an ordinary term."""
+        assert sanitize_fts_query("agent and sweep") == "agent and sweep"
+
+    def test_existing_phrase_untouched(self):
+        assert sanitize_fts_query('"agent reasoning"') == '"agent reasoning"'
+
+    def test_near_and_its_parens_survive(self):
+        assert sanitize_fts_query("NEAR(agent reasoning)") == "NEAR ( agent reasoning )"
+
+    def test_unterminated_phrase_is_closed(self):
+        assert sanitize_fts_query('"unterminated') == '"unterminated"'
+
+    def test_punctuation_only_yields_empty(self):
+        """Caller reads '' as 'no results' rather than passing it to MATCH."""
+        assert sanitize_fts_query("---") == ""
+        assert sanitize_fts_query("!!!") == ""
+        assert sanitize_fts_query("") == ""
+
+    def test_internal_quote_is_doubled(self):
+        """A quote inside a term must not close the phrase it is escaped into."""
+        assert sanitize_fts_query('foo"bar-baz') == '"foo""bar-baz"'
+
+    def test_mixed_query(self):
+        assert (
+            sanitize_fts_query('pre-commit OR "agent reasoning" OR delib*')
+            == '"pre-commit" OR "agent reasoning" OR delib*'
+        )

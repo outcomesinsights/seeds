@@ -33,6 +33,7 @@ from seeds.models import (
     iter_id_ref_snippets,
     now_utc,
     rewrite_id_refs,
+    sanitize_fts_query,
 )
 
 # A recoverable ID suffix is a base36 token — this spans the sequential scheme
@@ -1168,8 +1169,13 @@ class Database:
         self.ensure_fts()
         conn = self._get_conn()
 
-        # OR the tokens together — BM25 ranks; we'll post-filter.
-        fts_query = " OR ".join(tokens)
+        # OR the tokens together — BM25 ranks; we'll post-filter. Each token is
+        # sanitized first: tokenize_for_suggest keeps hyphens, which FTS5 would
+        # parse as syntax and reject — and the except below would turn that into
+        # a silent empty result for any hyphenated input.
+        fts_query = " OR ".join(q for q in (sanitize_fts_query(t) for t in tokens) if q)
+        if not fts_query:
+            return []
 
         sql = """
             SELECT s.*,
@@ -1226,6 +1232,11 @@ class Database:
     def search(self, query: str, include_terminal: bool = False) -> list[Seed]:
         """Full-text search across seed titles, content, and tags.
 
+        The query is sanitized before it reaches FTS5 — see
+        :func:`~seeds.models.sanitize_fts_query`. Without that, an ordinary
+        hyphenated term (``seeds-to-beads``, ``pre-commit``) is parsed as
+        syntax and raises ``sqlite3.OperationalError`` instead of searching.
+
         Args:
             query: FTS5 query string (supports AND, OR, NOT, prefix*, "phrases").
             include_terminal: If True, include resolved/abandoned seeds.
@@ -1233,6 +1244,12 @@ class Database:
         Returns:
             Seeds matching the query, ordered by relevance.
         """
+        fts_query = sanitize_fts_query(query)
+        if not fts_query:
+            # Nothing searchable survived sanitizing (a query of pure
+            # punctuation). MATCH would reject the empty string.
+            return []
+
         self.ensure_fts()
         conn = self._get_conn()
 
@@ -1241,7 +1258,7 @@ class Database:
             JOIN seeds_fts fts ON s.id = fts.id
             WHERE seeds_fts MATCH ?
         """
-        params: list[str] = [query]
+        params: list[str] = [fts_query]
 
         if not include_terminal:
             sql += " AND s.status NOT IN (?, ?)"
