@@ -231,7 +231,10 @@ seeds list                                      # what's open
 seeds show seeds-a1b2                           # one seed in detail
 seeds tree                                      # hierarchy view
 seeds prime                                     # context for an AI agent
-seeds sync --flush-only                         # export to JSONL for git
+seeds sync                                      # round trip: import, then export
+seeds sync --flush-only                         # export only, no import
+seeds import                                    # rebuild the DB from the JSONL
+seeds doctor                                    # check the DB and JSONL agree
 ```
 
 You will rarely type any of these yourself. That is fine.
@@ -360,7 +363,17 @@ may vary.
 A few small habits keep the seed database healthy.
 
 - **Sync at end of session.** `seeds sync --flush-only` writes the JSONL
-  export so the day's deliberation is git-trackable. Commit it.
+  export so the day's deliberation is git-trackable. Commit it. Plain `seeds
+  sync` round-trips — it imports the JSONL first, then exports — which is what
+  you want after pulling someone else's seeds.
+- **On a fresh clone, run `seeds import`.** The database is gitignored and the
+  JSONL is tracked, so a clone has the file and no database. That is the normal
+  state. `seeds import` rebuilds the database from the JSONL, recovering the
+  schema and the project prefix from the file itself.
+- **`seeds doctor` answers "is my sync actually healthy?"** It compares the
+  records in the JSONL against the database and names what each side is
+  missing, exiting non-zero when they disagree — so it can gate a pre-commit
+  or CI hook. Worth running when seeds seem to have gone missing.
 - **If a sync refuses, read what it names.** The export rewrites the JSONL
   wholesale from the database, so it stops rather than destroy a record the
   database has never seen — a merge conflict you resolved in the file, a hand

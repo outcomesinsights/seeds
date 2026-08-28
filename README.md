@@ -116,11 +116,27 @@ seeds questions                          # List open questions
 seeds link <id1> <id2>                   # Create bidirectional relationship
 ```
 
-### Export
+### Sync
+
+`.seeds/seeds.db` is gitignored; `.seeds/seeds.jsonl` is tracked. The JSONL is
+what travels between machines and through code review.
 
 ```bash
-seeds sync --flush-only                  # Export to .seeds/seeds.jsonl (git-trackable)
+seeds sync                               # Round trip: import the JSONL, then export
+seeds sync --flush-only                  # Export only, no import
+seeds import                             # Rehydrate the database from the JSONL
+seeds import -                           # Read JSONL from stdin
+seeds doctor                             # Check DB and JSONL agree (exits non-zero if not)
 ```
+
+**On a fresh clone you have the JSONL and no database** — that is the normal
+state, not a broken one. Run `seeds import` to rebuild the database from it;
+the schema and the project prefix are both recovered from the file.
+
+`seeds sync` refuses rather than overwrite a record on disk the database has
+never seen — a merge resolution, a hand edit, or a peer's seed. Read what it
+names and fold the content in; `--allow-divergence` skips the check and
+destroys that content.
 
 ### AI Context
 
