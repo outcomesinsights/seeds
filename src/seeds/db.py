@@ -878,6 +878,37 @@ class Database:
         conn.commit()
         return counts
 
+    def retype_seeds(
+        self,
+        from_type: str,
+        to_type: str,
+        dry_run: bool = False,
+    ) -> list[str]:
+        """Change every seed carrying ``from_type`` to ``to_type``.
+
+        Returns the IDs affected, sorted. When ``dry_run`` is True nothing is
+        written and the return value reports what *would* change.
+
+        Both types are arbitrary strings — the vocabulary is open (see
+        :class:`~seeds.models.SeedType`), so this is also the tool for
+        deliberate vocabulary evolution, not only for cleaning up a typo.
+        """
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT id FROM seeds WHERE seed_type = ? ORDER BY id",
+            (from_type,),
+        ).fetchall()
+        ids = [row["id"] for row in rows]
+
+        if ids and not dry_run:
+            conn.execute(
+                "UPDATE seeds SET seed_type = ?, updated_at = ? WHERE seed_type = ?",
+                (to_type, _datetime_to_str(now_utc()), from_type),
+            )
+            conn.commit()
+
+        return ids
+
     def rename_prefix(
         self,
         new_prefix: str,

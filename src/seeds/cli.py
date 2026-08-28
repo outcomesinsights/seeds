@@ -1766,6 +1766,64 @@ def serve(host: str, port: int, debug: bool) -> None:
     run_server(host=host, port=port, debug=debug)
 
 
+@main.command("retype")
+@click.option("--from", "from_type", required=True, help="The type to change")
+@click.option("--to", "to_type", required=True, help="The type to change it to")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Show what would change without writing to the database.",
+)
+@pass_context
+def retype(ctx: Context, from_type: str, to_type: str, dry_run: bool) -> None:
+    """Change every seed of one type to another.
+
+    Both types are arbitrary strings, matching `seeds create --type`. That
+    makes this the cleanup for a typo that slipped in (`--from ideea --to
+    idea`) and equally the tool for deliberate vocabulary evolution
+    (`--from concern --to risk`) across a whole project.
+
+    Note the same openness applies to --to: a typo there is not catchable
+    either. Use --dry-run first, and `seeds doctor` lists non-standard types
+    afterwards.
+    """
+    db = ctx.get_db()
+
+    if from_type == to_type:
+        click.echo(f"--from and --to are both {from_type!r}; nothing to do.")
+        return
+
+    ids = db.retype_seeds(from_type, to_type, dry_run=dry_run)
+
+    if not ids:
+        click.echo(f"No seeds have type {from_type!r}; nothing to do.")
+        return
+
+    if dry_run:
+        click.echo("DRY RUN — no changes will be written.")
+    else:
+        import shutil
+
+        backup_path = db.path.with_suffix(".db.bak")
+        shutil.copy2(db.path, backup_path)
+        click.echo(f"Backed up database to {backup_path}")
+
+    verb = "Would retype" if dry_run else "Retyped"
+    click.echo(f"{verb} {len(ids)} seed(s) from {from_type!r} to {to_type!r}:")
+    for seed_id in ids:
+        click.echo(f"  {seed_id}")
+
+    if dry_run:
+        click.echo("\nRun without --dry-run to apply.")
+        return
+
+    from seeds.export import export_to_jsonl
+
+    output_path = export_to_jsonl(db)
+    click.echo(f"\nRe-exported to {output_path}")
+
+
 @main.command("rename-prefix")
 @click.argument("new_prefix")
 @click.option(

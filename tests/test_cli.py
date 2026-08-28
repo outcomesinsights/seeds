@@ -950,6 +950,81 @@ class TestTrellisCommand:
         assert "not found" in result.output
 
 
+class TestRetypeCommand:
+    """Tests for 'seeds retype' (bulk type remap, bead seeds-scq)."""
+
+    def _seed(self, db, seed_id, seed_type):
+        db.create_seed(Seed(id=seed_id, title=f"Seed {seed_id}", seed_type=seed_type))
+
+    def test_retype_changes_every_matching_seed(self, cli_runner, env_with_seeds):
+        db = Database()
+        self._seed(db, "seed-a", "ideea")
+        self._seed(db, "seed-b", "ideea")
+        self._seed(db, "seed-c", "idea")
+        db.close()
+
+        result = cli_runner.invoke(main, ["retype", "--from", "ideea", "--to", "idea"])
+        assert result.exit_code == 0
+        assert "seed-a" in result.output and "seed-b" in result.output
+
+        db = Database()
+        assert db.get_seed("seed-a").seed_type == "idea"
+        assert db.get_seed("seed-b").seed_type == "idea"
+        db.close()
+
+    def test_dry_run_writes_nothing(self, cli_runner, env_with_seeds):
+        db = Database()
+        self._seed(db, "seed-a", "ideea")
+        db.close()
+
+        result = cli_runner.invoke(
+            main, ["retype", "--from", "ideea", "--to", "idea", "--dry-run"]
+        )
+        assert result.exit_code == 0
+        assert "DRY RUN" in result.output
+
+        db = Database()
+        assert db.get_seed("seed-a").seed_type == "ideea"
+        db.close()
+
+    def test_backup_written_on_apply(self, cli_runner, env_with_seeds):
+        db = Database()
+        self._seed(db, "seed-a", "ideea")
+        backup = db.path.with_suffix(".db.bak")
+        db.close()
+        assert not backup.exists()
+
+        cli_runner.invoke(main, ["retype", "--from", "ideea", "--to", "idea"])
+        assert backup.exists()
+
+    def test_no_match_touches_nothing(self, cli_runner, env_with_seeds):
+        result = cli_runner.invoke(
+            main, ["retype", "--from", "nonexistent", "--to", "idea"]
+        )
+        assert result.exit_code == 0
+        assert "nothing to do" in result.output
+
+    def test_same_from_and_to_is_refused_as_a_noop(self, cli_runner, env_with_seeds):
+        result = cli_runner.invoke(main, ["retype", "--from", "idea", "--to", "idea"])
+        assert result.exit_code == 0
+        assert "nothing to do" in result.output
+
+    def test_arbitrary_types_accepted_both_sides(self, cli_runner, env_with_seeds):
+        """The vocabulary is open, so neither --from nor --to is constrained."""
+        db = Database()
+        self._seed(db, "seed-a", "context")
+        db.close()
+
+        result = cli_runner.invoke(
+            main, ["retype", "--from", "context", "--to", "background"]
+        )
+        assert result.exit_code == 0
+
+        db = Database()
+        assert db.get_seed("seed-a").seed_type == "background"
+        db.close()
+
+
 class TestUpdateCommand:
     """Tests for 'seeds update' command."""
 
