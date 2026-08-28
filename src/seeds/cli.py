@@ -13,7 +13,12 @@ import click
 from seeds import __version__
 from seeds.beads import load_bead_ids
 from seeds.db import SEEDS_DIR, Database
-from seeds.export import JSONL_FILE, DivergentExportError, ImportResult
+from seeds.export import (
+    JSONL_FILE,
+    DivergentExportError,
+    ImportResult,
+    MalformedRecordError,
+)
 from seeds.models import (
     DEFAULT_PREFIX,
     RelationType,
@@ -1421,13 +1426,54 @@ def import_(ctx: Context, path: str | None) -> None:
 
     db = ctx.get_db(bootstrap=True)
 
-    if path == "-":
-        result = import_lines(db, sys.stdin, bootstrap=True)
-    else:
-        input_path = Path(path) if path is not None else None
-        result = import_from_jsonl(db, input_path, bootstrap=True)
+    reported_path = (
+        Path(path) if path not in (None, "-") else db.path.parent / JSONL_FILE
+    )
+    try:
+        if path == "-":
+            result = import_lines(db, sys.stdin, bootstrap=True)
+        else:
+            input_path = Path(path) if path is not None else None
+            result = import_from_jsonl(db, input_path, bootstrap=True)
+    except MalformedRecordError as exc:
+        click.echo(
+            _format_malformed_record_error(
+                exc, Path("<stdin>") if path == "-" else reported_path
+            ),
+            err=True,
+        )
+        sys.exit(1)
 
     click.echo(_format_import_summary(result))
+
+
+def _format_malformed_record_error(exc: MalformedRecordError, path: Path) -> str:
+    """Explain which record stopped an import, and what state that leaves."""
+    lines = [
+        f"Error: {path} holds a record seeds cannot read.",
+        "",
+        f"  {exc}",
+        "",
+    ]
+    if exc.imported_before:
+        lines.extend(
+            [
+                f"{exc.imported_before} record(s) before it were imported; nothing "
+                "from this one onward was.",
+                "The database is now partway through the file — fix the record and "
+                "re-run to finish.",
+            ]
+        )
+    else:
+        lines.append("Nothing was imported.")
+    lines.extend(
+        [
+            "",
+            "Records are read in file order, so this is the FIRST unreadable one; "
+            "there may be others below it.",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _format_divergence_error(exc: DivergentExportError) -> str:
@@ -1590,7 +1636,14 @@ def sync(
     from seeds.export import export_to_jsonl, import_from_jsonl
 
     if not flush_only:
-        import_result = import_from_jsonl(db)
+        try:
+            import_result = import_from_jsonl(db)
+        except MalformedRecordError as exc:
+            click.echo(
+                _format_malformed_record_error(exc, db.path.parent / JSONL_FILE),
+                err=True,
+            )
+            sys.exit(1)
         click.echo(_format_import_summary(import_result))
 
     if not allow_mixed_stage:
@@ -1778,14 +1831,25 @@ def doctor(ctx: Context) -> None:
         # the database lacks, i.e. JSONL newer than DB, which is exactly what
         # it certified as "up to date". That is how Mark Danese's sync stayed
         # broken for five weeks with doctor reporting all clear (seeds-1x6b).
-        from seeds.export import read_record_ids
+        #
+        # The ID comparison alone was ALSO a proxy, and blind to the other half
+        # of the same failure: an edit to a record's body in the file leaves
+        # every ID matching, so doctor passed while `seeds sync` refused on
+        # every run, permanently. find_divergence is the check the export
+        # itself refuses on, so asking it here makes doctor agree with sync by
+        # construction rather than by a second, weaker approximation.
+        from seeds.export import find_divergence, read_record_ids
 
         disk_ids = read_record_ids(jsonl_path)
         db_ids = {seed.id for seed in db.list_seeds(include_terminal=True)}
         missing_from_db = sorted(disk_ids - db_ids)
         missing_from_disk = sorted(db_ids - disk_ids)
+        divergences = find_divergence(db, jsonl_path)
+        # 'missing' divergences are the same records as missing_from_db; report
+        # each fact once, under the heading that explains what to do about it.
+        content_divergences = [d for d in divergences if d.kind != "missing"]
 
-        if not missing_from_db and not missing_from_disk:
+        if not missing_from_db and not missing_from_disk and not content_divergences:
             check_pass("JSONL and DB agree")
         else:
             check_fail("Sync", "JSONL and DB disagree")
@@ -1795,6 +1859,14 @@ def doctor(ctx: Context) -> None:
             if missing_from_disk:
                 click.echo(f"      {len(missing_from_disk)} seeds in DB not in JSONL")
                 click.echo(f"        {', '.join(missing_from_disk[:10])}")
+            if content_divergences:
+                click.echo(
+                    f"      {len(content_divergences)} records whose on-disk body "
+                    "the database has not seen"
+                )
+                click.echo(
+                    f"        {', '.join(d.seed_id for d in content_divergences[:10])}"
+                )
             click.echo("      Run 'seeds sync'; if it fails, fix the records it names.")
     else:
         check_warn("Sync", "No JSONL file, run 'seeds sync'")

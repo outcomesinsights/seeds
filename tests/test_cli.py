@@ -3251,6 +3251,44 @@ class TestDoctorCommand:
         assert "ideea (1)" in result.output
         assert "seeds retype" in result.output
 
+    def test_doctor_fails_on_content_divergence(self, cli_runner, env_with_seeds):
+        """doctor must agree with sync, not approximate it.
+
+        Regression: doctor compared ID sets only, so a body edited in the file
+        left every ID matching and doctor passed -- while `seeds sync` refused
+        on every run, permanently. find_divergence, the check the export
+        itself refuses on, sat unused in the same module.
+        """
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        jsonl = Path.cwd() / SEEDS_DIR / "seeds.jsonl"
+        lines = jsonl.read_text().splitlines()
+        record = json.loads(lines[0])
+        record["content"] = (record.get("content") or "") + "\n\nEdited in the file."
+        lines[0] = json.dumps(record)
+        jsonl.write_text("\n".join(lines) + "\n")
+
+        result = cli_runner.invoke(main, ["doctor"])
+        assert result.exit_code == 1
+        assert "on-disk body" in result.output
+        assert record["id"] in result.output
+
+    def test_doctor_agrees_with_sync_on_the_same_state(
+        self, cli_runner, env_with_seeds
+    ):
+        """The property that matters: doctor green iff sync succeeds."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        jsonl = Path.cwd() / SEEDS_DIR / "seeds.jsonl"
+        lines = jsonl.read_text().splitlines()
+        record = json.loads(lines[0])
+        record["content"] = (record.get("content") or "") + "\n\nEdited in the file."
+        lines[0] = json.dumps(record)
+        jsonl.write_text("\n".join(lines) + "\n")
+
+        sync_result = cli_runner.invoke(main, ["sync"])
+        doctor_result = cli_runner.invoke(main, ["doctor"])
+        assert sync_result.exit_code == 1
+        assert doctor_result.exit_code == 1
+
     def test_doctor_warns_no_jsonl(self, cli_runner, env_with_seeds):
         """Verify doctor warns when JSONL file doesn't exist."""
         result = cli_runner.invoke(main, ["doctor"])

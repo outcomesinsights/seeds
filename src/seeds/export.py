@@ -196,6 +196,38 @@ class Divergence:
     in_db: str = ""
 
 
+class MalformedRecordError(Exception):
+    """Raised when a JSONL record cannot be read into a Seed.
+
+    Exists so a bad record reports itself instead of surfacing a bare
+    ``ValueError`` traceback from an enum constructor. That traceback named
+    neither the record nor the file, which is how Mark Danese spent five weeks
+    not knowing which line had stopped his sync (seed seeds-1x6b).
+
+    Carries the index of the record in the file, its ``id`` when it has one,
+    and how many records were already imported before it -- because the import
+    is not transactional, and an operator needs to know the database is now
+    partway through. Whether it SHOULD be transactional is still open
+    (seed seeds-hao9); this reports the state honestly either way.
+    """
+
+    def __init__(
+        self,
+        record_number: int,
+        seed_id: str | None,
+        reason: str,
+        imported_before: int,
+    ) -> None:
+        self.record_number = record_number
+        self.seed_id = seed_id
+        self.reason = reason
+        self.imported_before = imported_before
+        where = f"record {record_number}"
+        if seed_id:
+            where += f" ({seed_id})"
+        super().__init__(f"{where}: {reason}")
+
+
 class DivergentExportError(Exception):
     """Raised instead of overwriting JSONL records the database never saw.
 
@@ -658,16 +690,24 @@ def import_records(
 
     now = now_utc()
     result = ImportResult()
-    for data in records:
+    for record_number, data in enumerate(records, start=1):
         refusal = _refusal_for(data, now)
         if refusal is not None:
             result.refused.append(refusal)
             continue
 
-        if data.get("format_version") == 2:
-            outcome = _import_v2_record(db, data)
-        else:
-            outcome = _import_v1_record(db, data)
+        try:
+            if data.get("format_version") == 2:
+                outcome = _import_v2_record(db, data)
+            else:
+                outcome = _import_v1_record(db, data)
+        except (ValueError, KeyError, TypeError) as exc:
+            raise MalformedRecordError(
+                record_number=record_number,
+                seed_id=data.get("id") if isinstance(data.get("id"), str) else None,
+                reason=str(exc),
+                imported_before=result.created + result.updated,
+            ) from exc
 
         if outcome == "created":
             result.created += 1

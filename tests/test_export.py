@@ -11,6 +11,7 @@ from seeds.export import (
     FUTURE_TIMESTAMP_TOLERANCE,
     DivergentExportError,
     ImportResult,
+    MalformedRecordError,
     RefusedRecord,
     db_extends_disk,
     export_to_jsonl,
@@ -910,6 +911,62 @@ class TestImportDefaultPath:
             assert seed.title == "Default Path Seed"
         finally:
             os.chdir(original_cwd)
+
+
+class TestMalformedRecordReporting:
+    """A record seeds cannot read must name itself (bead seeds-hao9 evidence)."""
+
+    def _records(self, bad_status="in-progress"):
+        def rec(seed_id, status="captured"):
+            return {
+                "format_version": 2,
+                "id": seed_id,
+                "title": seed_id,
+                "content": "",
+                "status": status,
+                "seed_type": "idea",
+                "tags": [],
+                "created_at": "2026-08-01T00:00:00+00:00",
+                "updated_at": "2026-08-01T00:00:00+00:00",
+                "relationships": [],
+            }
+
+        return [rec("seed-1"), rec("seed-bad", bad_status), rec("seed-3")]
+
+    def test_unreadable_record_raises_a_named_error_not_a_bare_valueerror(
+        self, db, tmp_path
+    ):
+        """Regression: an unrecognized status raised straight out of the enum.
+
+        Mark Danese's outage was this shape with seed_type; opening that
+        vocabulary left status with the same eager parse (seed seeds-1x6b).
+        """
+        jsonl = tmp_path / "seeds.jsonl"
+        jsonl.write_text("\n".join(json.dumps(r) for r in self._records()) + "\n")
+
+        with pytest.raises(MalformedRecordError) as exc_info:
+            import_from_jsonl(db, jsonl)
+
+        exc = exc_info.value
+        assert exc.seed_id == "seed-bad"
+        assert exc.record_number == 2
+        assert "SeedStatus" in exc.reason
+
+    def test_error_reports_how_many_records_already_landed(self, db, tmp_path):
+        """The import is not transactional, so the operator is told the state.
+
+        Whether it SHOULD be transactional is deliberately still open
+        (seed seeds-hao9); this reports honestly under either answer.
+        """
+        jsonl = tmp_path / "seeds.jsonl"
+        jsonl.write_text("\n".join(json.dumps(r) for r in self._records()) + "\n")
+
+        with pytest.raises(MalformedRecordError) as exc_info:
+            import_from_jsonl(db, jsonl)
+
+        assert exc_info.value.imported_before == 1
+        assert db.get_seed("seed-1") is not None
+        assert db.get_seed("seed-3") is None
 
 
 class TestArbitrarySeedType:
