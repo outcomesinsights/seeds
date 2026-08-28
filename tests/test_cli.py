@@ -99,6 +99,69 @@ def env_with_seeds(initialized_env):
 class TestInitCommand:
     """Tests for 'seeds init' command."""
 
+    def test_init_points_at_import_when_db_missing_but_jsonl_present(
+        self, cli_runner, env_with_seeds
+    ):
+        """The fresh-clone state: tracked JSONL, gitignored DB absent.
+
+        Regression: init reported "already initialized" over a directory with
+        no database, while every other command sent the user to init -- a
+        closed loop with no exit, and the exact state of every fresh clone
+        (bead seeds-1j3).
+        """
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        (Path.cwd() / SEEDS_DIR / "seeds.db").unlink()
+
+        result = cli_runner.invoke(main, ["init"])
+        assert result.exit_code == 0
+        assert "already initialized" not in result.output
+        assert "seeds import" in result.output
+
+    def test_commands_point_at_import_when_db_missing_but_jsonl_present(
+        self, cli_runner, env_with_seeds
+    ):
+        """Other commands name the recovery that actually works."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        (Path.cwd() / SEEDS_DIR / "seeds.db").unlink()
+
+        result = cli_runner.invoke(main, ["list"])
+        assert result.exit_code == 1
+        assert "seeds import" in result.output
+        assert "seeds init" not in result.output
+
+    def test_import_actually_recovers_that_state(self, cli_runner, env_with_seeds):
+        """The advice has to work, so exercise it rather than trusting it."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        (Path.cwd() / SEEDS_DIR / "seeds.db").unlink()
+
+        assert cli_runner.invoke(main, ["import"]).exit_code == 0
+        assert cli_runner.invoke(main, ["list"]).exit_code == 0
+
+    def test_uninitialized_project_still_says_init(self, cli_runner):
+        """No .seeds at all is the case where 'seeds init' IS the answer."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                result = cli_runner.invoke(main, ["list"])
+                assert result.exit_code == 1
+                assert "seeds init" in result.output
+            finally:
+                os.chdir(original_cwd)
+
+    def test_init_proceeds_on_empty_seeds_dir(self, cli_runner):
+        """A bare .seeds with nothing to rehydrate from initializes normally."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                (Path(tmpdir) / SEEDS_DIR).mkdir()
+                result = cli_runner.invoke(main, ["init"])
+                assert result.exit_code == 0
+                assert "Initialized seeds" in result.output
+            finally:
+                os.chdir(original_cwd)
+
     def test_init_creates_seeds_directory(self, cli_runner):
         """Verify init creates .seeds directory."""
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -13,7 +13,7 @@ import click
 from seeds import __version__
 from seeds.beads import load_bead_ids
 from seeds.db import SEEDS_DIR, Database
-from seeds.export import DivergentExportError, ImportResult
+from seeds.export import JSONL_FILE, DivergentExportError, ImportResult
 from seeds.models import (
     DEFAULT_PREFIX,
     RelationType,
@@ -25,6 +25,30 @@ from seeds.models import (
     parse_since,
     sanitize_prefix,
 )
+
+
+def _uninitialized_error(db_path: Path) -> str:
+    """The right recovery to name when there is no database.
+
+    Three states hide behind "no seeds.db", and sending all of them to `seeds
+    init` is wrong for the most common one. `.seeds/seeds.db` is gitignored
+    while `seeds.jsonl` is tracked, so a fresh clone has the file and not the
+    database -- and `seeds init` refuses there, reporting the directory as
+    already initialized. That closed loop is what this exists to break
+    (bead seeds-1j3).
+    """
+    seeds_dir = db_path.parent
+    if not seeds_dir.exists():
+        return "Error: seeds not initialized. Run 'seeds init' first."
+
+    jsonl_path = seeds_dir / JSONL_FILE
+    if jsonl_path.exists():
+        return (
+            f"Error: no database, but {jsonl_path} is present.\n"
+            "Run 'seeds import' to rehydrate it (the fresh-clone path -- the "
+            "database is gitignored, the JSONL is tracked)."
+        )
+    return "Error: seeds not initialized. Run 'seeds init' first."
 
 
 class Context:
@@ -47,9 +71,7 @@ class Context:
         if self.db is None:
             self.db = Database()
             if not bootstrap and not self.db.is_initialized():
-                click.echo(
-                    "Error: seeds not initialized. Run 'seeds init' first.", err=True
-                )
+                click.echo(_uninitialized_error(self.db.path), err=True)
                 sys.exit(1)
         return self.db
 
@@ -291,8 +313,21 @@ def init(prefix: str | None) -> None:
     """Initialize seeds in the current directory."""
     seeds_dir = Path.cwd() / SEEDS_DIR
     if seeds_dir.exists():
-        click.echo(f"seeds already initialized in {seeds_dir}")
-        return
+        # The directory existing is not the same as the project being usable.
+        # Only the database settles that, and it is the gitignored half.
+        if Database().is_initialized():
+            click.echo(f"seeds already initialized in {seeds_dir}")
+            return
+        jsonl_path = seeds_dir / JSONL_FILE
+        if jsonl_path.exists():
+            click.echo(
+                f"{seeds_dir} exists but holds no database, and "
+                f"{jsonl_path.name} is present."
+            )
+            click.echo("Run 'seeds import' to rehydrate it.")
+            return
+        # An empty .seeds/ with nothing to rehydrate from: carry on and
+        # initialize, rather than refusing over a bare directory.
 
     if prefix is None:
         derived = sanitize_prefix(Path.cwd().name)
@@ -1619,8 +1654,6 @@ def prime(no_digest: bool, digest_limit: int) -> None:
 @pass_context
 def doctor(ctx: Context) -> None:
     """Check for issues with seeds installation and data."""
-    from seeds.export import JSONL_FILE
-
     passed = 0
     warnings = 0
     failed = 0
