@@ -564,6 +564,35 @@ def _import_v2_record(db: Database, data: dict[str, Any]) -> str:
     return "skipped"
 
 
+def read_record_ids(input_path: Path) -> set[str]:
+    """Read just the seed IDs out of a JSONL file.
+
+    The seam `seeds doctor` uses to compare what is on disk against what the
+    database holds, without importing anything or caring whether a record
+    would parse into a Seed. A line that is not valid JSON, or carries no
+    ``id``, is skipped rather than raising: doctor's job is to report the
+    state, and crashing on a malformed file is the failure mode it exists to
+    tell you about.
+    """
+    if not input_path.exists():
+        return set()
+
+    ids: set[str] = set()
+    with open(input_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            seed_id = record.get("id")
+            if isinstance(seed_id, str):
+                ids.add(seed_id)
+    return ids
+
+
 def _iter_records(lines: Iterable[str]) -> Iterable[dict[str, Any]]:
     """Parse a stream of JSONL lines into records, skipping blank lines."""
     for line in lines:

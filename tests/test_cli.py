@@ -3127,6 +3127,67 @@ class TestDoctorCommand:
         assert "Database exists" in result.output
         assert "passed" in result.output
 
+    def test_doctor_fails_when_jsonl_holds_records_the_db_lacks(
+        self, cli_runner, env_with_seeds
+    ):
+        """The state that fooled the old mtime check for five weeks.
+
+        A failed import leaves the JSONL holding records the DB never got --
+        i.e. JSONL newer than DB, which is exactly what the old check called
+        "up to date". doctor reported all clear throughout Mark Danese's
+        outage (seed seeds-1x6b, bead seeds-jlt).
+        """
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        jsonl = Path.cwd() / SEEDS_DIR / "seeds.jsonl"
+        record = json.loads(jsonl.read_text().splitlines()[0])
+        record["id"] = "seed-ghost"
+        with open(jsonl, "a") as f:
+            f.write(json.dumps(record) + "\n")
+
+        result = cli_runner.invoke(main, ["doctor"])
+        assert result.exit_code == 1
+        assert "disagree" in result.output
+        assert "seed-ghost" in result.output
+
+    def test_doctor_fails_when_db_holds_seeds_the_jsonl_lacks(
+        self, cli_runner, env_with_seeds
+    ):
+        """The other direction reports too -- a count alone says nothing."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        db = Database()
+        db.create_seed(Seed(id="seed-unflushed", title="Never exported"))
+        db.close()
+
+        result = cli_runner.invoke(main, ["doctor"])
+        assert result.exit_code == 1
+        assert "seed-unflushed" in result.output
+
+    def test_doctor_passes_when_jsonl_and_db_agree(self, cli_runner, env_with_seeds):
+        """A synced project still exits 0."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        result = cli_runner.invoke(main, ["doctor"])
+        assert result.exit_code == 0
+        assert "JSONL and DB agree" in result.output
+
+    def test_doctor_warns_on_nonstandard_types_without_failing(
+        self, cli_runner, env_with_seeds
+    ):
+        """A non-standard type is legal, so it warns and does not fail.
+
+        With the vocabulary open (bead seeds-0lb) this is the only thing that
+        surfaces a typo, so it is load-bearing rather than cosmetic.
+        """
+        db = Database()
+        db.create_seed(Seed(id="seed-typo", title="Typo", seed_type="ideea"))
+        db.close()
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        result = cli_runner.invoke(main, ["doctor"])
+        assert result.exit_code == 0
+        assert "ideea (1)" in result.output
+        assert "seeds retype" in result.output
+
     def test_doctor_warns_no_jsonl(self, cli_runner, env_with_seeds):
         """Verify doctor warns when JSONL file doesn't exist."""
         result = cli_runner.invoke(main, ["doctor"])

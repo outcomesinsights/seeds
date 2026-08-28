@@ -1710,6 +1710,28 @@ def doctor(ctx: Context) -> None:
     if open_questions:
         check_pass(f"{len(open_questions)} open questions")
 
+    # Vocabulary drift. With seed_type an open string (seeds-0lb), this is the
+    # only thing that surfaces a typo, so it is load-bearing rather than
+    # cosmetic. A non-standard type is legal, hence a warning and not a failure.
+    nonstandard: dict[str, int] = {}
+    for seed in db.list_seeds(include_terminal=True):
+        if seed.seed_type not in SEED_TYPES:
+            nonstandard[seed.seed_type] = nonstandard.get(seed.seed_type, 0) + 1
+    if nonstandard:
+        click.echo()
+        click.echo("Vocabulary:")
+        total = sum(nonstandard.values())
+        check_warn(
+            "Non-standard types",
+            f"{total} seeds use a type outside the standard set",
+        )
+        for type_name, count in sorted(nonstandard.items()):
+            click.echo(f"      {type_name} ({count})")
+        # Deliberately does not suggest a target. A non-standard type is legal
+        # -- it may be this project's own vocabulary -- so naming one as the
+        # "right" type would presume a typo doctor cannot actually detect.
+        click.echo("      Remap one with: seeds retype --from <type> --to <type>")
+
     # Check JSONL sync
     click.echo()
     click.echo("Sync:")
@@ -1717,15 +1739,30 @@ def doctor(ctx: Context) -> None:
     if jsonl_path.exists():
         check_pass("JSONL file exists")
 
-        # Check if JSONL is stale
-        import os
+        # Compare CONTENT, not mtimes. The mtime check this replaces was not
+        # merely a weak proxy -- it was anti-correlated with the failure it
+        # should have caught. A failed import leaves the JSONL holding records
+        # the database lacks, i.e. JSONL newer than DB, which is exactly what
+        # it certified as "up to date". That is how Mark Danese's sync stayed
+        # broken for five weeks with doctor reporting all clear (seeds-1x6b).
+        from seeds.export import read_record_ids
 
-        db_mtime = os.path.getmtime(db.path)
-        jsonl_mtime = os.path.getmtime(jsonl_path)
-        if jsonl_mtime >= db_mtime:
-            check_pass("JSONL is up to date")
+        disk_ids = read_record_ids(jsonl_path)
+        db_ids = {seed.id for seed in db.list_seeds(include_terminal=True)}
+        missing_from_db = sorted(disk_ids - db_ids)
+        missing_from_disk = sorted(db_ids - disk_ids)
+
+        if not missing_from_db and not missing_from_disk:
+            check_pass("JSONL and DB agree")
         else:
-            check_warn("Sync", "JSONL may be stale, run 'seeds sync'")
+            check_fail("Sync", "JSONL and DB disagree")
+            if missing_from_db:
+                click.echo(f"      {len(missing_from_db)} records in JSONL not in DB")
+                click.echo(f"        {', '.join(missing_from_db[:10])}")
+            if missing_from_disk:
+                click.echo(f"      {len(missing_from_disk)} seeds in DB not in JSONL")
+                click.echo(f"        {', '.join(missing_from_disk[:10])}")
+            click.echo("      Run 'seeds sync'; if it fails, fix the records it names.")
     else:
         check_warn("Sync", "No JSONL file, run 'seeds sync'")
 
@@ -1740,6 +1777,11 @@ def doctor(ctx: Context) -> None:
     if failed:
         status_parts.append(f"✗ {failed} failed")
     click.echo("  ".join(status_parts))
+
+    # Exit non-zero on a real failure so doctor can gate a pre-commit or CI
+    # hook. Warnings stay exit 0 -- they are advisory by design.
+    if failed:
+        sys.exit(1)
 
 
 @main.command()
