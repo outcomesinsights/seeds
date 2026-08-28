@@ -188,7 +188,9 @@ def build_digest(
             lines.append(_format_line(seed))
 
     # Open questions (question-type, not terminal)
-    open_questions = db.list_seeds(seed_type=SeedType.QUESTION, include_terminal=False)
+    open_questions = db.list_seeds(
+        seed_type=SeedType.QUESTION.value, include_terminal=False
+    )
     if open_questions:
         lines.append("")
         lines.append(f"### Open Questions ({len(open_questions)})")

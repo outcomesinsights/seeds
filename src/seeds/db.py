@@ -397,7 +397,7 @@ class Database:
             title=row["title"],
             content=row["content"] or "",
             status=SeedStatus(row["status"]),
-            seed_type=SeedType(row["seed_type"]),
+            seed_type=row["seed_type"],
             tags=json.loads(row["tags"]) if row["tags"] else [],
             created_at=_str_to_datetime(row["created_at"]) or now_utc(),
             updated_at=_str_to_datetime(row["updated_at"]) or now_utc(),
@@ -421,7 +421,7 @@ class Database:
                 seed.title,
                 seed.content,
                 seed.status.value,
-                seed.seed_type.value,
+                seed.seed_type,
                 json.dumps(seed.tags),
                 _datetime_to_str(seed.created_at),
                 _datetime_to_str(seed.updated_at),
@@ -463,7 +463,7 @@ class Database:
                 seed.title,
                 seed.content,
                 seed.status.value,
-                seed.seed_type.value,
+                seed.seed_type,
                 json.dumps(seed.tags),
                 _datetime_to_str(seed.updated_at),
                 _datetime_to_str(seed.resolved_at),
@@ -492,7 +492,7 @@ class Database:
     def list_seeds(
         self,
         status: SeedStatus | None = None,
-        seed_type: SeedType | None = None,
+        seed_type: str | None = None,
         tag: str | None = None,
         include_terminal: bool = False,
         since: datetime | None = None,
@@ -518,7 +518,7 @@ class Database:
 
         if seed_type is not None:
             query += " AND seed_type = ?"
-            params.append(seed_type.value)
+            params.append(seed_type)
 
         if tag is not None:
             # Search in JSON array

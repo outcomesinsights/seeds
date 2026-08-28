@@ -619,6 +619,37 @@ class TestSearch:
         assert len(db.search("deliberation")) == 1
         assert len(db.search("automation")) == 1
 
+    def test_arbitrary_seed_type_round_trips(self, db):
+        """Verify a type outside the standard five stores and reads back.
+
+        Regression: seed_type was routed through the SeedType constructor on
+        every read, so an unrecognized value raised ValueError -- bricking
+        `seeds list` entirely, not just sync (seed seeds-1x6b, bead seeds-0lb).
+        """
+        db.create_seed(Seed(id="seed-1", title="A context note", seed_type="context"))
+
+        fetched = db.get_seed("seed-1")
+        assert fetched is not None
+        assert fetched.seed_type == "context"
+        assert [s.id for s in db.list_seeds()] == ["seed-1"]
+
+    def test_arbitrary_seed_type_is_filterable(self, db):
+        """A type you can store must be a type you can search for."""
+        db.create_seed(Seed(id="seed-1", title="Context", seed_type="context"))
+        db.create_seed(Seed(id="seed-2", title="Ordinary"))
+
+        assert [s.id for s in db.list_seeds(seed_type="context")] == ["seed-1"]
+        assert [s.id for s in db.list_seeds(seed_type="idea")] == ["seed-2"]
+
+    def test_seed_type_accepts_enum_member(self, db):
+        """SeedType members still work at call sites and store as strings."""
+        db.create_seed(Seed(id="seed-1", title="Q", seed_type=SeedType.QUESTION))
+
+        fetched = db.get_seed("seed-1")
+        assert fetched is not None
+        assert fetched.seed_type == SeedType.QUESTION
+        assert fetched.seed_type == "question"
+
     def test_search_hyphenated_term(self, db):
         """Verify a hyphenated query searches instead of raising.
 

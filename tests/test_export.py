@@ -912,6 +912,77 @@ class TestImportDefaultPath:
             os.chdir(original_cwd)
 
 
+class TestArbitrarySeedType:
+    """A seed_type outside the standard five must survive sync (bead seeds-0lb)."""
+
+    def test_unrecognized_type_imports_and_does_not_block_later_records(
+        self, db, tmp_path
+    ):
+        """Mark Danese's exact case (seed seeds-1x6b).
+
+        An agent wrote a 'context' seed_type into the JSONL. Every import
+        raised on it, so not only was that record lost -- every record after
+        it in the file never imported either, silently, for five weeks.
+        """
+        jsonl = tmp_path / "seeds.jsonl"
+        records = [
+            {
+                "format_version": 2,
+                "id": "seed-1",
+                "title": "Ordinary seed",
+                "content": "",
+                "status": "captured",
+                "seed_type": "idea",
+                "tags": [],
+                "created_at": "2026-08-01T00:00:00+00:00",
+                "updated_at": "2026-08-01T00:00:00+00:00",
+                "relationships": [],
+            },
+            {
+                "format_version": 2,
+                "id": "seed-2",
+                "title": "Type an agent invented",
+                "content": "",
+                "status": "captured",
+                "seed_type": "context",
+                "tags": [],
+                "created_at": "2026-08-01T00:00:00+00:00",
+                "updated_at": "2026-08-01T00:00:00+00:00",
+                "relationships": [],
+            },
+            {
+                "format_version": 2,
+                "id": "seed-3",
+                "title": "Filed AFTER the bad record",
+                "content": "",
+                "status": "captured",
+                "seed_type": "idea",
+                "tags": [],
+                "created_at": "2026-08-02T00:00:00+00:00",
+                "updated_at": "2026-08-02T00:00:00+00:00",
+                "relationships": [],
+            },
+        ]
+        jsonl.write_text("\n".join(json.dumps(r) for r in records) + "\n")
+
+        result = import_from_jsonl(db, jsonl)
+
+        assert result.created == 3
+        assert db.get_seed("seed-2").seed_type == "context"
+        # The point of the regression: the record after the bad one landed.
+        assert db.get_seed("seed-3") is not None
+
+    def test_arbitrary_type_survives_export_import(self, db, tmp_path):
+        """Full round trip, since the export side writes the type too."""
+        db.create_seed(Seed(id="seed-1", title="Context", seed_type="context"))
+        out = export_to_jsonl(db, tmp_path / "seeds.jsonl")
+
+        db2 = Database(path=tmp_path / "other.db")
+        import_from_jsonl(db2, out, bootstrap=True)
+        assert db2.get_seed("seed-1").seed_type == "context"
+        db2.close()
+
+
 class TestRoundTrip:
     """Tests for export -> import round trip."""
 

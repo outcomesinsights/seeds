@@ -145,7 +145,7 @@ def create_app(seeds_dir: Path | None = None) -> Flask:
         """List all open questions (question-type seeds)."""
         db = get_db()
         open_questions = db.list_seeds(
-            seed_type=SeedType.QUESTION, include_terminal=False
+            seed_type=SeedType.QUESTION.value, include_terminal=False
         )
 
         # Get parent seed for each question via relationship

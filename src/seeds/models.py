@@ -9,7 +9,7 @@ import time
 from collections.abc import Container
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from enum import Enum
+from enum import Enum, StrEnum
 
 
 class SeedStatus(Enum):
@@ -22,8 +22,24 @@ class SeedStatus(Enum):
     ABANDONED = "abandoned"  # Decided not to pursue
 
 
-class SeedType(Enum):
-    """Categories of seeds."""
+class SeedType(StrEnum):
+    """The standard seed vocabulary — a suggestion, not a constraint.
+
+    ``Seed.seed_type`` is a plain ``str`` and any value round-trips through
+    storage and sync. This enum names the five types seeds ships with, for
+    defaults, for the ``question`` machinery, and for ``seeds doctor`` to tell
+    standard types from a project's own.
+
+    Only ``QUESTION`` carries behavior (``seeds ask``/``answer``, ``seeds
+    questions``, prime's open-questions section, the web view). The rest are
+    display strings. Enforcing them at the storage and sync boundaries broke
+    on the first unrecognized value it met — see seed seeds-1x6b.
+
+    A ``StrEnum`` rather than a plain ``Enum`` precisely because the field is
+    now a string: ``seed.seed_type == SeedType.QUESTION`` has to keep meaning
+    what a reader expects when the left side is ``"question"``. ``SeedStatus``
+    stays a closed ``Enum`` — its values do drive behavior.
+    """
 
     IDEA = "idea"  # General thought
     QUESTION = "question"  # Something needing an answer
@@ -502,7 +518,7 @@ class Seed:
     title: str
     content: str = ""
     status: SeedStatus = SeedStatus.CAPTURED
-    seed_type: SeedType = SeedType.IDEA
+    seed_type: str = SeedType.IDEA.value
     tags: list[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=now_utc)
     updated_at: datetime = UNSET_TIMESTAMP
@@ -510,9 +526,17 @@ class Seed:
     resolution: str = ""
 
     def __post_init__(self) -> None:
-        """Default updated_at to created_at rather than a second clock read."""
+        """Default updated_at to created_at rather than a second clock read.
+
+        Also accepts a :class:`SeedType` member for ``seed_type`` and stores
+        its value. The field is a plain string so any vocabulary round-trips,
+        but ``SeedType.QUESTION`` reads better than ``"question"`` at a call
+        site, and callers written before the vocabulary opened still work.
+        """
         if self.updated_at == UNSET_TIMESTAMP:
             self.updated_at = self.created_at
+        if isinstance(self.seed_type, SeedType):
+            self.seed_type = self.seed_type.value
 
     @property
     def parent_id(self) -> str | None:

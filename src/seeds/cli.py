@@ -335,9 +335,8 @@ SEED_TYPES = [t.value for t in SeedType]
 @click.option(
     "--type",
     "seed_type",
-    type=click.Choice(SEED_TYPES),
     default="idea",
-    help="Type of seed",
+    help=f"Type of seed (any value; standard: {', '.join(SEED_TYPES)})",
 )
 @click.option("--tags", help="Comma-separated tags")
 @click.option("--parent", "parent_id", help="Parent seed ID for hierarchical grouping")
@@ -379,7 +378,7 @@ def create(
         id=seed_id,
         title=title,
         content=content,
-        seed_type=SeedType(seed_type),
+        seed_type=seed_type,
         tags=tag_list,
     )
 
@@ -436,8 +435,7 @@ def format_seed_line(seed: Seed, db: Database) -> str:
 @click.option(
     "--type",
     "seed_type",
-    type=click.Choice(SEED_TYPES),
-    help="Filter by type",
+    help=f"Filter by type (any value; standard: {', '.join(SEED_TYPES)})",
 )
 @click.option("--tag", help="Filter by tag")
 @click.option("--all", "include_all", is_flag=True, help="Include resolved/abandoned")
@@ -470,7 +468,6 @@ def list_seeds(
     db = ctx.get_db()
 
     status_enum = SeedStatus(status) if status else None
-    type_enum = SeedType(seed_type) if seed_type else None
 
     since_dt = None
     if since_value:
@@ -482,7 +479,7 @@ def list_seeds(
 
     seeds = db.list_seeds(
         status=status_enum,
-        seed_type=type_enum,
+        seed_type=seed_type,
         tag=tag,
         include_terminal=include_all,
         since=since_dt,
@@ -547,7 +544,7 @@ def format_seed_detail(
     # Header
     lines.append(f"{seed.id}: {seed.title}")
     lines.append(f"  Status: {seed.status.value}")
-    lines.append(f"  Type: {seed.seed_type.value}")
+    lines.append(f"  Type: {seed.seed_type}")
 
     if seed.resolution:
         lines.append(f"  Resolution: {seed.resolution}")
@@ -1099,7 +1096,7 @@ def ask(ctx: Context, question_text: str, seed_id: str) -> None:
     question_seed = Seed(
         id=question_id,
         title=question_text,
-        seed_type=SeedType.QUESTION,
+        seed_type=SeedType.QUESTION.value,
     )
 
     db.create_seed(question_seed)
@@ -1198,7 +1195,7 @@ def questions(ctx: Context, seed_id: str | None) -> None:
         qs = [q for q in db.get_questions_for_seed(seed_id) if not q.is_terminal()]
     else:
         # Get all unresolved question-type seeds
-        qs = db.list_seeds(seed_type=SeedType.QUESTION, include_terminal=False)
+        qs = db.list_seeds(seed_type=SeedType.QUESTION.value, include_terminal=False)
 
     if not qs:
         click.echo("No open questions.")
@@ -1693,7 +1690,9 @@ def doctor(ctx: Context) -> None:
         check_warn("Relationships", f"{len(orphaned_rels)} orphaned relationships")
 
     # Check for open question-seeds
-    open_questions = db.list_seeds(seed_type=SeedType.QUESTION, include_terminal=False)
+    open_questions = db.list_seeds(
+        seed_type=SeedType.QUESTION.value, include_terminal=False
+    )
     if open_questions:
         check_pass(f"{len(open_questions)} open questions")
 
