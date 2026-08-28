@@ -959,6 +959,11 @@ def trellis(
 )
 @click.option("--tags", help="New tags (comma-separated, replaces existing)")
 @click.option(
+    "--type",
+    "seed_type",
+    help=f"New type (any value; standard: {', '.join(SEED_TYPES)})",
+)
+@click.option(
     "--add-tag",
     "add_tags",
     multiple=True,
@@ -998,6 +1003,7 @@ def update(
     title: str | None,
     content: str | None,
     tags: str | None,
+    seed_type: str | None,
     add_tags: tuple[str, ...],
     remove_tags: tuple[str, ...],
     append_text: str | None,
@@ -1017,6 +1023,10 @@ def update(
     and neither can adding and removing the same tag: both are refused rather
     than resolved by a precedence rule. Removing a tag the seed does not carry
     is a silent no-op reported as "0 removed".
+
+    --type accepts any string, matching `seeds create`. Before this existed a
+    seed's type was write-once and the only way to change it was hand-editing
+    the JSONL -- which is how the malformed records in seed seeds-1x6b got in.
     """
     db = ctx.get_db()
     seed = get_seed_or_exit(db, seed_id)
@@ -1051,6 +1061,10 @@ def update(
 
     if tags is not None:
         seed.tags = [t.strip() for t in tags.split(",")] if tags else []
+        changed = True
+
+    if seed_type:
+        seed.seed_type = seed_type
         changed = True
 
     tag_report = None

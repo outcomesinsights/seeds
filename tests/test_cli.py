@@ -967,6 +967,49 @@ class TestUpdateCommand:
         assert seed.title == "New Title"
         db.close()
 
+    def test_update_type(self, cli_runner, env_with_seeds):
+        """Verify update can change a seed's type.
+
+        Regression: type was write-once. `seeds update` had no --type at all,
+        so the only way to fix a wrong one was hand-editing the JSONL -- the
+        same door the malformed records in seed seeds-1x6b came through.
+        """
+        result = cli_runner.invoke(
+            main,
+            ["update", "seed-test1", "--type", "decision"],
+        )
+        assert result.exit_code == 0
+
+        db = Database()
+        assert db.get_seed("seed-test1").seed_type == "decision"
+        db.close()
+
+    def test_update_type_accepts_arbitrary_value(self, cli_runner, env_with_seeds):
+        """The vocabulary is open here too, matching `seeds create`."""
+        result = cli_runner.invoke(
+            main,
+            ["update", "seed-test1", "--type", "context"],
+        )
+        assert result.exit_code == 0
+
+        db = Database()
+        assert db.get_seed("seed-test1").seed_type == "context"
+        db.close()
+
+    def test_update_type_composes_with_other_fields(self, cli_runner, env_with_seeds):
+        """--type is an ordinary field edit, usable alongside the rest."""
+        result = cli_runner.invoke(
+            main,
+            ["update", "seed-test1", "--type", "concern", "--title", "Renamed"],
+        )
+        assert result.exit_code == 0
+
+        db = Database()
+        seed = db.get_seed("seed-test1")
+        assert seed.seed_type == "concern"
+        assert seed.title == "Renamed"
+        db.close()
+
     def test_update_append_content(self, cli_runner, env_with_seeds):
         """Verify update --append adds to content."""
         result = cli_runner.invoke(
