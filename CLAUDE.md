@@ -95,7 +95,10 @@ uv run seeds resolve <id>            # Mark resolved
 uv run seeds trellis <id> --to <file> --as "<principle>"   # Record a matured seed as a durable trellis
 uv run seeds ask "?" --seed=<id>     # Attach question
 uv run seeds answer <q-id> "answer"  # Answer question
+uv run seeds update <id> --type <t>  # Change a seed's type (any string)
+uv run seeds retype --from X --to Y  # Bulk-remap one type to another
 uv run seeds sync                    # Export to JSONL
+uv run seeds doctor                  # Health check; exits non-zero on DB/JSONL divergence
 uv run seeds prime                   # AI context output
 uv run pytest                        # Run tests
 ```
@@ -118,7 +121,7 @@ Then restart any running `seeds serve` processes.
 ## Domain Concepts
 
 - **Seed**: An idea at any stage (captured/exploring/deferred/resolved/abandoned)
-- **SeedType**: idea, question, decision, exploration, concern
+- **SeedType**: an arbitrary string. idea, question, decision, exploration and concern are the standard set, but the vocabulary is open — only `question` carries behavior. `seeds doctor` lists non-standard types; `seeds retype` remaps them.
 - **Question**: First-class object attached to a seed with open/answered/deferred status
 - **Hierarchical IDs**: Children use `parent-id.N` format (e.g., `seed-a1b2.1`)
 - **Blocked**: A seed with unresolved children cannot be resolved

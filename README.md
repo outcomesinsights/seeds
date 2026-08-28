@@ -76,6 +76,24 @@ seeds explore <id>                       # Start actively exploring
 seeds defer <id>                         # Set aside for later
 seeds resolve <id>                       # Mark as resolved
 seeds abandon <id>                       # Decided against
+seeds update <id> --type <type>          # Change a seed's type
+```
+
+### Types
+
+A seed's type is an arbitrary string. Seeds ships five — `idea`, `question`,
+`decision`, `exploration`, `concern` — but they are a suggestion, not a
+constraint: use your project's own vocabulary if it fits better. Only
+`question` carries behavior (`seeds ask` / `seeds questions`).
+
+The trade-off is that a typo becomes a new type rather than an error, so
+`seeds doctor` lists any type outside the standard five, and `seeds retype`
+sweeps them up:
+
+```bash
+seeds retype --from ideea --to idea      # Clean up a typo
+seeds retype --from concern --to risk    # Or evolve the vocabulary
+seeds retype --from x --to y --dry-run   # Preview; backs up the DB when applied
 ```
 
 ### Trellis
