@@ -5,7 +5,7 @@ import os
 import re
 import subprocess
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -2538,7 +2538,7 @@ class TestSyncRefusesDivergence:
         `sync` the import absorbs it first, which is why that path proceeds:
         nothing is lost once the database holds the content.)
         """
-        newer = (datetime.now(timezone.utc) + timedelta(minutes=1)).isoformat()
+        newer = (datetime.now(UTC) + timedelta(minutes=1)).isoformat()
         jsonl_path, before = self._diverge(cli_runner, env_with_seeds, updated_at=newer)
 
         result = cli_runner.invoke(main, ["sync", "--flush-only"])
@@ -2550,7 +2550,7 @@ class TestSyncRefusesDivergence:
         self, cli_runner, env_with_seeds
     ):
         """The import is the resolution when it can be: absorb, then export."""
-        newer = (datetime.now(timezone.utc) + timedelta(minutes=1)).isoformat()
+        newer = (datetime.now(UTC) + timedelta(minutes=1)).isoformat()
         jsonl_path, _ = self._diverge(cli_runner, env_with_seeds, updated_at=newer)
 
         result = cli_runner.invoke(main, ["sync"])

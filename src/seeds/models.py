@@ -8,7 +8,7 @@ import re
 import time
 from collections.abc import Container
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum, StrEnum
 
 
@@ -216,7 +216,7 @@ def parse_since(value: str, now: datetime | None = None) -> datetime:
             f"(2026-05-08), relative (7d, 2w, 3m, 1y), or 'today'/'yesterday'"
         ) from exc
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -500,14 +500,14 @@ def get_parent_id(seed_id: str) -> str | None:
 
 def now_utc() -> datetime:
     """Return current UTC time."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # Sentinel meaning "caller supplied no updated_at". A freshly built seed mirrors
 # created_at instead of taking a second clock reading, so that a never-edited
 # seed satisfies ``updated_at == created_at`` exactly (two now_utc() calls drift
 # by microseconds, which would make has_been_edited() true for every new seed).
-UNSET_TIMESTAMP = datetime.min.replace(tzinfo=timezone.utc)
+UNSET_TIMESTAMP = datetime.min.replace(tzinfo=UTC)
 
 
 @dataclass
