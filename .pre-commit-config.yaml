@@ -96,15 +96,15 @@ repos:
         pass_filenames: false
         always_run: true
 
-      # ci.yml runs pytest across 3.10-3.13; the hook above only exercises the
+      # ci.yml runs pytest across 3.11-3.13; the hook above only exercises the
       # local interpreter. Cover the rest here so "pre-push passed" actually
-      # implies "CI will pass" — otherwise three of the four supported versions
+      # implies "CI will pass" — otherwise two of the three supported versions
       # are unverified until billed CI minutes discover the problem.
-      # Measured on titan: ~29s for the three. 3.13 is deliberately omitted;
+      # Measured on titan: ~29s for three. 3.13 is deliberately omitted;
       # it is the local interpreter and is already covered above.
       - id: pytest-matrix-pre-push
-        name: pytest (3.10, 3.11, 3.12)
-        entry: bash -c 'for v in 3.10 3.11 3.12; do echo "--- python $v ---"; uv run --python "$v" --no-sync pytest -q || exit 1; done'
+        name: pytest (3.11, 3.12)
+        entry: bash -c 'for v in 3.11 3.12; do echo "--- python $v ---"; uv run --python "$v" --no-sync pytest -q || exit 1; done'
         language: system
         stages: [pre-push]
         pass_filenames: false

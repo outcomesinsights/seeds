@@ -1,6 +1,6 @@
 """Tests for seeds data models."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -175,14 +175,14 @@ class TestSeed:
 
     def test_explicit_created_at_is_mirrored_too(self):
         """An explicit created_at with no updated_at still yields one instant."""
-        created = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        created = datetime(2026, 1, 1, tzinfo=UTC)
         seed = Seed(id="seed-test", title="Test", created_at=created)
         assert seed.updated_at == created
 
     def test_explicit_updated_at_is_preserved(self):
         """An explicitly supplied updated_at is never overwritten."""
-        created = datetime(2026, 1, 1, tzinfo=timezone.utc)
-        updated = datetime(2026, 2, 2, tzinfo=timezone.utc)
+        created = datetime(2026, 1, 1, tzinfo=UTC)
+        updated = datetime(2026, 2, 2, tzinfo=UTC)
         seed = Seed(
             id="seed-test", title="Test", created_at=created, updated_at=updated
         )
@@ -527,39 +527,39 @@ class TestParseSince:
         assert result.hour == 12
 
     def test_relative_days(self):
-        now = datetime(2026, 5, 18, 12, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 5, 18, 12, 0, tzinfo=UTC)
         result = parse_since("7d", now=now)
-        assert result == datetime(2026, 5, 11, 12, 0, tzinfo=timezone.utc)
+        assert result == datetime(2026, 5, 11, 12, 0, tzinfo=UTC)
 
     def test_relative_weeks(self):
-        now = datetime(2026, 5, 18, tzinfo=timezone.utc)
+        now = datetime(2026, 5, 18, tzinfo=UTC)
         result = parse_since("2w", now=now)
-        assert result == datetime(2026, 5, 4, tzinfo=timezone.utc)
+        assert result == datetime(2026, 5, 4, tzinfo=UTC)
 
     def test_relative_months(self):
-        now = datetime(2026, 5, 18, tzinfo=timezone.utc)
+        now = datetime(2026, 5, 18, tzinfo=UTC)
         result = parse_since("1m", now=now)
         # 30-day month convention
-        assert result == datetime(2026, 4, 18, tzinfo=timezone.utc)
+        assert result == datetime(2026, 4, 18, tzinfo=UTC)
 
     def test_relative_years(self):
-        now = datetime(2026, 5, 18, tzinfo=timezone.utc)
+        now = datetime(2026, 5, 18, tzinfo=UTC)
         result = parse_since("1y", now=now)
         # 365-day year convention
-        assert result == datetime(2025, 5, 18, tzinfo=timezone.utc)
+        assert result == datetime(2025, 5, 18, tzinfo=UTC)
 
     def test_today_keyword(self):
-        now = datetime(2026, 5, 18, 15, 30, 22, tzinfo=timezone.utc)
+        now = datetime(2026, 5, 18, 15, 30, 22, tzinfo=UTC)
         result = parse_since("today", now=now)
-        assert result == datetime(2026, 5, 18, 0, 0, 0, tzinfo=timezone.utc)
+        assert result == datetime(2026, 5, 18, 0, 0, 0, tzinfo=UTC)
 
     def test_yesterday_keyword(self):
-        now = datetime(2026, 5, 18, 15, 30, tzinfo=timezone.utc)
+        now = datetime(2026, 5, 18, 15, 30, tzinfo=UTC)
         result = parse_since("yesterday", now=now)
-        assert result == datetime(2026, 5, 17, 0, 0, 0, tzinfo=timezone.utc)
+        assert result == datetime(2026, 5, 17, 0, 0, 0, tzinfo=UTC)
 
     def test_case_insensitive_keyword(self):
-        now = datetime(2026, 5, 18, 15, tzinfo=timezone.utc)
+        now = datetime(2026, 5, 18, 15, tzinfo=UTC)
         assert parse_since("TODAY", now=now) == parse_since("today", now=now)
 
     def test_invalid_value(self):

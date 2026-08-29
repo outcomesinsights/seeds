@@ -2,7 +2,7 @@
 
 import json
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -35,7 +35,7 @@ class TestSeedToDict:
 
     def test_basic_seed_conversion(self, db):
         """Verify basic seed converts to dict correctly."""
-        now = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        now = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
         seed = Seed(
             id="seed-test",
             title="Test Seed",
@@ -64,7 +64,7 @@ class TestSeedToDict:
 
     def test_seed_with_resolution(self, db):
         """Verify resolved seed with resolution exports correctly."""
-        now = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        now = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
         seed = Seed(
             id="seed-resolved",
             title="Resolved Seed",
@@ -82,7 +82,7 @@ class TestSeedToDict:
 
     def test_seed_with_relationships(self, db):
         """Verify relationships are included as outbound edges."""
-        now = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        now = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
         seed = Seed(id="seed-test", title="Test Seed", created_at=now, updated_at=now)
         other = Seed(id="seed-other", title="Other", created_at=now, updated_at=now)
         q_seed = Seed(
@@ -562,7 +562,7 @@ class TestImportV1:
 
     def test_import_v1_basic(self, db, temp_dir):
         """Verify v1 seed imports correctly."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         data = {
             "id": "seed-import",
             "title": "Imported Seed",
@@ -592,7 +592,7 @@ class TestImportV1:
 
     def test_import_v1_with_related_to(self, db, temp_dir):
         """Verify v1 related_to arrays create relationships."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         data_a = {
             "id": "seed-a",
             "title": "A",
@@ -632,7 +632,7 @@ class TestImportV1:
 
     def test_import_v1_with_questions(self, db, temp_dir):
         """Verify v1 embedded questions become question-seeds with relationships."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         data = {
             "id": "seed-parent",
             "title": "Parent",
@@ -684,7 +684,7 @@ class TestImportV2:
 
     def test_import_v2_basic(self, db, temp_dir):
         """Verify v2 seed imports correctly."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         data = {
             "format_version": 2,
             "id": "seed-v2",
@@ -711,7 +711,7 @@ class TestImportV2:
 
     def test_import_v2_with_relationships(self, db, temp_dir):
         """Verify v2 relationships are created correctly."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         data_a = {
             "format_version": 2,
             "id": "seed-a",
@@ -808,7 +808,7 @@ class TestImportGeneral:
 
     def test_import_skips_blank_lines(self, db, temp_dir):
         """Verify import skips blank lines in JSONL file."""
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         data = {
             "format_version": 2,
             "id": "seed-blank",
@@ -836,7 +836,7 @@ class TestImportGeneral:
         v2 record (``relationships``) in the same file each import via their own
         code path.
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         v1 = {
             "id": "seed-v1",
             "title": "Legacy",
@@ -886,7 +886,7 @@ class TestImportDefaultPath:
         try:
             seeds_dir = temp_dir / ".seeds"
             seeds_dir.mkdir(exist_ok=True)
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
             data = {
                 "format_version": 2,
                 "id": "seed-default",
@@ -1193,7 +1193,7 @@ class TestImportLastWriteWins:
 
     def test_newer_updated_at_overwrites(self, db, temp_dir):
         """A record with a newer updated_at overwrites the existing seed."""
-        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
         db.create_seed(
             Seed(id="seed-x", title="Old title", created_at=base, updated_at=base)
         )
@@ -1218,7 +1218,7 @@ class TestImportLastWriteWins:
 
     def test_stale_updated_at_does_not_clobber(self, db, temp_dir):
         """A record older than the DB row leaves the DB row untouched."""
-        fresh = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        fresh = datetime(2025, 6, 1, 12, 0, 0, tzinfo=UTC)
         db.create_seed(
             Seed(id="seed-y", title="Fresh title", created_at=fresh, updated_at=fresh)
         )
@@ -1238,7 +1238,7 @@ class TestImportLastWriteWins:
 
     def test_equal_updated_at_is_skipped(self, db, temp_dir):
         """Equal updated_at is not 'newer' — the record is skipped, not updated."""
-        ts = datetime(2025, 3, 3, 9, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2025, 3, 3, 9, 0, 0, tzinfo=UTC)
         db.create_seed(
             Seed(id="seed-z", title="Original", created_at=ts, updated_at=ts)
         )
@@ -1253,7 +1253,7 @@ class TestImportLastWriteWins:
 
     def test_relationships_not_duplicated_on_reimport(self, db, temp_dir):
         """Re-importing does not duplicate relationship edges."""
-        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        ts = datetime(2025, 1, 1, tzinfo=UTC).isoformat()
         rec_a = _v2_record(
             "seed-a",
             title="A",
@@ -1290,7 +1290,7 @@ class TestImportLastWriteWins:
         is skipped) but carries no relationship; the stale record names one,
         which must still be created.
         """
-        fresh = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        fresh = datetime(2025, 6, 1, 12, 0, 0, tzinfo=UTC)
         # seed-a is fresh in the DB and has NO outbound edge yet.
         db.create_seed(Seed(id="seed-a", title="A", created_at=fresh, updated_at=fresh))
         # seed-b exists so the edge has a target (no FK, but keep it realistic).
@@ -1326,7 +1326,7 @@ class TestImportLastWriteWins:
 
     def test_import_lines_accepts_iterable(self, db):
         """import_lines consumes an arbitrary iterable of JSONL lines (stdin seam)."""
-        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        ts = datetime(2025, 1, 1, tzinfo=UTC).isoformat()
         lines = [
             "",  # blank lines ignored
             json.dumps(_v2_record("seed-1", title="One", updated_at=ts)),
@@ -1360,7 +1360,7 @@ class TestImportUntrustworthyTimestamps:
 
     def test_future_dated_record_is_refused(self, db, temp_dir):
         """A record dated far in the future is refused; the DB row is unchanged."""
-        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
         db.create_seed(
             Seed(
                 id="seed-f",
@@ -1469,7 +1469,7 @@ class TestImportUntrustworthyTimestamps:
         ``now_utc()`` — earlier than 2030 — so the same unchanged file kept
         winning forever.
         """
-        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
         db.create_seed(
             Seed(
                 id="seed-p",
@@ -1535,7 +1535,7 @@ class TestImportUntrustworthyTimestamps:
         ``TypeError: can't compare offset-naive and offset-aware datetimes``
         and left the import partially applied, with no summary.
         """
-        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
         for sid in ("seed-1", "seed-2", "seed-3"):
             db.create_seed(
                 Seed(id=sid, title=f"old {sid}", created_at=base, updated_at=base)
@@ -1572,7 +1572,7 @@ class TestImportUntrustworthyTimestamps:
         UTC makes it not-newer and the record is skipped — the same outcome an
         explicit ``+00:00`` would produce.
         """
-        ts = datetime(2025, 3, 3, 9, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2025, 3, 3, 9, 0, 0, tzinfo=UTC)
         db.create_seed(
             Seed(id="seed-n", title="Original", created_at=ts, updated_at=ts)
         )
@@ -1591,7 +1591,7 @@ class TestImportUntrustworthyTimestamps:
 
     def test_naive_stored_timestamp_is_normalized_to_utc(self, db, temp_dir):
         """A naive record that wins is stored timezone-aware, not naive."""
-        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        base = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
         db.create_seed(Seed(id="seed-w", title="Old", created_at=base, updated_at=base))
 
         newer = base + timedelta(days=2)
@@ -1640,7 +1640,7 @@ class TestImportBootstrap:
         lives only in the gitignored DB config. bootstrap=True must create the
         schema and recover the prefix ('seeds') from the first record's ID.
         """
-        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        ts = datetime(2025, 1, 1, tzinfo=UTC).isoformat()
         seeds_dir = temp_dir / ".seeds"
         jsonl_path = seeds_dir / "seeds.jsonl"
         self._write_jsonl(
@@ -1669,7 +1669,7 @@ class TestImportBootstrap:
     def test_bootstrap_next_id_avoids_imported_ids(self, temp_dir):
         """After a bootstrap import, next_id mints hash IDs (seeds-mlj) that
         don't collide with the imported ones, using the recovered prefix."""
-        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        ts = datetime(2025, 1, 1, tzinfo=UTC).isoformat()
         jsonl_path = temp_dir / ".seeds" / "seeds.jsonl"
         self._write_jsonl(
             jsonl_path,
@@ -1695,7 +1695,7 @@ class TestImportBootstrap:
 
     def test_bootstrap_recovers_custom_prefix(self, temp_dir):
         """The recovered prefix is the JSONL's, not a directory-derived one."""
-        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        ts = datetime(2025, 1, 1, tzinfo=UTC).isoformat()
         jsonl_path = temp_dir / ".seeds" / "seeds.jsonl"
         self._write_jsonl(
             jsonl_path,
@@ -1716,7 +1716,7 @@ class TestImportBootstrap:
         export (seeds-199), not just legacy sequential IDs. Regression guard:
         without this, hash-ID stores fall back to a wrong directory-derived
         prefix on fresh clone."""
-        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        ts = datetime(2025, 1, 1, tzinfo=UTC).isoformat()
         jsonl_path = temp_dir / ".seeds" / "seeds.jsonl"
         self._write_jsonl(
             jsonl_path,
@@ -1733,7 +1733,7 @@ class TestImportBootstrap:
 
     def test_bootstrap_on_initialized_db_does_not_clobber_prefix(self, temp_dir):
         """An already-initialized DB keeps its prefix; bootstrap is a no-op there."""
-        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        ts = datetime(2025, 1, 1, tzinfo=UTC).isoformat()
         db_path = temp_dir / ".seeds" / "seeds.db"
         db = Database(path=db_path)
         db.init(prefix="existing")
@@ -1754,7 +1754,7 @@ class TestImportBootstrap:
 
     def test_bootstrap_lines_seam(self, temp_dir):
         """import_lines also bootstraps when fed an iterable (stdin seam)."""
-        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        ts = datetime(2025, 1, 1, tzinfo=UTC).isoformat()
         lines = [
             json.dumps(_v2_record("seeds-7", title="One", updated_at=ts)),
             json.dumps(_v2_record("seeds-8", title="Two", updated_at=ts)),
@@ -1788,7 +1788,7 @@ class TestImportBootstrap:
     def test_bootstrap_unrecoverable_first_id_leaves_prefix_unset(self, temp_dir):
         """A malformed first ID with no '<prefix>-<suffix>' shape can't yield a
         prefix; the DB still bootstraps with the prefix left unset."""
-        ts = datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat()
+        ts = datetime(2025, 1, 1, tzinfo=UTC).isoformat()
         jsonl_path = temp_dir / ".seeds" / "seeds.jsonl"
         self._write_jsonl(
             jsonl_path,

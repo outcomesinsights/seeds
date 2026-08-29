@@ -64,7 +64,7 @@ uv run pytest
 
 ## Tech Stack
 
-- Language: Python 3.13+
+- Language: Python 3.11+
 - Framework: Click (CLI)
 - Key dependencies: click>=8.1.0, pytest (dev)
 - Package manager: uv
