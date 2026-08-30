@@ -11,12 +11,12 @@ from seeds.export import (
     FUTURE_TIMESTAMP_TOLERANCE,
     DivergentExportError,
     ImportResult,
-    MalformedRecordError,
     RefusedRecord,
     db_extends_disk,
     export_to_jsonl,
     export_would_change,
     find_divergence,
+    find_refused_records,
     import_from_jsonl,
     import_lines,
     seed_to_dict,
@@ -917,56 +917,162 @@ class TestMalformedRecordReporting:
     """A record seeds cannot read must name itself (bead seeds-hao9 evidence)."""
 
     def _records(self, bad_status="in-progress"):
-        def rec(seed_id, status="captured"):
-            return {
-                "format_version": 2,
-                "id": seed_id,
-                "title": seed_id,
-                "content": "",
-                "status": status,
-                "seed_type": "idea",
-                "tags": [],
-                "created_at": "2026-08-01T00:00:00+00:00",
-                "updated_at": "2026-08-01T00:00:00+00:00",
-                "relationships": [],
-            }
+        return [
+            _record("seed-1", "body"),
+            _record("seed-bad", "body", status=bad_status),
+            _record("seed-3", "body"),
+        ]
 
-        return [rec("seed-1"), rec("seed-bad", bad_status), rec("seed-3")]
+    def _write(self, tmp_path, records):
+        jsonl = tmp_path / "seeds.jsonl"
+        jsonl.write_text("\n".join(json.dumps(r) for r in records) + "\n")
+        return jsonl
 
-    def test_unreadable_record_raises_a_named_error_not_a_bare_valueerror(
-        self, db, tmp_path
-    ):
+    def test_unreadable_record_is_refused_and_names_itself(self, db, tmp_path):
         """Regression: an unrecognized status raised straight out of the enum.
 
         Mark Danese's outage was this shape with seed_type; opening that
         vocabulary left status with the same eager parse (seed seeds-1x6b).
+        The refusal has to carry enough to go fix the file: where the record
+        is, which seed it is, and which field failed.
         """
-        jsonl = tmp_path / "seeds.jsonl"
-        jsonl.write_text("\n".join(json.dumps(r) for r in self._records()) + "\n")
+        result = import_from_jsonl(db, self._write(tmp_path, self._records()))
 
-        with pytest.raises(MalformedRecordError) as exc_info:
-            import_from_jsonl(db, jsonl)
+        assert len(result.refused) == 1
+        refusal = result.refused[0]
+        assert refusal.seed_id == "seed-bad"
+        assert refusal.record_number == 2
+        assert refusal.field == "status"
+        assert "SeedStatus" in refusal.reason
 
-        exc = exc_info.value
-        assert exc.seed_id == "seed-bad"
-        assert exc.record_number == 2
-        assert "SeedStatus" in exc.reason
+    def test_records_after_the_bad_one_still_import(self, db, tmp_path):
+        """THE seeds-1x6b regression: a bad line must not eat the rest of the file.
 
-    def test_error_reports_how_many_records_already_landed(self, db, tmp_path):
-        """The import is not transactional, so the operator is told the state.
-
-        Whether it SHOULD be transactional is deliberately still open
-        (seed seeds-hao9); this reports honestly under either answer.
+        The behaviour this replaces was neither transactional nor best-effort
+        — records above the bad line committed, records below never imported,
+        silently, for five weeks. Ruled best-effort in seed seeds-hao9.
         """
-        jsonl = tmp_path / "seeds.jsonl"
-        jsonl.write_text("\n".join(json.dumps(r) for r in self._records()) + "\n")
+        result = import_from_jsonl(db, self._write(tmp_path, self._records()))
 
-        with pytest.raises(MalformedRecordError) as exc_info:
-            import_from_jsonl(db, jsonl)
-
-        assert exc_info.value.imported_before == 1
         assert db.get_seed("seed-1") is not None
-        assert db.get_seed("seed-3") is None
+        assert db.get_seed("seed-3") is not None
+        assert db.get_seed("seed-bad") is None
+        assert result.created == 2
+        assert result.total == 3
+
+    def test_unparseable_json_line_does_not_stop_the_lines_below_it(self, db, tmp_path):
+        """A conflict-marker line is the other half of the same failure.
+
+        json.loads raised from inside the record generator, which took the
+        rest of the file with it before import_records ever saw a record.
+        """
+        jsonl = tmp_path / "seeds.jsonl"
+        jsonl.write_text(
+            json.dumps(_record("seed-1", "body"))
+            + "\n<<<<<<< HEAD\n"
+            + json.dumps(_record("seed-3", "body"))
+            + "\n"
+        )
+
+        result = import_from_jsonl(db, jsonl)
+
+        assert db.get_seed("seed-1") is not None
+        assert db.get_seed("seed-3") is not None
+        assert len(result.refused) == 1
+        assert result.refused[0].record_number == 2
+        assert result.refused[0].seed_id is None
+        assert result.refused[0].field == "<line>"
+
+    @pytest.mark.parametrize(
+        "overrides,expected_field",
+        [
+            ({"seed_type": None}, "seed_type"),
+            ({"created_at": "not-a-date"}, "created_at"),
+            (
+                {"relationships": [{"target_id": "x", "rel_type": "nonsense"}]},
+                "relationships[1].rel_type",
+            ),
+        ],
+    )
+    def test_each_malformed_field_is_named(
+        self, db, tmp_path, overrides, expected_field
+    ):
+        """The report names the field, not just "something went wrong"."""
+        jsonl = self._write(tmp_path, [_record("seed-bad", "body", **overrides)])
+
+        result = import_from_jsonl(db, jsonl)
+
+        assert [r.field for r in result.refused] == [expected_field]
+
+    def test_missing_required_field_is_refused_with_the_field_name(self, db, tmp_path):
+        """A dropped required field names the field that is gone."""
+        record = _record("seed-bad", "body")
+        del record["title"]
+        jsonl = self._write(tmp_path, [record])
+
+        result = import_from_jsonl(db, jsonl)
+
+        assert [(r.seed_id, r.field) for r in result.refused] == [("seed-bad", "title")]
+
+    def test_a_stale_record_is_skipped_not_refused(self, db, tmp_path):
+        """Last-write-wins skipping is the normal case and must stay quiet.
+
+        Reporting it as a refusal would bury the real ones under one line per
+        unchanged seed on every single sync.
+        """
+        db.create_seed(Seed(id="seed-1", title="Newer in DB", content="mine"))
+        stale = datetime(2020, 1, 1, tzinfo=UTC)
+        jsonl = self._write(tmp_path, [_record("seed-1", "body", updated_at=stale)])
+
+        result = import_from_jsonl(db, jsonl)
+
+        assert result.refused == []
+        assert result.skipped == 1
+
+
+class TestFindRefusedRecords:
+    """doctor's read-only view of what the import would refuse (seeds-1x6b)."""
+
+    def test_clean_file_refuses_nothing(self, db, tmp_path):
+        jsonl = tmp_path / "seeds.jsonl"
+        jsonl.write_text(json.dumps(_record("seed-1", "body")) + "\n")
+
+        assert find_refused_records(jsonl) == []
+
+    def test_missing_file_refuses_nothing(self, tmp_path):
+        assert find_refused_records(tmp_path / "absent.jsonl") == []
+
+    def test_malformed_and_future_dated_records_are_both_reported(self, tmp_path):
+        """Both refusal reasons reach doctor; neither imports, so both matter."""
+        far_future = now_utc() + FUTURE_TIMESTAMP_TOLERANCE + timedelta(hours=1)
+        jsonl = tmp_path / "seeds.jsonl"
+        jsonl.write_text(
+            "\n".join(
+                json.dumps(r)
+                for r in [
+                    _record("seed-1", "body"),
+                    _record("seed-bad", "body", status="in-progress"),
+                    _record("seed-future", "body", updated_at=far_future),
+                ]
+            )
+            + "\n"
+        )
+
+        refused = find_refused_records(jsonl)
+
+        assert [(r.record_number, r.seed_id, r.field) for r in refused] == [
+            (2, "seed-bad", "status"),
+            (3, "seed-future", "updated_at"),
+        ]
+
+    def test_it_does_not_import_anything(self, db, tmp_path):
+        """Read-only: doctor must not mutate the DB as a side effect."""
+        jsonl = tmp_path / "seeds.jsonl"
+        jsonl.write_text(json.dumps(_record("seed-1", "body")) + "\n")
+
+        find_refused_records(jsonl)
+
+        assert db.get_seed("seed-1") is None
 
 
 class TestArbitrarySeedType:
@@ -1344,7 +1450,7 @@ class TestImportLastWriteWins:
         assert (
             ImportResult(
                 created=1,
-                refused=[RefusedRecord("seed-x", "2030-01-01T00:00:00+00:00", "why")],
+                refused=[RefusedRecord(1, "seed-x", "updated_at", "why")],
             ).total
             == 2
         )
@@ -1386,7 +1492,8 @@ class TestImportUntrustworthyTimestamps:
         assert len(result.refused) == 1
         # The refusal names the seed and quotes the timestamp the file claimed.
         assert result.refused[0].seed_id == "seed-f"
-        assert result.refused[0].claimed_updated_at == forged
+        assert result.refused[0].field == "updated_at"
+        assert forged in result.refused[0].reason
 
         seed = db.get_seed("seed-f")
         assert seed.title == "Real title"
