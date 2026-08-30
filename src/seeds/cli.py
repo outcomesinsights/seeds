@@ -254,6 +254,70 @@ def _reject_ambiguous_tag_flags(
         sys.exit(1)
 
 
+STDIN_SENTINEL = "-"
+"""``--content -``: read the new body from stdin rather than from argv."""
+
+
+def _resolve_content(content: str | None, content_file: str | None) -> str | None:
+    """Collapse ``--content``/``--content-file`` into the single body to store.
+
+    A body worth protecting is a body nobody wants in argv. Folding a
+    divergence means reproducing the whole existing text verbatim as one shell
+    word -- for an agent, reading it into context and re-emitting it, roughly
+    twice the body in tokens, where a truncation or a mangled quote corrupts
+    deliberation without saying so. So the same text can arrive from a file, or
+    on stdin.
+
+    Stdin is the sentinel ``-`` on the EXISTING ``--content`` option rather
+    than a third flag: where the body came from is not a different kind of
+    update. ``--content-file -`` is refused for the same reason -- one spelling
+    for stdin, not two.
+
+    Combining the two options is refused rather than resolved by a precedence
+    rule, matching :func:`_reject_ambiguous_tag_flags`: a silent winner is the
+    surprise, not the error.
+
+    A trailing newline is dropped, because every editor and ``>`` redirect adds
+    one and ``-c TEXT`` never carries one -- keeping it would make the same
+    body differ by its delivery route. Returns ``None`` when neither option was
+    passed (body untouched); an empty file or empty stdin returns ``""``, a
+    deliberate blanking that still has to clear the guard.
+    """
+    if content is not None and content_file is not None:
+        click.echo(
+            "Error: --content and --content-file both supply the new body, so "
+            "passing both is ambiguous.",
+            err=True,
+        )
+        click.echo(
+            "  Pick one: -c TEXT, --content-file PATH, or --content - for stdin.",
+            err=True,
+        )
+        sys.exit(1)
+
+    if content_file == STDIN_SENTINEL:
+        click.echo(
+            "Error: --content-file takes a path; read stdin with --content -.",
+            err=True,
+        )
+        sys.exit(1)
+
+    if content_file is not None:
+        path = Path(content_file)
+        if not path.is_file():
+            click.echo(
+                f"Error: --content-file: not a readable file: {content_file}",
+                err=True,
+            )
+            sys.exit(1)
+        return path.read_text(encoding="utf-8").rstrip("\n")
+
+    if content == STDIN_SENTINEL:
+        return sys.stdin.read().rstrip("\n")
+
+    return content
+
+
 def _apply_tag_edits(seed: Seed, add: Sequence[str], remove: Sequence[str]) -> str:
     """Add/remove individual tags in place; return a report of what happened.
 
@@ -995,7 +1059,19 @@ def trellis(
 @click.option(
     "--content",
     "-c",
-    help="New content (replaces existing; refused once a seed has been edited)",
+    metavar="TEXT",
+    help=(
+        "New content (replaces existing; refused once a seed has been edited). "
+        "Pass - to read the body from stdin."
+    ),
+)
+@click.option(
+    "--content-file",
+    metavar="PATH",
+    help=(
+        "Read the new content from a file instead of argv (same replacement "
+        "and same guard as --content; cannot be combined with it)"
+    ),
 )
 @click.option("--tags", help="New tags (comma-separated, replaces existing)")
 @click.option(
@@ -1026,7 +1102,8 @@ def trellis(
     "--replace",
     is_flag=True,
     help=(
-        "Let --content discard content accumulated since the seed was created. "
+        "Let a --content/--content-file replacement discard content "
+        "accumulated since the seed was created. "
         "For redactions only -- and it does not finish the job: the old body "
         "stays in git history and needs separate scrubbing."
     ),
@@ -1042,6 +1119,7 @@ def update(
     seed_id: str,
     title: str | None,
     content: str | None,
+    content_file: str | None,
     tags: str | None,
     seed_type: str | None,
     add_tags: tuple[str, ...],
@@ -1057,6 +1135,11 @@ def update(
     or --replace to discard it deliberately. --title and --tags carry no such
     guard: tags are working state whose normal verb is replacement.
 
+    The replacement body does not have to travel through argv: --content-file
+    PATH reads it from a file and --content - reads it from stdin. Both are the
+    same replacement as -c TEXT and clear the same guard the same way; passing
+    more than one of the three is refused rather than ranked.
+
     Tags can be set wholesale with --tags or edited one at a time with
     --add-tag/--remove-tag, which compose with each other and leave every other
     tag untouched and in place. The two styles cannot be mixed in one command,
@@ -1070,6 +1153,8 @@ def update(
     """
     db = ctx.get_db()
     seed = get_seed_or_exit(db, seed_id)
+
+    content = _resolve_content(content, content_file)
 
     _validate_id_refs(db, [title, content, append_text], allow_unknown_refs)
     _reject_ambiguous_tag_flags(tags, add_tags, remove_tags)

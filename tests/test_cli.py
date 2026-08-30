@@ -1317,6 +1317,162 @@ class TestUpdateContentGuard:
         db.close()
 
 
+class TestUpdateContentInput:
+    """Tests for 'update --content-file' / '--content -' (see bead seeds-lf5).
+
+    These are three spellings of one replacement, so what is asserted is that
+    they land the same body, clear the same guard the same way, and refuse to
+    be combined instead of picking a winner.
+    """
+
+    def _create(self, cli_runner, content="Original capture"):
+        result = cli_runner.invoke(
+            main, ["create", "--title", "Filed seed", "--content", content]
+        )
+        assert result.exit_code == 0, result.output
+        return _extract_created_id(result.output)
+
+    def _content_of(self, seed_id):
+        db = Database()
+        try:
+            return db.get_seed(seed_id).content
+        finally:
+            db.close()
+
+    def test_content_file_replaces_the_body(self, cli_runner, initialized_env):
+        seed_id = self._create(cli_runner)
+        body = initialized_env / "body.md"
+        body.write_text("line one\n\nline two\n")
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--content-file", str(body)]
+        )
+        assert result.exit_code == 0, result.output
+        assert self._content_of(seed_id) == "line one\n\nline two"
+
+    def test_content_file_keeps_quotes_and_newlines_intact(
+        self, cli_runner, initialized_env
+    ):
+        """The whole point: text argv would mangle survives the file route."""
+        seed_id = self._create(cli_runner)
+        awkward = 'it\'s "quoted" $HOME `backticks`\nand a second line'
+        body = initialized_env / "body.md"
+        body.write_text(awkward)
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--content-file", str(body)]
+        )
+        assert result.exit_code == 0, result.output
+        assert self._content_of(seed_id) == awkward
+
+    def test_content_dash_reads_stdin(self, cli_runner, initialized_env):
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "-c", "-"], input="piped body\n"
+        )
+        assert result.exit_code == 0, result.output
+        assert self._content_of(seed_id) == "piped body"
+
+    def test_missing_content_file_is_refused(self, cli_runner, initialized_env):
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--content-file", "no-such-file.md"]
+        )
+        assert result.exit_code != 0
+        assert "--content-file" in result.stderr
+        assert self._content_of(seed_id) == "Original capture"
+
+    def test_content_file_dash_points_at_the_one_stdin_spelling(
+        self, cli_runner, initialized_env
+    ):
+        """Stdin has exactly one spelling; the other is redirected, not aliased."""
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--content-file", "-"], input="piped body\n"
+        )
+        assert result.exit_code != 0
+        assert "--content -" in result.stderr
+        assert self._content_of(seed_id) == "Original capture"
+
+    def test_content_and_content_file_together_are_refused(
+        self, cli_runner, initialized_env
+    ):
+        """Refused, not resolved by precedence -- a silent winner is the bug."""
+        seed_id = self._create(cli_runner)
+        body = initialized_env / "body.md"
+        body.write_text("from the file")
+
+        result = cli_runner.invoke(
+            main,
+            ["update", seed_id, "-c", "from argv", "--content-file", str(body)],
+        )
+        assert result.exit_code != 0
+        assert "ambiguous" in result.stderr
+        assert self._content_of(seed_id) == "Original capture"
+
+    def test_content_file_respects_the_edited_seed_guard(
+        self, cli_runner, initialized_env
+    ):
+        seed_id = self._create(cli_runner)
+        assert cli_runner.invoke(main, ["update", seed_id, "-a", "more"]).exit_code == 0
+        body = initialized_env / "body.md"
+        body.write_text("wiped")
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--content-file", str(body)]
+        )
+        assert result.exit_code != 0
+        assert "--replace" in result.stderr
+        assert "wiped" not in self._content_of(seed_id)
+
+    def test_stdin_respects_the_edited_seed_guard(self, cli_runner, initialized_env):
+        seed_id = self._create(cli_runner)
+        assert cli_runner.invoke(main, ["update", seed_id, "-a", "more"]).exit_code == 0
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "-c", "-"], input="wiped\n"
+        )
+        assert result.exit_code != 0
+        assert "--replace" in result.stderr
+        assert "wiped" not in self._content_of(seed_id)
+
+    def test_replace_overrides_the_guard_for_the_file_route(
+        self, cli_runner, initialized_env
+    ):
+        seed_id = self._create(cli_runner)
+        cli_runner.invoke(main, ["update", seed_id, "-a", "more"])
+        body = initialized_env / "body.md"
+        body.write_text("deliberately rebuilt")
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--content-file", str(body), "--replace"]
+        )
+        assert result.exit_code == 0, result.output
+        assert self._content_of(seed_id) == "deliberately rebuilt"
+
+    def test_replace_overrides_the_guard_for_the_stdin_route(
+        self, cli_runner, initialized_env
+    ):
+        seed_id = self._create(cli_runner)
+        cli_runner.invoke(main, ["update", seed_id, "-a", "more"])
+
+        result = cli_runner.invoke(
+            main,
+            ["update", seed_id, "-c", "-", "--replace"],
+            input="deliberately rebuilt\n",
+        )
+        assert result.exit_code == 0, result.output
+        assert self._content_of(seed_id) == "deliberately rebuilt"
+
+    def test_both_routes_are_documented_in_help(self, cli_runner):
+        result = cli_runner.invoke(main, ["update", "--help"])
+        assert result.exit_code == 0
+        assert "--content-file" in result.output
+
+
 class TestUpdateTagEdits:
     """Tests for 'update --add-tag/--remove-tag' (see bead seeds-3ps).
 
