@@ -38,12 +38,24 @@ FUTURE_TIMESTAMP_TOLERANCE = timedelta(minutes=5)
 class RefusedRecord:
     """A record the import declined to apply, and why.
 
-    ``claimed_updated_at`` is the raw string the file asserted, reported
-    verbatim so the operator can see exactly what is wrong upstream.
+    One shape covers every refusal, because the operator's question is always
+    the same: *which* record, and *what* about it. The fields answer it
+    without a second lookup:
+
+    - ``record_number``: 1-based position in the file, counting only
+      non-blank lines — how to go find it.
+    - ``seed_id``: the record's ``id``, or ``None`` when the line is too
+      broken to have one (unparseable JSON, or a non-object).
+    - ``field``: the field that failed. ``"<line>"`` when the whole line is
+      unreadable, ``"<record>"`` when it parsed to something other than a
+      JSON object.
+    - ``reason``: what is wrong with that field, quoting the offending value
+      verbatim so the upstream defect is visible from the report alone.
     """
 
-    seed_id: str
-    claimed_updated_at: str
+    record_number: int
+    seed_id: str | None
+    field: str
     reason: str
 
 
@@ -56,10 +68,14 @@ class ImportResult:
       ``updated_at`` was newer than the DB's (last-write-wins).
     - ``skipped``: records left untouched — an existing seed whose JSONL
       ``updated_at`` was not newer than the DB's (stale or identical), or a
-      legacy v1 collision (v1 import is create-only).
-    - ``refused``: records rejected outright without touching the DB at all
-      (not even their relationships), because their ``updated_at`` is further
-      ahead of local time than :data:`FUTURE_TIMESTAMP_TOLERANCE` allows.
+      legacy v1 collision (v1 import is create-only). This is the ordinary,
+      uninteresting outcome and is never a refusal.
+    - ``refused``: records the import would not apply at all, leaving the DB
+      untouched by them (not even their relationships) — either because they
+      are malformed (see :func:`refusal_for_record`) or because their
+      ``updated_at`` is further ahead of local time than
+      :data:`FUTURE_TIMESTAMP_TOLERANCE` allows. A refusal never stops the
+      import: every other record in the file still lands.
     """
 
     created: int = 0
@@ -117,24 +133,159 @@ def _optional_timestamp(value: str | None) -> datetime | None:
     return _parse_timestamp(value)
 
 
-def _refusal_for(data: dict[str, Any], now: datetime) -> RefusedRecord | None:
+def _future_refusal_for(
+    record_number: int, data: dict[str, Any], now: datetime
+) -> RefusedRecord | None:
     """Return a :class:`RefusedRecord` if this record's timestamp is untrustworthy.
 
     Applies to every record regardless of format version: the claim being
     checked is the file's ``updated_at``, which both the v1 and v2 importers
-    write into the DB verbatim.
+    write into the DB verbatim. Only call this on a record that has already
+    passed :func:`refusal_for_record`, which is what guarantees ``updated_at``
+    is present and parseable.
     """
     claimed = data["updated_at"]
     if _parse_timestamp(claimed) <= now + FUTURE_TIMESTAMP_TOLERANCE:
         return None
     return RefusedRecord(
+        record_number=record_number,
         seed_id=data["id"],
-        claimed_updated_at=claimed,
+        field="updated_at",
         reason=(
-            f"updated_at is more than {FUTURE_TIMESTAMP_TOLERANCE} ahead of "
-            f"now ({now.isoformat()})"
+            f"claimed updated_at {claimed} is more than "
+            f"{FUTURE_TIMESTAMP_TOLERANCE} ahead of now ({now.isoformat()})"
         ),
     )
+
+
+# Fields every record must carry, in both format versions, for either importer
+# to build a Seed from it. ``content``, ``tags``, ``resolution`` and
+# ``resolved_at`` are all optional with defaults, so their absence is not a
+# defect.
+_REQUIRED_STRING_FIELDS = ("id", "title", "seed_type")
+_REQUIRED_TIMESTAMP_FIELDS = ("created_at", "updated_at")
+
+
+def _timestamp_problem(value: Any) -> str | None:
+    """Why this value cannot be read as an ISO timestamp, or ``None`` if it can."""
+    if not isinstance(value, str):
+        return f"expected an ISO timestamp string, got {type(value).__name__}"
+    try:
+        _parse_timestamp(value)
+    except ValueError as exc:
+        return f"{value!r} is not an ISO timestamp ({exc})"
+    return None
+
+
+def _relationship_problem(rels: Any) -> tuple[str, str] | None:
+    """Validate a v2 record's ``relationships`` array; return (field, reason)."""
+    if not isinstance(rels, list):
+        return ("relationships", f"expected a list, got {type(rels).__name__}")
+    for index, rel in enumerate(rels, start=1):
+        where = f"relationships[{index}]"
+        if not isinstance(rel, dict):
+            return (where, f"expected an object, got {type(rel).__name__}")
+        if "target_id" not in rel:
+            return (f"{where}.target_id", "required field is missing")
+        if "rel_type" not in rel:
+            return (f"{where}.rel_type", "required field is missing")
+        try:
+            RelationType(rel["rel_type"])
+        except ValueError as exc:
+            return (f"{where}.rel_type", str(exc))
+        problem = None
+        if rel.get("created_at"):
+            problem = _timestamp_problem(rel["created_at"])
+        if problem is not None:
+            return (f"{where}.created_at", problem)
+    return None
+
+
+def _v1_questions_problem(questions: Any) -> tuple[str, str] | None:
+    """Validate a legacy v1 record's embedded ``questions`` array."""
+    if not isinstance(questions, list):
+        return ("questions", f"expected a list, got {type(questions).__name__}")
+    for index, question in enumerate(questions, start=1):
+        where = f"questions[{index}]"
+        if not isinstance(question, dict):
+            return (where, f"expected an object, got {type(question).__name__}")
+        for name in ("text", "created_at"):
+            if name not in question:
+                return (f"{where}.{name}", "required field is missing")
+        problem = _timestamp_problem(question["created_at"])
+        if problem is not None:
+            return (f"{where}.created_at", problem)
+        if question.get("answered_at"):
+            problem = _timestamp_problem(question["answered_at"])
+            if problem is not None:
+                return (f"{where}.answered_at", problem)
+    return None
+
+
+def refusal_for_record(record_number: int, data: Any) -> RefusedRecord | None:
+    """Return a :class:`RefusedRecord` if this record cannot be read at all.
+
+    Names the failing FIELD, which is the thing an operator actually has to go
+    fix. Deriving that from the exception the importer happens to raise does
+    not work — ``SeedStatus('in-progress')`` raises a ``ValueError`` that names
+    the enum, not the field it came from — so the check is written out
+    explicitly here instead.
+
+    Running as a separate pass also lets ``seeds doctor`` ask the question
+    without importing anything, so a file full of records the import will
+    refuse can no longer be certified clean (seed seeds-1x6b).
+
+    :func:`import_records` still wraps the import itself in a backstop, so a
+    record this misses is refused rather than aborting the file. This
+    function's job is the good error message, not the safety guarantee.
+    """
+    if not isinstance(data, dict):
+        return RefusedRecord(
+            record_number=record_number,
+            seed_id=None,
+            field="<record>",
+            reason=f"expected a JSON object, got {type(data).__name__}",
+        )
+
+    seed_id = data["id"] if isinstance(data.get("id"), str) else None
+
+    def refuse(field_name: str, reason: str) -> RefusedRecord:
+        return RefusedRecord(
+            record_number=record_number,
+            seed_id=seed_id,
+            field=field_name,
+            reason=reason,
+        )
+
+    for name in (*_REQUIRED_STRING_FIELDS, "status", *_REQUIRED_TIMESTAMP_FIELDS):
+        if name not in data:
+            return refuse(name, "required field is missing")
+    for name in _REQUIRED_STRING_FIELDS:
+        if not isinstance(data[name], str):
+            return refuse(name, f"expected a string, got {type(data[name]).__name__}")
+    try:
+        SeedStatus(data["status"])
+    except ValueError as exc:
+        return refuse("status", str(exc))
+    for name in (*_REQUIRED_TIMESTAMP_FIELDS, "resolved_at"):
+        value = data.get(name)
+        if name in _REQUIRED_TIMESTAMP_FIELDS or value:
+            problem = _timestamp_problem(value)
+            if problem is not None:
+                return refuse(name, problem)
+
+    if data.get("format_version") == 2:
+        found = _relationship_problem(data.get("relationships", []))
+    else:
+        found = _v1_questions_problem(data.get("questions", []))
+        if found is None and not isinstance(data.get("related_to", []), list):
+            found = (
+                "related_to",
+                f"expected a list, got {type(data['related_to']).__name__}",
+            )
+    if found is not None:
+        return refuse(*found)
+    return None
 
 
 def seed_to_dict(seed: Seed, db: Database) -> dict[str, Any]:
@@ -194,38 +345,6 @@ class Divergence:
     detail: str
     on_disk: str = ""
     in_db: str = ""
-
-
-class MalformedRecordError(Exception):
-    """Raised when a JSONL record cannot be read into a Seed.
-
-    Exists so a bad record reports itself instead of surfacing a bare
-    ``ValueError`` traceback from an enum constructor. That traceback named
-    neither the record nor the file, which is how Mark Danese spent five weeks
-    not knowing which line had stopped his sync (seed seeds-1x6b).
-
-    Carries the index of the record in the file, its ``id`` when it has one,
-    and how many records were already imported before it -- because the import
-    is not transactional, and an operator needs to know the database is now
-    partway through. Whether it SHOULD be transactional is still open
-    (seed seeds-hao9); this reports the state honestly either way.
-    """
-
-    def __init__(
-        self,
-        record_number: int,
-        seed_id: str | None,
-        reason: str,
-        imported_before: int,
-    ) -> None:
-        self.record_number = record_number
-        self.seed_id = seed_id
-        self.reason = reason
-        self.imported_before = imported_before
-        where = f"record {record_number}"
-        if seed_id:
-            where += f" ({seed_id})"
-        super().__init__(f"{where}: {reason}")
 
 
 class DivergentExportError(Exception):
@@ -625,16 +744,38 @@ def read_record_ids(input_path: Path) -> set[str]:
     return ids
 
 
-def _iter_records(lines: Iterable[str]) -> Iterable[dict[str, Any]]:
-    """Parse a stream of JSONL lines into records, skipping blank lines."""
+@dataclass(frozen=True)
+class UnreadableLine:
+    """A JSONL line that is not valid JSON at all.
+
+    Carried through the record stream instead of raising, so one line of
+    conflict markers cannot stop the lines below it from importing. The
+    caller turns it into a :class:`RefusedRecord`.
+    """
+
+    reason: str
+
+
+def _iter_records(lines: Iterable[str]) -> Iterable[dict[str, Any] | UnreadableLine]:
+    """Parse a stream of JSONL lines into records, skipping blank lines.
+
+    A line that will not parse yields an :class:`UnreadableLine` rather than
+    raising, because a generator that raises takes the rest of the file with
+    it — the exact mechanism behind the five-week silent outage in seeds-1x6b.
+    """
     for line in lines:
         line = line.strip()
         if not line:
             continue
-        yield json.loads(line)
+        try:
+            yield json.loads(line)
+        except json.JSONDecodeError as exc:
+            yield UnreadableLine(reason=f"line is not valid JSON ({exc})")
 
 
-def _bootstrap_db_if_absent(db: Database, records: list[dict[str, Any]]) -> None:
+def _bootstrap_db_if_absent(
+    db: Database, records: list[dict[str, Any] | UnreadableLine]
+) -> None:
     """Create the schema + recover the prefix when the DB file is absent.
 
     The fresh-clone rehydration case: a checkout ships ``.seeds/seeds.jsonl``
@@ -650,18 +791,24 @@ def _bootstrap_db_if_absent(db: Database, records: list[dict[str, Any]]) -> None
     Recovery falls back to leaving the prefix unset (``init()`` with no prefix)
     when the first record's ID is not a recoverable ``<prefix>-<number>``
     shape, so a legacy-only export still bootstraps a usable DB.
+
+    The prefix is recovered from the first record that actually has a string
+    ``id``, not literally the first line: a leading unreadable or malformed
+    record must not cost the whole file its prefix.
     """
     if db.is_initialized():
         return
     prefix: str | None = None
-    if records:
-        prefix = recover_prefix_from_id(records[0]["id"])
+    for record in records:
+        if isinstance(record, dict) and isinstance(record.get("id"), str):
+            prefix = recover_prefix_from_id(record["id"])
+            break
     db.init(prefix=prefix)
 
 
 def import_records(
     db: Database,
-    records: Iterable[dict[str, Any]],
+    records: Iterable[dict[str, Any] | UnreadableLine],
     bootstrap: bool = False,
 ) -> ImportResult:
     """Import already-parsed JSONL records into the database.
@@ -670,12 +817,30 @@ def import_records(
     else is treated as legacy v1) and applies it via the matching importer.
     Tallies the per-record outcomes into an :class:`ImportResult`.
 
-    A record whose ``updated_at`` is further ahead of local time than
-    :data:`FUTURE_TIMESTAMP_TOLERANCE` is refused before either importer sees
-    it — nothing about it reaches the DB, not even its relationships — and is
-    recorded in ``result.refused`` for the caller to report. Every record is
-    compared against a single ``now`` captured once, so a long import cannot
-    change its mind partway through.
+    **Best-effort, never all-or-nothing.** A record seeds cannot read is
+    refused and the import moves on to the next one; the caller gets the whole
+    refusal list in ``result.refused`` and reports it loudly. The policy the
+    alternative replaced was neither transactional nor best-effort — it walked
+    the file in order and raised where it stood, so records above the bad line
+    committed and every record BELOW it never imported at all. That is the
+    mechanism behind the five-week silent outage in seeds-1x6b, and it is not
+    a fixed cost of a bad record: it is a choice about what to do with one
+    (ruled in seed seeds-hao9).
+
+    Two conditions refuse a record, both leaving the DB untouched by it — not
+    even its relationships:
+
+    - It cannot be read at all: unparseable JSON, not a JSON object, a missing
+      required field, an unrecognized ``status``, an unparseable timestamp.
+      See :func:`refusal_for_record`.
+    - Its ``updated_at`` is further ahead of local time than
+      :data:`FUTURE_TIMESTAMP_TOLERANCE` allows. Every record is compared
+      against a single ``now`` captured once, so a long import cannot change
+      its mind partway through.
+
+    A record merely skipped by last-write-wins (its ``updated_at`` is not
+    newer than the DB's) is NOT a refusal — that is the ordinary outcome of a
+    healthy round-trip and reporting it as a problem would bury the real ones.
 
     When ``bootstrap`` is True and the database file does not yet exist, the
     schema is created and the project prefix is recovered from the first
@@ -691,7 +856,20 @@ def import_records(
     now = now_utc()
     result = ImportResult()
     for record_number, data in enumerate(records, start=1):
-        refusal = _refusal_for(data, now)
+        if isinstance(data, UnreadableLine):
+            result.refused.append(
+                RefusedRecord(
+                    record_number=record_number,
+                    seed_id=None,
+                    field="<line>",
+                    reason=data.reason,
+                )
+            )
+            continue
+
+        refusal = refusal_for_record(record_number, data)
+        if refusal is None:
+            refusal = _future_refusal_for(record_number, data, now)
         if refusal is not None:
             result.refused.append(refusal)
             continue
@@ -701,13 +879,21 @@ def import_records(
                 outcome = _import_v2_record(db, data)
             else:
                 outcome = _import_v1_record(db, data)
-        except (ValueError, KeyError, TypeError) as exc:
-            raise MalformedRecordError(
-                record_number=record_number,
-                seed_id=data.get("id") if isinstance(data.get("id"), str) else None,
-                reason=str(exc),
-                imported_before=result.created + result.updated,
-            ) from exc
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            # Backstop. refusal_for_record above is what produces a good field
+            # name, but it is a second description of what the importers
+            # require and could drift from them. This guarantees the property
+            # that actually matters -- a record seeds cannot read never stops
+            # the records after it -- for a failure shape nobody anticipated.
+            result.refused.append(
+                RefusedRecord(
+                    record_number=record_number,
+                    seed_id=data["id"] if isinstance(data.get("id"), str) else None,
+                    field="<unknown>",
+                    reason=f"{type(exc).__name__}: {exc}",
+                )
+            )
+            continue
 
         if outcome == "created":
             result.created += 1
@@ -752,9 +938,11 @@ def import_from_jsonl(
             initialized projects are unaffected.
 
     Returns:
-        An :class:`ImportResult` with created/updated/skipped counts plus any
-        records refused for an untrustworthy ``updated_at``. A missing file
-        yields an empty result (all-zero counts).
+        An :class:`ImportResult` with created/updated/skipped counts plus every
+        record that was refused — malformed, or carrying an untrustworthy
+        ``updated_at``. A refusal never stops the import; see
+        :func:`import_records`. A missing file yields an empty result
+        (all-zero counts).
     """
     if input_path is None:
         input_path = Path.cwd() / SEEDS_DIR / JSONL_FILE
@@ -764,3 +952,38 @@ def import_from_jsonl(
 
     with open(input_path) as f:
         return import_lines(db, f, bootstrap=bootstrap)
+
+
+def find_refused_records(input_path: Path) -> list[RefusedRecord]:
+    """Every record in a JSONL file that an import would refuse, without importing.
+
+    The read-only half of :func:`import_records`, so ``seeds doctor`` can
+    answer "is anything in this file unimportable?" instead of certifying a
+    file clean while every ``seeds sync`` quietly drops records out of it
+    (seed seeds-1x6b).
+
+    A missing file has nothing to refuse and yields an empty list.
+    """
+    if not input_path.exists():
+        return []
+
+    now = now_utc()
+    refused: list[RefusedRecord] = []
+    with open(input_path) as f:
+        for record_number, data in enumerate(_iter_records(f), start=1):
+            if isinstance(data, UnreadableLine):
+                refused.append(
+                    RefusedRecord(
+                        record_number=record_number,
+                        seed_id=None,
+                        field="<line>",
+                        reason=data.reason,
+                    )
+                )
+                continue
+            refusal = refusal_for_record(record_number, data)
+            if refusal is None:
+                refusal = _future_refusal_for(record_number, data, now)
+            if refusal is not None:
+                refused.append(refusal)
+    return refused

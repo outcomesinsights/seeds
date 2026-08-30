@@ -17,7 +17,7 @@ from seeds.export import (
     JSONL_FILE,
     DivergentExportError,
     ImportResult,
-    MalformedRecordError,
+    RefusedRecord,
 )
 from seeds.models import (
     DEFAULT_PREFIX,
@@ -1386,13 +1386,26 @@ def tree(ctx: Context, seed_id: str) -> None:
 # --- Sync and export commands ---
 
 
+def _format_refusal(rec: RefusedRecord) -> str:
+    """One refusal line: where the record is, which one it is, what is wrong."""
+    where = f"record {rec.record_number}"
+    if rec.seed_id:
+        where += f" ({rec.seed_id})"
+    return f"  {where}: {rec.field} — {rec.reason}"
+
+
 def _format_import_summary(result: ImportResult) -> str:
     """Created/updated/skipped summary shared by import and sync.
 
     Stays a single unchanged line when nothing was refused. Refusals are the
-    exception, and each one names the seed and the timestamp the file claimed
-    — a future-dated record means something is wrong upstream and the operator
-    has to be able to go find it.
+    exception, and each one names the record's position in the file, its ID,
+    the field that failed and why — everything needed to go fix it without a
+    second command.
+
+    The import is best-effort (seed seeds-hao9): everything else in the file
+    landed, so this report is the ONLY trace a refused record leaves. Both
+    callers exit non-zero when it is non-empty, because a refusal that scrolls
+    past unnoticed is the defect being fixed, not a cosmetic one.
     """
     summary = (
         f"Imported: {result.created} created, "
@@ -1402,11 +1415,10 @@ def _format_import_summary(result: ImportResult) -> str:
         return summary
 
     lines = [f"{summary}, {len(result.refused)} refused"]
-    lines.append("Refused (untrustworthy timestamp — DB left unchanged):")
-    lines.extend(
-        f"  {rec.seed_id}: claimed updated_at {rec.claimed_updated_at} — {rec.reason}"
-        for rec in result.refused
+    lines.append(
+        "Refused (DB left unchanged by these records; everything else landed):"
     )
+    lines.extend(_format_refusal(rec) for rec in result.refused)
     return "\n".join(lines)
 
 
@@ -1421,6 +1433,10 @@ def import_(ctx: Context, path: str | None) -> None:
     schema is created and the project prefix recovered from the JSONL itself.
     DB rows fresher than their JSONL record are never clobbered, and DB-only
     seeds (absent from the JSONL) are never deleted.
+
+    Best-effort: a record seeds cannot read is refused and named, and every
+    other record in the file still imports. Exits non-zero when anything was
+    refused, so a script notices.
     """
     from seeds.export import import_from_jsonl, import_lines
 
@@ -1429,51 +1445,20 @@ def import_(ctx: Context, path: str | None) -> None:
     reported_path = (
         Path(path) if path not in (None, "-") else db.path.parent / JSONL_FILE
     )
-    try:
-        if path == "-":
-            result = import_lines(db, sys.stdin, bootstrap=True)
-        else:
-            input_path = Path(path) if path is not None else None
-            result = import_from_jsonl(db, input_path, bootstrap=True)
-    except MalformedRecordError as exc:
+    if path == "-":
+        result = import_lines(db, sys.stdin, bootstrap=True)
+    else:
+        input_path = Path(path) if path is not None else None
+        result = import_from_jsonl(db, input_path, bootstrap=True)
+
+    click.echo(_format_import_summary(result))
+    if result.refused:
         click.echo(
-            _format_malformed_record_error(
-                exc, Path("<stdin>") if path == "-" else reported_path
-            ),
+            f"Fix the records named above in "
+            f"{Path('<stdin>') if path == '-' else reported_path} and re-run.",
             err=True,
         )
         sys.exit(1)
-
-    click.echo(_format_import_summary(result))
-
-
-def _format_malformed_record_error(exc: MalformedRecordError, path: Path) -> str:
-    """Explain which record stopped an import, and what state that leaves."""
-    lines = [
-        f"Error: {path} holds a record seeds cannot read.",
-        "",
-        f"  {exc}",
-        "",
-    ]
-    if exc.imported_before:
-        lines.extend(
-            [
-                f"{exc.imported_before} record(s) before it were imported; nothing "
-                "from this one onward was.",
-                "The database is now partway through the file — fix the record and "
-                "re-run to finish.",
-            ]
-        )
-    else:
-        lines.append("Nothing was imported.")
-    lines.extend(
-        [
-            "",
-            "Records are read in file order, so this is the FIRST unreadable one; "
-            "there may be others below it.",
-        ]
-    )
-    return "\n".join(lines)
 
 
 def _format_divergence_error(exc: DivergentExportError) -> str:
@@ -1630,20 +1615,22 @@ def sync(
     only fires inside a git working tree with something staged, and only when
     the flush would actually change the file; a seed-only commit or a no-op
     sync is never blocked. Pass --allow-mixed-stage to flush anyway.
+
+    The import half is best-effort: a record it cannot read is refused and
+    named, and every other record still imports. Sync then finishes normally
+    and exits non-zero at the END, rather than stopping at the refusal — a bad
+    record must not also block the flush, or one unreadable line silently
+    freezes the whole round-trip, which is the failure this policy replaced
+    (seed seeds-hao9).
     """
     db = ctx.get_db()
 
     from seeds.export import export_to_jsonl, import_from_jsonl
 
+    refused: list[RefusedRecord] = []
     if not flush_only:
-        try:
-            import_result = import_from_jsonl(db)
-        except MalformedRecordError as exc:
-            click.echo(
-                _format_malformed_record_error(exc, db.path.parent / JSONL_FILE),
-                err=True,
-            )
-            sys.exit(1)
+        import_result = import_from_jsonl(db)
+        refused = import_result.refused
         click.echo(_format_import_summary(import_result))
 
     if not allow_mixed_stage:
@@ -1661,6 +1648,17 @@ def sync(
     # Count seeds
     seeds = db.list_seeds(include_terminal=True)
     click.echo(f"Exported {len(seeds)} seeds to {output_path}")
+
+    # Deferred to the very end so the flush still happens, but still non-zero
+    # so a script or hook driving `seeds sync` cannot mistake a lossy round
+    # trip for a clean one.
+    if refused:
+        click.echo(
+            f"{len(refused)} record(s) were refused on import (listed above) and "
+            "are not in the database.",
+            err=True,
+        )
+        sys.exit(1)
 
 
 @main.command()
@@ -1838,7 +1836,25 @@ def doctor(ctx: Context) -> None:
         # every run, permanently. find_divergence is the check the export
         # itself refuses on, so asking it here makes doctor agree with sync by
         # construction rather than by a second, weaker approximation.
-        from seeds.export import find_divergence, read_record_ids
+        from seeds.export import find_divergence, find_refused_records, read_record_ids
+
+        # Records the import will not apply. Since the import became
+        # best-effort (seed seeds-hao9) these no longer stop a sync, so nothing
+        # else makes noise about them: `seeds sync` reports them once and the
+        # line scrolls away, and every one of doctor's other checks can be
+        # perfectly green while the file quietly loses records on every round
+        # trip. This is the check that keeps that from reading as clean.
+        refused_records = find_refused_records(jsonl_path)
+        if refused_records:
+            check_fail(
+                "Records", f"{len(refused_records)} record(s) the import will refuse"
+            )
+            for rec in refused_records[:10]:
+                click.echo(f"    {_format_refusal(rec)}")
+            if len(refused_records) > 10:
+                click.echo(f"      ... and {len(refused_records) - 10} more")
+        else:
+            check_pass("All records readable")
 
         disk_ids = read_record_ids(jsonl_path)
         db_ids = {seed.id for seed in db.list_seeds(include_terminal=True)}

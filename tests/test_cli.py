@@ -2286,7 +2286,8 @@ class TestImportCommand:
 
         result = cli_runner.invoke(main, ["import"])
 
-        assert result.exit_code == 0
+        # Non-zero so a script driving `seeds import` notices the loss.
+        assert result.exit_code == 1
         # The refusal is counted, named, and quotes the claimed timestamp.
         assert "1 refused" in result.output
         assert "seed-test2" in result.output
@@ -2321,6 +2322,136 @@ class TestImportCommand:
         assert result.exception is None
         # All four records accounted for — nothing aborted partway.
         assert "Imported: 0 created, 0 updated, 4 skipped" in result.output
+
+
+def _corrupt_one_record(jsonl_path, seed_id, **overrides):
+    """Rewrite one record in a JSONL file, returning the ids of the ones after it."""
+    lines = [ln for ln in jsonl_path.read_text().splitlines() if ln.strip()]
+    records = [json.loads(ln) for ln in lines]
+    index = next(i for i, r in enumerate(records) if r["id"] == seed_id)
+    records[index].update(overrides)
+    jsonl_path.write_text("\n".join(json.dumps(r) for r in records) + "\n")
+    return index + 1, [r["id"] for r in records[index + 1 :]]
+
+
+class TestBestEffortImport:
+    """Import is best-effort with a loud report (bead seeds-cvi, seed seeds-hao9).
+
+    The behaviour these replace was neither transactional nor best-effort: the
+    import raised where it stood, so records ABOVE the bad line committed and
+    records BELOW never imported -- silently, for five weeks (seed seeds-1x6b).
+    """
+
+    def _forge(self, cli_runner, env, **overrides):
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        jsonl_path = env / SEEDS_DIR / "seeds.jsonl"
+        record_number, after = _corrupt_one_record(
+            jsonl_path, "seed-test2", **overrides
+        )
+        (env / SEEDS_DIR / "seeds.db").unlink()
+        return jsonl_path, record_number, after
+
+    def test_records_after_the_bad_one_still_import(self, cli_runner, env_with_seeds):
+        """The exact seeds-1x6b failure: everything below the bad line lands."""
+        _, _, after = self._forge(
+            cli_runner, env_with_seeds, seed_type=None, title=None
+        )
+        assert after, "fixture must have records after the corrupted one"
+
+        result = cli_runner.invoke(main, ["import"])
+
+        listing = cli_runner.invoke(main, ["list", "--all"])
+        for seed_id in after:
+            assert seed_id in listing.output
+        assert "seed-test2" not in listing.output
+        assert result.exit_code == 1
+
+    def test_report_names_record_number_id_field_and_reason(
+        self, cli_runner, env_with_seeds
+    ):
+        """A refusal that does not say what is wrong is the defect being fixed."""
+        _, record_number, _ = self._forge(
+            cli_runner, env_with_seeds, status="in-progress"
+        )
+
+        result = cli_runner.invoke(main, ["import"])
+
+        assert "1 refused" in result.output
+        assert f"record {record_number} (seed-test2)" in result.output
+        assert "status" in result.output
+        assert "SeedStatus" in result.output
+
+    def test_exit_status_is_non_zero_so_a_script_notices(
+        self, cli_runner, env_with_seeds
+    ):
+        self._forge(cli_runner, env_with_seeds, status="in-progress")
+
+        assert cli_runner.invoke(main, ["import"]).exit_code == 1
+
+    def test_a_clean_import_still_exits_zero(self, cli_runner, env_with_seeds):
+        """Nothing refused, nothing to complain about."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        (env_with_seeds / SEEDS_DIR / "seeds.db").unlink()
+
+        result = cli_runner.invoke(main, ["import"])
+
+        assert result.exit_code == 0
+        assert "refused" not in result.output
+
+    def test_unparseable_line_does_not_stop_the_lines_below(
+        self, cli_runner, env_with_seeds
+    ):
+        """Conflict markers are the other shape of the same outage."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
+        lines = [ln for ln in jsonl_path.read_text().splitlines() if ln.strip()]
+        jsonl_path.write_text("\n".join([lines[0], "<<<<<<< HEAD", *lines[1:]]) + "\n")
+        (env_with_seeds / SEEDS_DIR / "seeds.db").unlink()
+
+        result = cli_runner.invoke(main, ["import"])
+
+        assert result.exit_code == 1
+        assert "record 2" in result.output
+        listing = cli_runner.invoke(main, ["list", "--all"])
+        for record in (json.loads(ln) for ln in lines):
+            assert record["id"] in listing.output
+
+    def test_sync_still_flushes_and_then_exits_non_zero(
+        self, cli_runner, env_with_seeds
+    ):
+        """A bad record must not also freeze the export half of the round trip."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
+        _corrupt_one_record(jsonl_path, "seed-test2", status="in-progress")
+
+        result = cli_runner.invoke(main, ["sync", "--allow-divergence"])
+
+        assert result.exit_code == 1
+        assert "1 refused" in result.output
+        # The flush happened anyway, which is what repairs the file.
+        assert "Exported" in result.output
+        assert "in-progress" not in jsonl_path.read_text()
+
+    def test_doctor_does_not_report_clean_when_a_record_is_refused(
+        self, cli_runner, env_with_seeds
+    ):
+        """doctor must not certify a file whose records the import will drop."""
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
+        _corrupt_one_record(jsonl_path, "seed-test2", status="in-progress")
+
+        result = cli_runner.invoke(main, ["doctor"])
+
+        assert result.exit_code == 1
+        assert "1 record(s) the import will refuse" in result.output
+        assert "seed-test2" in result.output
+
+    def test_doctor_passes_on_a_clean_file(self, cli_runner, env_with_seeds):
+        cli_runner.invoke(main, ["sync", "--flush-only"])
+
+        result = cli_runner.invoke(main, ["doctor"])
+
+        assert "All records readable" in result.output
 
 
 class TestSyncCommand:
