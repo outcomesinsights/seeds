@@ -2751,9 +2751,30 @@ class TestSyncRefusesDivergence:
 
         result = cli_runner.invoke(main, ["sync"])
 
-        assert "seeds update <id> --replace -c" in result.output
+        assert "seeds update <id> --replace --content-file <file>" in result.output
         assert "seeds sync --allow-divergence" in result.output
         assert "byte-for-byte unchanged" in result.output
+
+    def test_refusal_never_asks_for_a_whole_body_through_argv(
+        self, cli_runner, env_with_seeds
+    ):
+        """seeds-m06: the rebuild is the operator's; the paste was gratuitous.
+
+        The remediation used to print a `-c '<on-disk text><newer text>'`
+        template, which asks for the entire merged body as one shell word --
+        for the agent that actually runs this, the whole seed read into context
+        and re-emitted verbatim, with a truncation or a mangled quote
+        corrupting deliberation silently. It must name the file/stdin route
+        instead.
+        """
+        self._diverge(cli_runner, env_with_seeds)
+
+        result = cli_runner.invoke(main, ["sync"])
+
+        assert "-c '<on-disk text>" not in result.output
+        assert "--replace -c" not in result.output
+        assert "--content-file" in result.output
+        assert "--content -" in result.output
 
     def test_the_remediation_actually_clears_the_guard(
         self, cli_runner, env_with_seeds
@@ -2776,16 +2797,19 @@ class TestSyncRefusesDivergence:
 
         refusal = cli_runner.invoke(main, ["sync"])
         assert refusal.exit_code == 1
-        remediation = "seeds update <id> --replace -c '<on-disk text><newer text>'"
+        remediation = "seeds update <id> --replace --content-file <file>"
         assert remediation in refusal.output
 
-        # Follow that printed form literally: <id> -> the real seed, and the
-        # two placeholders -> the on-disk body first, then the DB's body.
+        # Follow that printed form literally: rebuild the body the way the
+        # message describes -- on-disk text first, then what the DB added --
+        # put it in a file, and hand <file> to the command it prints.
+        body_file = env_with_seeds / "rebuilt.md"
+        body_file.write_text(disk_content + db_content)
         rebuilt = cli_runner.invoke(
             main,
-            ["update", "seed-div", "--replace", "-c", disk_content + db_content],
+            ["update", "seed-div", "--replace", "--content-file", str(body_file)],
         )
-        assert rebuilt.exit_code == 0
+        assert rebuilt.exit_code == 0, rebuilt.output
 
         followup = cli_runner.invoke(main, ["sync"])
         assert followup.exit_code == 0

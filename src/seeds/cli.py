@@ -1552,6 +1552,16 @@ def _format_divergence_error(exc: DivergentExportError) -> str:
     Names every affected seed, shows what each side holds, and states the two
     ways forward. seeds did not write the on-disk content, so it cannot say
     where it came from — it can only say that overwriting would destroy it.
+
+    A content divergence still has to be resolved by a person: only they can
+    say what the merged body should read. What this must NOT do is make them
+    pay for that twice — the remediation used to print a ``-c '<on-disk
+    text><newer text>'`` template, which asked for the entire rebuilt body as
+    one shell word. For the agent that actually runs this, that is the whole
+    seed read into context and re-emitted verbatim, where a truncation or a
+    mangled quote corrupts deliberation silently, and the seeds most likely to
+    diverge are the long ones. So the rebuild is still theirs; the delivery
+    points at ``--content-file``/``--content -`` (seeds-lf5) instead.
     """
     path = exc.output_path
     lines = [
@@ -1585,9 +1595,12 @@ def _format_divergence_error(exc: DivergentExportError) -> str:
         lines.append("  # absorb the records the database is missing")
         lines.append(f"  seeds import {path}")
     if "content" in kinds:
-        lines.append("  # compare, then rebuild the body with the on-disk text first")
+        lines.append("  # compare, then rebuild the body: the on-disk text FIRST,")
+        lines.append("  # then whatever the database added after it")
         lines.append("  seeds show <id>")
-        lines.append("  seeds update <id> --replace -c '<on-disk text><newer text>'")
+        lines.append("  # hand the rebuilt body over as a file -- not through argv")
+        lines.append("  seeds update <id> --replace --content-file <file>")
+        lines.append("  # or on stdin: ... | seeds update <id> --replace --content -")
     if "unreadable" in kinds:
         lines.append("  # unreadable lines have to be repaired in the file by hand")
     lines.extend(
