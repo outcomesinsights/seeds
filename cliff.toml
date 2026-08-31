@@ -54,6 +54,12 @@ commit_parsers = [
     # `seeds:` subjects are captures into this repo's own deliberation
     # database (.seeds/) — design notes, not shipped code.
     { message = "^seeds", skip = true },
+    # Same reasoning for `docs(seeds…)`: these edit seed CONTENT in .seeds/,
+    # not user-facing documentation, so they are not a changelog entry.
+    # `chore(seeds…)` was already skipped and this was not, so two seed edits
+    # leaked into 0.6.0's generated Documentation section and had to be
+    # removed by hand. Keep the two scopes in agreement.
+    { message = "^docs\\(seeds[a-z0-9.,_-]*\\)", skip = true },
     { message = "^ci", group = "Tooling" },
 
     # Real groups, mapped to Keep a Changelog headings
