@@ -92,13 +92,33 @@ Cutting a release (manual steps; intentionally no automation yet):
    paste the output into `CHANGELOG.md`, replacing or appending the
    `[Unreleased]` section. Polish the
    prose — git-cliff gives you the structure; the human writes the story.
-3. Commit the bumped files and the changelog together
+
+   **Write the section here, not earlier.** Both times 0.6.0's changelog fell
+   behind, it was because the section had been written days ahead and then
+   invalidated by further work. Writing it in this step, immediately before the
+   commit and tag, removes that failure for free; step 3 is the belt to that
+   suspenders.
+3. Run `just changelog-section X.Y.Z` and do not proceed until it exits 0.
+   Step 2's gate proves the *generator* saw every commit; this one proves the
+   section you just wrote kept up with it, which is a different question — a
+   months-stale section passes `changelog-coverage` without a murmur. It names
+   every generated entry in a gated group (everything except Documentation and
+   Tooling, which the polished section may prune freely) that the section
+   neither links nor accounts for, and every commit the section links that is
+   not in the range at all — a stale entry left by a rebase or a botched merge.
+
+   A deliberate omission from a gated group is recorded next to the section it
+   describes, as `<!-- changelog-omit: <short-sha> <why it is not an entry> -->`.
+   The reason is mandatory; a bare hash allowlist is one nobody can audit
+   later. 0.6.0 carries exactly one, for a `fix:` superseded within the same
+   release.
+4. Commit the bumped files and the changelog together
    (`chore: bump version to X.Y.Z`).
-4. Tag: `git tag -a vX.Y.Z -m "vX.Y.Z — short summary"`.
-5. Push: `git push origin main && git push origin vX.Y.Z`.
-6. Create the GitHub Release with the same notes:
+5. Tag: `git tag -a vX.Y.Z -m "vX.Y.Z — short summary"`.
+6. Push: `git push origin main && git push origin vX.Y.Z`.
+7. Create the GitHub Release with the same notes:
    `gh release create vX.Y.Z --notes "..."`.
-7. Refresh the global `seeds` CLI on your dev host so the new version is
+8. Refresh the global `seeds` CLI on your dev host so the new version is
    available outside the source tree. Which command does that depends on how
    `seeds` got onto your PATH, so check first with `which seeds`:
    - **`~/.nix-profile/bin/seeds`** — nix installed it (the case on titan).

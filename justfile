@@ -57,3 +57,22 @@ changelog-latest:
 # Optional argument overrides the range (default: <latest tag>..HEAD).
 changelog-coverage RANGE="":
     @uv run python scripts/changelog_coverage.py {{RANGE}}
+
+# Release GATE, second half: prove the section you just WROTE into CHANGELOG.md
+# matches the notes git-cliff generates. `changelog-coverage` gates the
+# generator; this gates the artifact. They are not the same check, and passing
+# the first says nothing about the second — 0.6.0's section fell behind the
+# generated notes twice, both times caught only by diffing the two by hand.
+#
+# Names anything git-cliff put under a gated group (everything except
+# Documentation and Tooling) that the section neither links nor records a
+# deliberate `<!-- changelog-omit: <sha> <why> -->` marker for, plus anything
+# the section links that is not in the range at all.
+#
+# Run it AFTER pasting and polishing, and immediately before the commit and tag
+# — writing the changelog last is what stops the section going stale in the
+# first place; this is the belt to that suspenders.
+#
+# Usage: just changelog-section 0.7.0   (optional second arg overrides the range)
+changelog-section VERSION RANGE="":
+    @uv run python scripts/changelog_coverage.py --section {{VERSION}} {{RANGE}}

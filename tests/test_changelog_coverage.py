@@ -356,3 +356,259 @@ def test_end_to_end_on_a_throwaway_repo(tmp_path: Path) -> None:
     broken = run()
     assert broken.returncode == 1, broken.stdout + broken.stderr
     assert "raise the Python floor" in broken.stderr
+
+
+# ---------------------------------------------------------------------------
+# The second assertion (bead seeds-3ti): generated notes vs CHANGELOG.md.
+#
+# Everything above gates the GENERATOR. These gate the ARTIFACT — the polished
+# section that actually ships, which fell behind the generated notes twice
+# during 0.6.0 while `changelog-coverage` read green throughout. Same rule as
+# above: hand-built notes, hand-built sections, verdicts worked out by hand.
+# ---------------------------------------------------------------------------
+
+C = "https://example.invalid/commit"
+
+SHA_FEAT = "aaaaaaa0000000000000000000000000000000a"
+SHA_FIX = "bbbbbbb0000000000000000000000000000000b"
+SHA_DOCS = "ddddddd0000000000000000000000000000000d"
+SHA_CHORE = "eeeeeee0000000000000000000000000000000e"
+SHA_OUTSIDE = "fffffff0000000000000000000000000000000f"
+
+# git-cliff's output for a release with one entry in each of the four groups
+# this repo's cliff.toml can produce. Added and Fixed are gated; Documentation
+# and Tooling are in PRUNABLE_GROUPS and may be dropped without a word.
+SECTION_NOTES = f"""\
+## [0.9.0] - 2026-09-01
+
+### Added
+- Add a thing ([aaaaaaa]({C}/{SHA_FEAT}))
+
+### Documentation
+- Document a thing ([ddddddd]({C}/{SHA_DOCS}))
+
+### Fixed
+- Fix a thing ([bbbbbbb]({C}/{SHA_FIX}))
+
+### Tooling
+- Bump a dep ([eeeeeee]({C}/{SHA_CHORE}))
+"""
+
+SECTION_COMMITS = [
+    _commit(SHA_FEAT, "feat: add a thing"),
+    _commit(SHA_FIX, "fix: fix a thing"),
+    _commit(SHA_DOCS, "docs: document a thing"),
+    _commit(SHA_CHORE, "chore(deps): bump a dep"),
+]
+
+# The must-PASS case: both gated entries are linked, both prunable ones are
+# dropped, and the section stops before the previous release's block.
+GOOD_CHANGELOG = f"""\
+# Changelog
+
+## [0.9.0] - 2026-09-01
+
+### Added
+- Add a thing ([aaaaaaa]({C}/{SHA_FEAT}))
+
+### Fixed
+- Fix a thing ([bbbbbbb]({C}/{SHA_FIX}))
+
+## [0.8.0] - 2026-08-01
+
+- Something older ([fffffff]({C}/{SHA_OUTSIDE}))
+"""
+
+# The must-FAIL case: identical but for the dropped `fix:` — the exact shape of
+# both 0.6.0 misses, a real Fixed entry that the section never caught up with.
+STALE_CHANGELOG = GOOD_CHANGELOG.replace(
+    f"\n### Fixed\n- Fix a thing ([bbbbbbb]({C}/{SHA_FIX}))\n", ""
+)
+
+
+def test_rendered_entries_carry_their_group() -> None:
+    """The group decides whether an omission is allowed, so it must be read."""
+    entries = cc.rendered_entries(SECTION_NOTES)
+    assert {(e.short, e.group, e.gated) for e in entries} == {
+        ("aaaaaaa", "Added", True),
+        ("bbbbbbb", "Fixed", True),
+        ("ddddddd", "Documentation", False),
+        ("eeeeeee", "Tooling", False),
+    }
+
+
+def test_extract_section_stops_at_the_next_release() -> None:
+    section = cc.extract_section(GOOD_CHANGELOG, "0.9.0")
+    assert "Add a thing" in section
+    assert "Something older" not in section
+    # A leading `v` is accepted, because that is how the tag is spelled.
+    assert cc.extract_section(GOOD_CHANGELOG, "v0.9.0") == section
+
+
+def test_extract_section_refuses_a_version_that_is_not_written_yet() -> None:
+    with pytest.raises(cc.SectionError, match=r"no `## \[9\.9\.9\]` heading"):
+        cc.extract_section(GOOD_CHANGELOG, "9.9.9")
+
+
+def test_shipped_section_with_prunable_groups_dropped_passes(capsys) -> None:
+    """Must-PASS control.
+
+    Hand-computed: the notes hold four entries. `aaaaaaa` (Added) and `bbbbbbb`
+    (Fixed) are gated and both are linked. `ddddddd` (Documentation) and
+    `eeeeeee` (Tooling) are prunable, so their absence is not a finding. The
+    section links nothing outside the range. Therefore zero findings.
+    """
+    section = cc.extract_section(GOOD_CHANGELOG, "0.9.0")
+    findings = cc.check_section(SECTION_NOTES, section, SECTION_COMMITS)
+    assert findings == []
+    assert cc.report_section(findings, "0.9.0", {}) == 0
+    assert "OK:" in capsys.readouterr().out
+
+
+def test_missing_gated_entry_fails_and_is_named(capsys) -> None:
+    """Must-FAIL control: the defect this whole check exists for.
+
+    `bbbbbbb` is generated under Fixed — a gated group — and the section
+    neither links it nor records an omission for it. One finding, and the
+    report has to name the commit rather than just count it.
+    """
+    section = cc.extract_section(STALE_CHANGELOG, "0.9.0")
+    findings = cc.check_section(SECTION_NOTES, section, SECTION_COMMITS)
+    assert [(f.status, f.short) for f in findings] == [
+        (cc.MISSING_FROM_CHANGELOG, "bbbbbbb")
+    ]
+    assert cc.report_section(findings, "0.9.0", {}) == 1
+    err = capsys.readouterr().err
+    assert "bbbbbbb" in err
+    assert "Fix a thing" in err
+
+
+def test_an_omission_marker_with_a_reason_accounts_for_a_gated_entry() -> None:
+    """The escape hatch: deliberate, recorded, and next to the artifact.
+
+    0.6.0's one genuine gated omission was a `fix:` superseded inside the same
+    release. Marked, it is accounted for; the check still fails on anything
+    else missing.
+    """
+    marked = STALE_CHANGELOG.replace(
+        "### Added",
+        "<!-- changelog-omit: bbbbbbb superseded by aaaaaaa inside this "
+        "release -->\n\n### Added",
+    )
+    section = cc.extract_section(marked, "0.9.0")
+    omitted, malformed = cc.parse_omissions(section)
+    assert omitted == {"bbbbbbb": "superseded by aaaaaaa inside this release"}
+    assert malformed == []
+    assert cc.check_section(SECTION_NOTES, section, SECTION_COMMITS) == []
+
+
+def test_an_omission_marker_without_a_reason_is_refused() -> None:
+    """A bare hash allowlist is one nobody can audit later, so it is malformed."""
+    marked = STALE_CHANGELOG.replace(
+        "### Added", "<!-- changelog-omit: bbbbbbb -->\n\n### Added"
+    )
+    section = cc.extract_section(marked, "0.9.0")
+    omitted, malformed = cc.parse_omissions(section)
+    assert omitted == {}
+    assert malformed == ["bbbbbbb"]
+
+    findings = cc.check_section(SECTION_NOTES, section, SECTION_COMMITS)
+    statuses = {f.status for f in findings}
+    # The entry is still missing AND the marker is rejected — both reported.
+    assert statuses == {cc.MISSING_FROM_CHANGELOG, cc.MALFORMED_OMISSION}
+
+
+def test_a_marker_reason_may_wrap_across_lines() -> None:
+    """Real ones do — 0.6.0's runs to three lines inside the HTML comment."""
+    marked = STALE_CHANGELOG.replace(
+        "### Added",
+        "<!-- changelog-omit: bbbbbbb superseded inside this release\n"
+        "     by the floor bump, so it describes a state no released\n"
+        "     version was ever in -->\n\n### Added",
+    )
+    omitted, malformed = cc.parse_omissions(cc.extract_section(marked, "0.9.0"))
+    assert malformed == []
+    assert omitted["bbbbbbb"].startswith("superseded inside this release by the")
+
+
+def test_a_link_to_a_commit_outside_the_range_is_a_phantom(capsys) -> None:
+    """A stale entry left by a rebase or a botched merge.
+
+    `fffffff` is not among SECTION_COMMITS, so a section claiming it is
+    describing work this release does not contain.
+    """
+    changelog = GOOD_CHANGELOG.replace(
+        f"### Added\n- Add a thing ([aaaaaaa]({C}/{SHA_FEAT}))",
+        f"### Added\n- Add a thing ([aaaaaaa]({C}/{SHA_FEAT}))\n"
+        f"- Work from another branch ([fffffff]({C}/{SHA_OUTSIDE}))",
+    )
+    section = cc.extract_section(changelog, "0.9.0")
+    findings = cc.check_section(SECTION_NOTES, section, SECTION_COMMITS)
+    assert [(f.status, f.short) for f in findings] == [(cc.PHANTOM, "fffffff")]
+    assert cc.report_section(findings, "0.9.0", {}) == 1
+    assert "fffffff" in capsys.readouterr().err
+
+
+def test_an_omission_marker_for_a_commit_outside_the_range_goes_stale() -> None:
+    """Otherwise the allowlist rots quietly, which is what it exists to avoid."""
+    marked = GOOD_CHANGELOG.replace(
+        "### Added", "<!-- changelog-omit: fffffff not in this release -->\n\n### Added"
+    )
+    section = cc.extract_section(marked, "0.9.0")
+    findings = cc.check_section(SECTION_NOTES, section, SECTION_COMMITS)
+    assert [(f.status, f.short) for f in findings] == [(cc.STALE_OMISSION, "fffffff")]
+
+
+def test_prunable_groups_are_the_only_exempt_ones() -> None:
+    """A group nobody has invented yet must arrive gated, not silently exempt."""
+    notes = (
+        SECTION_NOTES
+        + f"\n### Security\n- Patch a hole ([fffffff]({C}/{SHA_OUTSIDE}))\n"
+    )
+    commits = [*SECTION_COMMITS, _commit(SHA_OUTSIDE, "fix(sec): patch a hole")]
+    section = cc.extract_section(GOOD_CHANGELOG, "0.9.0")
+    findings = cc.check_section(notes, section, commits)
+    assert [(f.status, f.short) for f in findings] == [
+        (cc.MISSING_FROM_CHANGELOG, "fffffff")
+    ]
+
+
+@pytest.mark.skipif(
+    shutil.which("git-cliff") is None, reason="git-cliff not installed on this host"
+)
+def test_the_shipped_0_6_0_section_passes() -> None:
+    """The acceptance case, against the REAL repo rather than a fixture.
+
+    A gate that fails on the last real release gets ignored, which is worse
+    than no gate — so this asserts the 0.6.0 section exactly as it shipped
+    comes back clean, with its one gated omission (194cd3e, a `fix:` the 3.11
+    floor bump superseded) accounted for by its marker and the rest covered by
+    PRUNABLE_GROUPS. v0.5.0..v0.6.0 is a closed range, so unlike the release in
+    progress it cannot drift underneath the suite.
+
+    Skipped on a shallow checkout, where the tags are not present.
+    """
+    # Through tests/githelpers, the suite's single door to real git — read
+    # only, and only to decide whether this checkout has the tags at all.
+    if git(REPO_ROOT, "tag", "--list", "v0.5.0", "v0.6.0").stdout.split() != [
+        "v0.5.0",
+        "v0.6.0",
+    ]:
+        pytest.skip("v0.5.0/v0.6.0 not in this checkout")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "v0.5.0..v0.6.0",
+            "--section",
+            "0.6.0",
+            "--repo",
+            str(REPO_ROOT),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "omitted:  1" in result.stdout
