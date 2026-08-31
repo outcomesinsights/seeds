@@ -6,6 +6,119 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-31
+
+**This release is about failing loudly.** 0.5.0 stopped seeds destroying
+deliberation silently; 0.6.0 stops it *losing* deliberation silently — and the
+difference was found the hard way, by the project's first external bug report.
+
+A user's sync had been broken for five weeks. An agent had written a seed type
+the CLI does not accept directly into the JSONL, and the import aborted on that
+line — so every record filed *below* it never reached the database, while every
+record above it did. Nothing said so. `seeds doctor` reported healthy the entire
+time, because its sync check compared file mtimes and never read the file. The
+tool you run to ask "is my sync healthy?" was answering from a proxy that is
+*anti-correlated* with this exact failure: a failed import leaves the JSONL
+newer than the database, which is precisely the state it was calling clean.
+
+Both halves are fixed. A record the import cannot read is now refused
+**individually** and named — record number, id, failing field, reason — while
+every other record lands, and the command exits non-zero so a script notices.
+`doctor` no longer compares mtimes; it runs the same divergence check `sync`
+does, so it is green exactly when `sync` would succeed rather than when a
+timestamp happens to look right.
+
+The type vocabulary that started it is open now. `seed_type` accepts any
+string, `seeds update --type` fixes one, and `seeds retype` sweeps a typo across
+the corpus. `SeedStatus` deliberately stays closed — status drives lifecycle
+behaviour, so an unrecognised value there would break `ready`, `blocked` and the
+resolve/defer/abandon transitions quietly rather than loudly.
+
+### Breaking
+
+- **Python 3.10 is no longer supported; the floor is 3.11.** 3.10 reaches
+  end-of-life in October 2026, and seeds already required 3.11 in practice — it
+  imports `enum.StrEnum`, so on 3.10 it had become an ImportError at startup for
+  every command. ([6a70429](https://github.com/outcomesinsights/seeds/commit/6a7042910ff31c0f1b4983a5831199336b19fba2))
+- **`seeds sync` refuses to flush** when it would change `.seeds/seeds.jsonl`
+  while unrelated files are staged, rather than folding seed-database changes
+  into whatever commit fires next. `--allow-mixed-stage` overrides.
+  ([00ed416](https://github.com/outcomesinsights/seeds/commit/00ed4165ec26ce5edcfc22053e2ba119f886715e))
+- **`seeds answer` refuses to overwrite a prior answer** instead of silently
+  replacing it. ([89e6db0](https://github.com/outcomesinsights/seeds/commit/89e6db04590a19308f46ded9bc8594bcede20395))
+
+### Upgrading
+
+`seeds import` and `seeds sync` now **exit non-zero when any record was
+refused**, where previously an unreadable record raised a traceback and stopped
+the file. Scripts that treated a zero exit as "everything imported" were already
+wrong — they just could not tell. If a sync starts reporting refusals, the
+records it names have never been in your database; fix them in the JSONL and
+re-run. `seeds doctor` now surfaces the same records before an import is run.
+
+### Added
+
+- Accept `seeds update` content from a file or stdin — `--content-file PATH` and
+  `--content -` — so a long body no longer has to be quoted through argv
+  ([d842efc](https://github.com/outcomesinsights/seeds/commit/d842efcaa02d7a991ece88a57305714186da68d4))
+- `seeds retype --from X --to Y` bulk-remaps one seed type to another
+  ([d21f7ba](https://github.com/outcomesinsights/seeds/commit/d21f7badc41aefe63db5551dc9a6f1cc5f18cb68))
+- `seeds update --type` — a seed's type is no longer write-once
+  ([c00bed0](https://github.com/outcomesinsights/seeds/commit/c00bed0b2ddc3ccdbaa9aff4da24c61693709dc2))
+- The `seed_type` vocabulary accepts arbitrary strings
+  ([15d3a6c](https://github.com/outcomesinsights/seeds/commit/15d3a6c3abf06469362f217490ac067e226dbdae))
+- The bundled seeds-to-beads skill consults you before writing a bead;
+  `--autonomous` opts out
+  ([83e5f3c](https://github.com/outcomesinsights/seeds/commit/83e5f3c200f3c3f6e9ecbbf5fff4935a82acbb9f))
+
+### Changed
+
+- Python floor raised to 3.11 — see Breaking
+  ([6a70429](https://github.com/outcomesinsights/seeds/commit/6a7042910ff31c0f1b4983a5831199336b19fba2))
+
+### Fixed
+
+- A malformed record is refused individually instead of aborting the import, so
+  records below a bad line still land
+  ([0c58123](https://github.com/outcomesinsights/seeds/commit/0c58123f006788a64daa9540d0a7d87748e8a265))
+- `seeds doctor` agrees with `seeds sync` by construction, and names the record
+  that breaks an import
+  ([55bf114](https://github.com/outcomesinsights/seeds/commit/55bf1142d5e4a127060755bc0797c6501baff73d))
+- `doctor` compares JSONL against the database instead of mtimes, and fails on
+  divergence ([1600c37](https://github.com/outcomesinsights/seeds/commit/1600c372592dfd2a52b20c6d98d5ce6781033743))
+- The divergence refusal no longer asks for a whole seed body through argv
+  ([ccee855](https://github.com/outcomesinsights/seeds/commit/ccee8555fb2557b498b5d09779bfcc355e64a906))
+- The divergence guard's guidance can now actually satisfy the guard
+  ([54057b1](https://github.com/outcomesinsights/seeds/commit/54057b1546fa8b9c81b364cd97b3ab7823b86723))
+- The content guard prints remediation for the command that raised it
+  ([f6f010f](https://github.com/outcomesinsights/seeds/commit/f6f010f8e0eae581cb9ff6611e81483bd74c7cbf))
+- A fresh clone is pointed at `seeds import` instead of being sent in a circle
+  ([5589268](https://github.com/outcomesinsights/seeds/commit/5589268c02c7fd0045aeac25a8d1854bc02d0c29))
+- Hyphenated queries search — FTS5 syntax characters are quoted
+  ([46c63b8](https://github.com/outcomesinsights/seeds/commit/46c63b8883a7186b47474a03ceec9c56ece69159))
+- `cliff.toml` no longer silently drops unhandled commit types
+  ([e8320d2](https://github.com/outcomesinsights/seeds/commit/e8320d20c98d92a4bf413767d17f4732d79187f8))
+- The release changelog uses an explicit tag range instead of
+  `git-cliff --unreleased`, which dropped commits after a merge
+  ([7cad77f](https://github.com/outcomesinsights/seeds/commit/7cad77f2bd4b6223ab52aa81042e487d30a614ee))
+- Git test fixtures are sandboxed so they cannot poison the real repository
+  ([3919c00](https://github.com/outcomesinsights/seeds/commit/3919c006760adbd72fdbccf40f73984acabaf096))
+- The test sandbox has git, and two tests no longer assume a git checkout
+  ([859aacd](https://github.com/outcomesinsights/seeds/commit/859aacd1882a7caaee4abb2001e98dd3efe8c300))
+
+### Documentation
+
+- Document the new content inputs and per-record import refusals; repair the
+  changelog link references, which stopped at v0.3.3
+  ([827a028](https://github.com/outcomesinsights/seeds/commit/827a0284d7b1f970d2d96a99daac310060fb70bf))
+- Point the release checklist at `just bump-version`, which covers the two
+  plugin manifests the old wording omitted
+  ([161622b](https://github.com/outcomesinsights/seeds/commit/161622b9985998e4667e26b8c73746cf13351702))
+- Document `seeds import`, round-trip sync, and the fresh-clone path
+  ([6336416](https://github.com/outcomesinsights/seeds/commit/6336416760a31d1af3138c8735643f2d46049c1c))
+- Document the open type vocabulary, `update --type`, and `retype`
+  ([a72ab29](https://github.com/outcomesinsights/seeds/commit/a72ab29fd1c41df645bc0f320e8db64ca8adc2a3))
+
 ## [0.5.0] - 2026-08-10
 
 This release is about one thing: **seeds now refuses to destroy deliberation
@@ -371,7 +484,8 @@ Initial public beta release.
 - **Experimental web UI**: `seeds serve` for read-only browsing of seeds and questions
 - **Doctor command**: `seeds doctor` for installation health checks
 
-[Unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/outcomesinsights/seeds/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/outcomesinsights/seeds/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/outcomesinsights/seeds/compare/v0.3.5...v0.4.0
 [0.3.5]: https://github.com/outcomesinsights/seeds/compare/v0.3.4...v0.3.5
