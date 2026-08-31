@@ -130,9 +130,6 @@ documents the one-time fix: run `uv tool uninstall seeds` *after* a switch, to
 drop a stale `~/.local/bin/seeds` left over from before the move to nix. That is
 cleanup, not a step in a reinstall.
 
-Then restart any running `seeds serve` processes. Release step 7 in
-`CONTRIBUTING.md` says the same thing — keep the two in sync.
-
 ## Relationships
 
 - **Depends on**: None

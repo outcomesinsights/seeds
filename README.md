@@ -176,16 +176,6 @@ Under the hood this appends a provenance-stamped bullet under a managed `## Prin
 
 **Beta.** Seeds is under active development. The core workflow (capture, explore, resolve) is stable. The CLI interface may evolve.
 
-## Web UI (Experimental)
-
-Seeds includes an experimental web interface for browsing your seeds:
-
-```bash
-seeds serve                              # Starts on http://localhost:53365
-```
-
-This provides read-only views of your seeds, questions, and their relationships.
-
 ## Claude Code Skills
 
 Seeds ships a small set of skills for use with [Claude Code](https://claude.com/claude-code), distributed as a local plugin. After installing the seeds CLI, run:

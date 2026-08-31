@@ -48,17 +48,12 @@
           pyproject = true;
           build-system = [ python3Packages.hatchling ];
 
-          # Sole runtime dependencies per pyproject.toml (click>=8.1.8, flask>=3.1.3).
-          # Keep this list in step with [project.dependencies] — that is the whole
-          # point of the flake living beside pyproject.toml.
+          # Sole runtime dependency per pyproject.toml (click>=8.1.8). Keep this
+          # list in step with [project.dependencies] — that is the whole point of
+          # the flake living beside pyproject.toml.
           dependencies = with python3Packages; [
             click
-            flask
           ];
-
-          # nixpkgs can lag seeds' declared flask floor (>=3.1.3); the delta is a
-          # no-op for our usage. Relax ONLY flask — click stays validated.
-          pythonRelaxDeps = [ "flask" ];
 
           # Tests are wired through checks.default, not the package: home-manager
           # consumes packages.default and should not run pytest on every rebuild.
