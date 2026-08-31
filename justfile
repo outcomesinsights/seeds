@@ -41,12 +41,17 @@ changelog-latest:
     @git-cliff --latest
 
 # Release guard: how many commits the range holds vs how many entries render.
-# The gap is expected (cliff.toml skips chore(beads)/chore(seeds)/style/test and
-# unconventional subjects), so this is an eyeball check, not a pass/fail gate —
-# read it before cutting a release and confirm the entry count matches the real
-# user-facing work. Exists because the failure it guards against reports green.
+# The gap is expected (cliff.toml skips chore(beads)/chore(seeds*)/seeds:/style/
+# test and unconventional subjects), so this is an eyeball check, not a pass/fail
+# gate — read it before cutting a release and confirm the entry count matches the
+# real user-facing work. Exists because the failure it guards against reports
+# green. An "Uncategorized" heading in the preview means a commit type has no
+# parser in cliff.toml: classify it there, don't ignore it.
 changelog-audit:
     @echo "range:   $(git describe --tags --abbrev=0)..HEAD"
     @echo "commits: $(git log --oneline $(git describe --tags --abbrev=0)..HEAD | wc -l | tr -d ' ')"
     @echo "entries: $(git-cliff "$(git describe --tags --abbrev=0)..HEAD" 2>/dev/null | grep -c '^- ' | tr -d ' ')"
-    @echo "skipped by cliff.toml (expected): chore(beads), chore(seeds*), style, test, merge commits"
+    @echo "skipped by cliff.toml (expected): chore(beads), chore(seeds*), seeds:, style, test, merge commits"
+    @git-cliff "$(git describe --tags --abbrev=0)..HEAD" 2>/dev/null | grep -q '^### Uncategorized' \
+        && echo "WARNING: Uncategorized section present — a commit type has no parser in cliff.toml" \
+        || echo "uncategorized: none"
