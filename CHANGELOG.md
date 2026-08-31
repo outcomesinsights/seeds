@@ -131,6 +131,14 @@ re-run. `seeds doctor` now surfaces the same records before an import is run.
 - Document the open type vocabulary, `update --type`, and `retype`
   ([a72ab29](https://github.com/outcomesinsights/seeds/commit/a72ab29fd1c41df645bc0f320e8db64ca8adc2a3))
 
+<!-- Deliberate omissions from this section, so the release gate can tell them
+     apart from work that went missing. See `just changelog-section`. Entries
+     git-cliff put under Documentation or Tooling are pruned freely and need no
+     marker; everything else does. -->
+<!-- changelog-omit: 194cd3e superseded inside this release — 6a70429 raised the
+     Python floor to 3.11, which retires the py310 ruff target-version that
+     commit set, so it describes a state no released version was ever in -->
+
 ## [0.5.0] - 2026-08-10
 
 This release is about one thing: **seeds now refuses to destroy deliberation
