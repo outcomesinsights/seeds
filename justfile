@@ -40,18 +40,20 @@ changelog-release VERSION:
 changelog-latest:
     @git-cliff --latest
 
-# Release guard: how many commits the range holds vs how many entries render.
-# The gap is expected (cliff.toml skips chore(beads)/chore(seeds*)/seeds:/style/
-# test and unconventional subjects), so this is an eyeball check, not a pass/fail
-# gate — read it before cutting a release and confirm the entry count matches the
-# real user-facing work. Exists because the failure it guards against reports
-# green. An "Uncategorized" heading in the preview means a commit type has no
-# parser in cliff.toml: classify it there, don't ignore it.
-changelog-audit:
-    @echo "range:   $(git describe --tags --abbrev=0)..HEAD"
-    @echo "commits: $(git log --oneline $(git describe --tags --abbrev=0)..HEAD | wc -l | tr -d ' ')"
-    @echo "entries: $(git-cliff "$(git describe --tags --abbrev=0)..HEAD" 2>/dev/null | grep -c '^- ' | tr -d ' ')"
-    @echo "skipped by cliff.toml (expected): chore(beads), chore(seeds*), seeds:, style, test, merge commits"
-    @git-cliff "$(git describe --tags --abbrev=0)..HEAD" 2>/dev/null | grep -q '^### Uncategorized' \
-        && echo "WARNING: Uncategorized section present — a commit type has no parser in cliff.toml" \
-        || echo "uncategorized: none"
+# Release GATE: prove every commit in the range either renders in the notes or
+# is deliberately dropped by a rule in cliff.toml. Exits non-zero and names the
+# offenders otherwise. Run this before `changelog-release`.
+#
+# This replaced `changelog-audit` (removed 2026-08-31, bead seeds-0t1), which
+# printed a commit count beside an entry count. Counts cannot name the commit
+# that vanished, and 100-vs-39 looks equally reasonable whether or not `build:
+# raise the Python floor to 3.11` is among the 61 that did not render — which is
+# how the same omission got through three times running. Two overlapping checks
+# where one is weaker only invites running the weak one, so there is now one.
+#
+# The skip rules are read out of cliff.toml, never hardcoded here; a second copy
+# of that list is what went stale in the check this replaces.
+#
+# Optional argument overrides the range (default: <latest tag>..HEAD).
+changelog-coverage RANGE="":
+    @uv run python scripts/changelog_coverage.py {{RANGE}}

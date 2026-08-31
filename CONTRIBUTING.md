@@ -80,11 +80,17 @@ Cutting a release (manual steps; intentionally no automation yet):
    missing. `pyproject.toml` derives the version via hatchling and is never
    edited by hand. `tests/test_version_sync.py` fails the build if a manifest is
    ever left behind.
-2. Run `just changelog-audit` first — it prints the commit count in the range
-   against the number of rendered entries. The gap is expected (`cliff.toml`
-   filters noise), but a suspiciously small entry count means commits are being
-   dropped. Then run `just changelog-release vX.Y.Z` and paste the output into
-   `CHANGELOG.md`, replacing or appending the `[Unreleased]` section. Polish the
+2. Run `just changelog-coverage` first, and do not proceed until it exits 0.
+   It classifies *every* commit in the range as RENDERED, SKIPPED (a deliberate
+   `cliff.toml` rule dropped it) or MISSING, and fails naming the offenders —
+   including when an `### Uncategorized` section appears, which means a commit
+   type has no parser in `cliff.toml`. Fix it there, by giving the type a group
+   or an explicit skip; never by re-silencing the catch-all. (This replaced
+   `just changelog-audit`, which compared two counts. A count cannot tell you
+   *which* commit vanished, and three releases nearly shipped with real work
+   missing while it read green.) Then run `just changelog-release vX.Y.Z` and
+   paste the output into `CHANGELOG.md`, replacing or appending the
+   `[Unreleased]` section. Polish the
    prose — git-cliff gives you the structure; the human writes the story.
 3. Commit the bumped files and the changelog together
    (`chore: bump version to X.Y.Z`).
