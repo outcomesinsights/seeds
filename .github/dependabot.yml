@@ -1,6 +1,14 @@
 version: 2
 updates:
-  - package-ecosystem: "pip"
+  # "uv", not "pip". The pip ecosystem reads pyproject.toml but has no concept
+  # of uv.lock, so its PRs bump a floor and leave the lock behind — that is
+  # exactly how e789ac8 (PR #30, mypy >=2.3.0 -> >=2.3.1) shipped a lock that
+  # `uv lock --check` exits 1 on. The uv ecosystem understands both files and
+  # updates them together, which fixes the cause rather than detecting it; the
+  # `uv lock --check` gates in ci.yml and .pre-commit-config.yaml stay as the
+  # backstop. GA since 2025-03-13; listed in GitHub's supported-ecosystems
+  # table as ecosystem `uv`, v0.11 (checked 2026-08-31). See bead seeds-3p1.
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
