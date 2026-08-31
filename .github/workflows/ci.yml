@@ -12,6 +12,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
+      # MUST come before `uv sync` — and before any `uv run`. Both re-lock by
+      # default, rewriting uv.lock in the workspace, after which `uv lock
+      # --check` passes unconditionally. Measured on titan 2026-08-31 with
+      # click's floor bumped and the lock left stale: `uv lock --check` exited
+      # 1; `uv sync --dev` then changed uv.lock's md5 and the same check exited
+      # 0. Moved below the sync, this gate is a permanent no-op that reports
+      # green — the exact defect class it exists to close. See bead seeds-3p1.
+      - run: uv lock --check
       - run: uv sync --dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .

@@ -139,11 +139,13 @@ Cutting a release (manual steps; intentionally no automation yet):
    That is cleanup, not a step in a reinstall. `CLAUDE.md`'s "Deploy to Global
    CLI" section says the same thing — keep the two in sync.
 
-The pre-push hook runs the full local CI equivalent — mypy (strict), `ruff check`,
-`ruff format --check`, the full pytest suite on the local interpreter plus 3.11
-and 3.12, and `nix flake check` (skipped cleanly when nix is absent). So if it
-fires green, the GitHub Actions CI on push is the last line of defense rather
-than the first. See `.pre-commit-config.yaml`; if you add a step to
+The pre-push hook runs the full local CI equivalent — `uv lock --check`, mypy
+(strict), `ruff check`, `ruff format --check`, the full pytest suite on the local
+interpreter plus 3.11 and 3.12, and `nix flake check` (skipped cleanly when nix
+is absent). `uv lock --check` is declared out of order, above the commit-stage
+hooks, because `uv sync` and `uv run` both re-lock and would make it pass
+unconditionally. So if it fires green, the GitHub Actions CI on push is the last
+line of defense rather than the first. See `.pre-commit-config.yaml`; if you add a step to
 `.github/workflows/ci.yml`, add it there too.
 
 ## License

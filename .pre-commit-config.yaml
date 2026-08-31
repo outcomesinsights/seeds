@@ -22,6 +22,29 @@ repos:
         pass_filenames: false
         always_run: true
 
+      # pre-push, but declared HERE rather than in the pre-push section below,
+      # because it has to run before every other uv-invoking hook. `uv sync`
+      # and `uv run` both re-lock by default and rewrite uv.lock in place,
+      # after which `uv lock --check` passes unconditionally. Measured on titan
+      # 2026-08-31: with click's floor bumped and the lock left stale, `uv lock
+      # --check` exited 1; a single `uv sync --dev` changed uv.lock's md5 and
+      # the same check exited 0. The hooks below (pytest, mypy, ruff) all shell
+      # out through `uv run`, so anywhere after them this gate is a permanent
+      # no-op that reports green.
+      #
+      # Deliberately NOT a commit-stage hook: Dependabot merges arrive on main
+      # without ever passing through a local commit, and that is precisely the
+      # path that shipped the stale lock in e789ac8. git-config-sanity stays
+      # ahead of it: that one diagnoses a poisoned .git/config, which would
+      # otherwise garble every failure reported after it.
+      - id: uv-lock-check
+        name: uv lock --check (uv.lock matches pyproject.toml)
+        entry: uv lock --check
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+
       - id: pytest
         name: pytest
         entry: uv run pytest -x -q
@@ -56,6 +79,10 @@ repos:
       # line of defense, not the first. Covers ALL THREE jobs in
       # .github/workflows/ci.yml — lint, test (all four Python versions), and
       # nix. Measured ~79s on titan for the full stage.
+      #
+      # One pre-push hook is NOT in this section: uv-lock-check, declared above
+      # with the commit-stage hooks. It mirrors the lint job's `uv lock --check`
+      # and has to precede every `uv run`; the comment there explains why.
       #
       # The single deliberate exception: CI passes --cov to pytest, this does
       # not. There is no fail-under anywhere, so coverage is report-only and
