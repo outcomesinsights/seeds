@@ -144,10 +144,40 @@ Requirements in full in `seeds-sdhc.1`. In short:
 Fixtures: this repo, plus a synthetic repo built to exhibit all four divergence
 cases at once.
 
-### 5. Command cutover
+### 5. Command cutover, and three deletions
 
-Every verb reads and writes the tree. SQLite deleted. Search becomes ripgrep with
-the status filter inline (measured at 17 ms across 303 files).
+Every verb reads and writes the tree. SQLite deleted. `seeds search` becomes
+ripgrep with the status filter inline (measured at 17 ms across 303 files).
+
+Three things are removed rather than ported. Each was already ruled; this is the
+cheapest moment to execute all three, because otherwise the overhaul pays to
+carry them across.
+
+- **`seeds suggest` and the FTS5 machinery behind it** — `Database.suggest`
+  (db.py:1173), `sanitize_fts_query`, and the `seeds_fts*` tables.
+  @aguynamedryan ruled it out 2026-08-31, and the usage evidence supports it:
+  roughly 15 genuine invocations across 5 sessions in the whole project
+  transcript history, mostly agent-initiated during dedup passes. `seeds-fkb8`
+  had already judged its one real win — surfacing seeds-74.2 on a query nobody
+  had in context — as something substring-plus-recency would likely have found
+  too. Porter stemming is a genuine casualty ("merging" stops finding "merge"),
+  and it is accepted: grep tested *broader* than FTS on a real query, 72 hits vs
+  77, and found one FTS missed.
+- **The web UI** — `seeds serve`, `src/seeds/web.py`, and the four templates.
+  Ruled dead 2026-08-25 in `seeds-rlc2` ("never used, never went anywhere") and
+  never executed, so the overhaul would otherwise port a killed feature to a new
+  storage format.
+- **The legacy `questions` table** — all 36 rows are orphaned, verified
+  2026-08-31, so the table is entirely debris from the v2 question-seeds
+  migration (`seeds-02ur`). The converter drops it rather than translating it.
+  Note that `doctor` reports "549 relationships, no orphans" while this table is
+  100% orphaned, because nothing checks it — one more argument for the
+  plausibility tier in phase 3.
+
+**`tend` is dropped as a planned verb.** It was never built, so there is no code
+to remove — but it should not be built either. With supersession marked at write
+time (`seeds-sdhc.3`) nothing editorial is left for it, and the noticing function
+lives in `check --smells`.
 
 ### 6. `seeds history`
 
@@ -180,23 +210,6 @@ writes through `bash`, `sed`, or a Python one-liner, which is most of them.
 ### 9. Dogfood
 
 Convert this repo. Use it. Keep the old store until ruled otherwise.
-
-## The one decision still open
-
-**What happens to ranked search.** `seeds-lcfa.6.1` calls FTS the one real
-casualty and is right. What would be lost is not bare bm25 but `suggest`'s
-bm25 × tag-overlap × recency with a dynamic noise floor (`Database.suggest`, db.py:1173), plus
-`sanitize_fts_query`, which exists because this project's hyphenated vocabulary is
-a syntax error to MATCH.
-
-Two measurements bear on it and they point in different directions. Porter
-stemming is a genuine casualty — ripgrep has no stemmer, so "merging" stops
-finding "merge". But grep tested *broader* than FTS on a real query (72 hits vs
-77, and grep found one FTS missed: "contextual", which Porter has no rule for).
-
-This is a usage question, not a technical one: **is `suggest` actually used, and
-would losing ranked results be felt?** It does not block phases 1-4, and it should
-be answered before phase 5.
 
 ## What is deliberately not being done
 
