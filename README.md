@@ -77,7 +77,17 @@ seeds defer <id>                         # Set aside for later
 seeds resolve <id>                       # Mark as resolved
 seeds abandon <id>                       # Decided against
 seeds update <id> --type <type>          # Change a seed's type
+seeds update <id> --content-file <path>  # Replace the body from a file
+cmd | seeds update <id> --content -      # Replace the body from stdin
 ```
+
+A body can get long, and passing one through `-c TEXT` means quoting a
+multi-paragraph string on the command line — easy to truncate or mangle, and
+expensive for an agent, which has to re-emit the whole body verbatim as a shell
+argument. `--content-file` and `--content -` take the same body without argv.
+All three are mutually exclusive, and all three respect the guard that refuses
+to replace a body that has been edited since it was created (`--replace`
+overrides it).
 
 ### Types
 
@@ -137,6 +147,14 @@ the schema and the project prefix are both recovered from the file.
 never seen — a merge resolution, a hand edit, or a peer's seed. Read what it
 names and fold the content in; `--allow-divergence` skips the check and
 destroys that content.
+
+A record the import cannot read no longer stops the file. Each bad record is
+refused **individually** and named — its record number, id, failing field and
+reason — while every other record imports, and the command exits non-zero so a
+script notices. This matters because the old behaviour aborted where it stood:
+records above a bad line landed, records below it silently did not, and nothing
+said so. `seeds doctor` reports refusable records too, so the state is
+discoverable before an import is ever run.
 
 ### AI Context
 
