@@ -51,6 +51,9 @@ commit_parsers = [
     { message = "^chore\\(hooks\\)", group = "Tooling" },
     { message = "^style", skip = true },
     { message = "^test", skip = true },
+    # `seeds:` subjects are captures into this repo's own deliberation
+    # database (.seeds/) — design notes, not shipped code.
+    { message = "^seeds", skip = true },
     { message = "^ci", group = "Tooling" },
 
     # Real groups, mapped to Keep a Changelog headings
@@ -59,10 +62,33 @@ commit_parsers = [
     { message = "^refactor", group = "Changed" },
     { message = "^perf", group = "Changed" },
     { message = "^docs", group = "Documentation" },
+    # A packaging change like a Python-floor bump is user-facing behaviour,
+    # not tooling noise — it belongs under Changed, where a reader looking
+    # for "what broke for me" will actually find it.
+    { message = "^build", group = "Changed" },
     { message = "^chore", group = "Tooling" },
 
-    # Catch-all — everything else gets dropped (filter_commits = true)
-    { message = ".*", skip = true },
+    # Catch-all — deliberately NOT a silent skip.
+    #
+    # Every type this repo has used is handled above. Audit over the full
+    # history, 2026-08-31 (`git log --format=%s | sed 's/[(:].*//' |
+    # sort | uniq -c`): chore, feat, fix, docs, test, style, ci, build,
+    # refactor, perf, seeds. The ones dropped on purpose are the explicit
+    # `skip = true` entries at the top of this table; merge commits and
+    # other unconventional subjects are dropped earlier by
+    # filter_unconventional.
+    #
+    # Anything else is a type nobody has taught this file about, so it
+    # renders loudly under its own heading rather than vanishing. Twice a
+    # release nearly shipped with real work missing because a commit was
+    # dropped without a word (seeds-gzf7, then seeds-3sh: `build: raise the
+    # Python floor to 3.11`, the most user-affecting change in 0.6.0). An
+    # untidy line in the generated notes is strictly better than an
+    # omission nobody can see.
+    #
+    # If a commit turns up under "Uncategorized", either give its type a
+    # group or give it an explicit skip above — do not re-silence this.
+    { message = ".*", group = "Uncategorized" },
 ]
 
 [remote.github]
