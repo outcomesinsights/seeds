@@ -107,13 +107,31 @@ uv run pytest                        # Run tests
 
 ## Deploy to Global CLI
 
-After making changes, deploy to the global `seeds` command:
+How you refresh the global `seeds` command depends on how it got onto your PATH,
+so check first:
 
 ```bash
-uv cache clean seeds && uv tool uninstall seeds && uv tool install --reinstall .
+which seeds
 ```
 
-Then restart any running `seeds serve` processes.
+- **`~/.nix-profile/bin/seeds`** — nix installed it (this is the case on titan).
+  Refresh from `~/.config/home-manager`: `nix flake update seeds`, then switch.
+  The flake input carries no ref pin, so it tracks **main** — your changes must
+  be pushed to `origin/main` before the update can see them. Don't bump it by
+  editing `modules/packages.nix`.
+- **`~/.local/bin/seeds`** — `uv tool` installed it. Refresh with
+  `uv cache clean seeds && uv tool install --reinstall .`. `--reinstall` already
+  implies `--refresh`, so no separate `uv tool uninstall` is needed.
+
+The nix profile comes *before* `~/.local/bin` on PATH, so on a host with both, a
+`uv tool install` is silently shadowed and `seeds --version` keeps reporting the
+nix copy. home-manager's `modules/packages.nix` is authoritative on this and
+documents the one-time fix: run `uv tool uninstall seeds` *after* a switch, to
+drop a stale `~/.local/bin/seeds` left over from before the move to nix. That is
+cleanup, not a step in a reinstall.
+
+Then restart any running `seeds serve` processes. Release step 7 in
+`CONTRIBUTING.md` says the same thing — keep the two in sync.
 
 ## Relationships
 
