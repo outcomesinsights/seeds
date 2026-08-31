@@ -70,6 +70,11 @@ re-run. `seeds doctor` now surfaces the same records before an import is run.
 - The bundled seeds-to-beads skill consults you before writing a bead;
   `--autonomous` opts out
   ([83e5f3c](https://github.com/outcomesinsights/seeds/commit/83e5f3c200f3c3f6e9ecbbf5fff4935a82acbb9f))
+- `just changelog-coverage` gates a release on per-commit coverage rather
+  than a count: every commit in the range must either render in the notes or
+  match a deliberate skip rule in `cliff.toml`, and it names the ones that do
+  neither. Replaces the count-based `changelog-audit`
+  ([ac1cdc9](https://github.com/outcomesinsights/seeds/commit/ac1cdc9618f3258fdf1bc8fcbb6a4ee1fa6e6cad))
 
 ### Changed
 
@@ -98,6 +103,9 @@ re-run. `seeds doctor` now surfaces the same records before an import is run.
   ([46c63b8](https://github.com/outcomesinsights/seeds/commit/46c63b8883a7186b47474a03ceec9c56ece69159))
 - `cliff.toml` no longer silently drops unhandled commit types
   ([e8320d2](https://github.com/outcomesinsights/seeds/commit/e8320d20c98d92a4bf413767d17f4732d79187f8))
+- `cliff.toml` skips `docs(seeds…)` alongside `chore(seeds…)`, so edits to
+  this repo's own seed database stop rendering as user documentation
+  ([841a4dc](https://github.com/outcomesinsights/seeds/commit/841a4dc637f2e9cd9f95a43d0c34a1a149ee70c6))
 - The release changelog uses an explicit tag range instead of
   `git-cliff --unreleased`, which dropped commits after a merge
   ([7cad77f](https://github.com/outcomesinsights/seeds/commit/7cad77f2bd4b6223ab52aa81042e487d30a614ee))
@@ -114,6 +122,10 @@ re-run. `seeds doctor` now surfaces the same records before an import is run.
 - Point the release checklist at `just bump-version`, which covers the two
   plugin manifests the old wording omitted
   ([161622b](https://github.com/outcomesinsights/seeds/commit/161622b9985998e4667e26b8c73746cf13351702))
+- Split the global-CLI refresh by install method — `which seeds` decides
+  between the nix profile and a `uv tool` install, since the nix profile
+  precedes `~/.local/bin` on PATH and silently shadows the other
+  ([260bc53](https://github.com/outcomesinsights/seeds/commit/260bc53c16f27e8fda73f48b70ed7f089224349e))
 - Document `seeds import`, round-trip sync, and the fresh-clone path
   ([6336416](https://github.com/outcomesinsights/seeds/commit/6336416760a31d1af3138c8735643f2d46049c1c))
 - Document the open type vocabulary, `update --type`, and `retype`
