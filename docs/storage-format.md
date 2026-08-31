@@ -445,12 +445,21 @@ the case where the writer is killed mid-write.
   every read, forever.
 - **No open `status` vocabulary.** See §3.
 
-## 9. Not settled here
+## 9. Repo-level configuration
 
-The project prefix currently lives in the SQLite `config` table, which phase 5
-deletes. Where it lives afterwards is phase 5's call and is deliberately not
-specified by this document — but it is not a frontmatter field, because it is a
-property of the project rather than of any seed.
+The project prefix lives in a small tracked **`.seeds/config.yaml`**, alongside any
+future repo-level settings:
+
+    prefix: seeds
+
+Ruled by @aguynamedryan, 2026-08-31. Until then it lived in the SQLite `config`
+table (`db.get_prefix`, db.py:316), which phase 5 deletes.
+
+It is **not** a frontmatter field, because it is a property of the project rather
+than of any seed — 312 copies of one value would only drift. And it is **not**
+derived from seed filenames, tempting though that is: a repo with no seeds yet has
+no prefix to read, so `seeds init` would have nothing to record and the first
+`seeds jot` would not know what to name its file.
 
 ## 10. Why the checker matters to this document
 

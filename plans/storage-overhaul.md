@@ -87,13 +87,22 @@ hook, and inside the converter against its own output (`seeds-sdhc.2`).
 
 *Violations* (exit non-zero, block the commit): frontmatter that will not parse;
 a `status` outside the closed set; a title that is a filesystem path, a URL, or
-empty; an empty body; git conflict markers left in a file; `updated_at` before
+empty; git conflict markers left in a file; `updated_at` before
 `created_at`; a future timestamp; a `parent` that disagrees with the dotted id,
 names a missing file, or forms a cycle; a relationship naming a file that does not
 exist; a one-sided edge; a `[!SUPERSEDED]` marker with no reason clause.
 
-*Smells* (report only, never fail): a long body with many commits of history and
-no supersession marker; a body byte-identical to another seed's. This tier is
+*Smells* (report only, never fail): an empty body; a long body with many commits of
+history and no supersession marker; a body byte-identical to another seed's.
+
+**An empty body is a SMELL, not a violation** (@aguynamedryan, ruled 2026-08-31).
+An earlier draft of this plan listed it as a violation, and that was wrong on the
+evidence: `seeds jot` creates a title-only seed by design (`cli.py:507` constructs
+`Seed(id=..., title=thought)` with no content), and 31 of 312 seeds in this repo
+have no body — 23 of them question-type, where the title *is* the question. As a
+violation it would have failed `check` on 10% of the corpus on day one and on the
+output of the primary capture verb. As a smell it still nudges toward fleshing one
+out, at the cost of a standing 31 entries in the smells report. This tier is
 where `tend` ends up — with marking moved to write time there is nothing editorial
 left for it to do, so `tend` collapses into `check --smells` rather than shipping
 as its own verb (`seeds-sdhc.3`).
@@ -145,6 +154,14 @@ Fixtures: this repo, plus a synthetic repo built to exhibit all four divergence
 cases at once.
 
 ### 5. Command cutover, and three deletions
+
+**Where the project prefix goes** (@aguynamedryan, ruled 2026-08-31): a small
+tracked `.seeds/config.yaml` holding `prefix:` and any future repo-level settings.
+It cannot be derived from seed filenames, because a repo with no seeds yet has no
+prefix to read and `seeds init` would have nothing to record; and it is not a
+frontmatter field, because it is a property of the project rather than of any seed.
+Today it lives in the SQLite `config` table (`db.get_prefix`, db.py:316), which
+this phase deletes.
 
 Every verb reads and writes the tree. SQLite deleted. `seeds search` becomes
 ripgrep with the status filter inline (measured at 17 ms across 303 files).
