@@ -71,11 +71,23 @@ just changelog-preview          # See what would go under [Unreleased] now
 
 Cutting a release (manual steps; intentionally no automation yet):
 
-1. Decide the version. Bump it in `pyproject.toml` and `src/seeds/__init__.py`.
-2. Run `just changelog-release vX.Y.Z` and paste the output into `CHANGELOG.md`,
-   replacing or appending the `[Unreleased]` section. Polish the prose — git-cliff
-   gives you the structure; the human writes the story.
-3. Commit (`chore: bump version to X.Y.Z`).
+1. Decide the version, then run `just bump-version X.Y.Z`. This is the only
+   supported way to bump: it updates `src/seeds/__init__.py` (canonical) plus the
+   two Claude Code plugin manifests
+   (`src/seeds/plugin/claude-plugin/.claude-plugin/plugin.json` and
+   `src/seeds/plugin/.claude-plugin/marketplace.json`, which hold a *literal*
+   version string that Claude Code reads), and fails loudly if a manifest is
+   missing. `pyproject.toml` derives the version via hatchling and is never
+   edited by hand. `tests/test_version_sync.py` fails the build if a manifest is
+   ever left behind.
+2. Run `just changelog-audit` first — it prints the commit count in the range
+   against the number of rendered entries. The gap is expected (`cliff.toml`
+   filters noise), but a suspiciously small entry count means commits are being
+   dropped. Then run `just changelog-release vX.Y.Z` and paste the output into
+   `CHANGELOG.md`, replacing or appending the `[Unreleased]` section. Polish the
+   prose — git-cliff gives you the structure; the human writes the story.
+3. Commit the bumped files and the changelog together
+   (`chore: bump version to X.Y.Z`).
 4. Tag: `git tag -a vX.Y.Z -m "vX.Y.Z — short summary"`.
 5. Push: `git push origin main && git push origin vX.Y.Z`.
 6. Create the GitHub Release with the same notes:
@@ -86,9 +98,12 @@ Cutting a release (manual steps; intentionally no automation yet):
    (`uv tool` installs to `~/.local/bin`, per-user — system-wide install
    would need sudo/nix and isn't part of the standard flow.)
 
-The pre-push hook runs the full local CI equivalent (mypy + ruff + pytest), so
-if it fires green, the GitHub Actions CI on push is the last line of defense
-rather than the first.
+The pre-push hook runs the full local CI equivalent — mypy (strict), `ruff check`,
+`ruff format --check`, the full pytest suite on the local interpreter plus 3.11
+and 3.12, and `nix flake check` (skipped cleanly when nix is absent). So if it
+fires green, the GitHub Actions CI on push is the last line of defense rather
+than the first. See `.pre-commit-config.yaml`; if you add a step to
+`.github/workflows/ci.yml`, add it there too.
 
 ## License
 
