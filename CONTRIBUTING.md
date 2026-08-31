@@ -99,10 +99,25 @@ Cutting a release (manual steps; intentionally no automation yet):
 6. Create the GitHub Release with the same notes:
    `gh release create vX.Y.Z --notes "..."`.
 7. Refresh the global `seeds` CLI on your dev host so the new version is
-   available outside the source tree:
-   `uv cache clean seeds && uv tool install --reinstall .`.
-   (`uv tool` installs to `~/.local/bin`, per-user — system-wide install
-   would need sudo/nix and isn't part of the standard flow.)
+   available outside the source tree. Which command does that depends on how
+   `seeds` got onto your PATH, so check first with `which seeds`:
+   - **`~/.nix-profile/bin/seeds`** — nix installed it (the case on titan).
+     Refresh from `~/.config/home-manager`: `nix flake update seeds`, then
+     switch. The flake input carries no ref pin, so it tracks **main**, not the
+     tag — step 5's `git push origin main` must have landed first. Don't bump it
+     by editing `modules/packages.nix`.
+   - **`~/.local/bin/seeds`** — `uv tool` installed it, per-user. Refresh with
+     `uv cache clean seeds && uv tool install --reinstall .`. `--reinstall`
+     already implies `--refresh`, so no separate `uv tool uninstall` is needed.
+
+   The nix profile comes *before* `~/.local/bin` on PATH, so on a host with
+   both, a `uv tool install` is silently shadowed and `seeds --version` keeps
+   reporting the nix copy — the failure mode that made a finished release look
+   like it never shipped. home-manager's `modules/packages.nix` is authoritative
+   on this and documents the one-time fix: run `uv tool uninstall seeds` *after*
+   a switch, to drop a stale `~/.local/bin/seeds` predating the move to nix.
+   That is cleanup, not a step in a reinstall. `CLAUDE.md`'s "Deploy to Global
+   CLI" section says the same thing — keep the two in sync.
 
 The pre-push hook runs the full local CI equivalent — mypy (strict), `ruff check`,
 `ruff format --check`, the full pytest suite on the local interpreter plus 3.11
