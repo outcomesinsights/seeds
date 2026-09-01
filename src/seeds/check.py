@@ -43,7 +43,13 @@ Three tiers live here now.
   ``git diff --name-status`` — a deleted seed counts here as changing every
   field, so ``rm <seed-file>`` at scale trips the same rule. Detection at commit
   is not immutability, and that is accepted: it bounds the damage to one
-  working session rather than five weeks.
+  working session rather than five weeks. The same tier carries a second,
+  per-seed rule: a body that differs from its committed version *while*
+  ``updated_at`` did not move was written by something other than seeds, since
+  every edit path bumps the stamp. That is the one rewrite the smells tier
+  cannot see — a formatter reflowing a code block inside a body leaves the
+  layout perfectly canonical — and it takes no threshold, because one file
+  quietly reformatted is the whole incident.
 
 Two things deliberately absent, so a later reader does not file them as gaps:
 
@@ -94,7 +100,7 @@ from seeds.githistory import (
     rev_exists,
     tree_files,
 )
-from seeds.models import SeedStatus
+from seeds.models import SeedStatus, rewrite_id_refs
 from seeds.seedfile import (
     FILE_SUFFIX,
     SeedFileError,
@@ -1172,7 +1178,7 @@ class GitComparison:
 
 
 def check_against_git(seeds_dir: Path) -> GitComparison:
-    """Flag any one field rewritten across a large fraction of the corpus.
+    """Flag a mass field rewrite, and any body rewritten with a frozen stamp.
 
     Compares the working store against ``HEAD`` — which is what a pre-commit
     hook needs, since there "the previous commit" is ``HEAD`` and the state
@@ -1302,6 +1308,9 @@ def _compare(
                 reldir, label, rewritten, deleted, total, before_label, after_label
             )
         )
+    comparison.findings.extend(
+        _rewritten_bodies(reldir, before, after, before_label, after_label)
+    )
     return comparison
 
 
@@ -1339,6 +1348,151 @@ def _mass_finding(
             f"and went unread for three days (seeds-wurl)"
         ),
     )
+
+
+# --- A body rewritten in place -----------------------------------------------
+
+# The third rule of the tooling-scope defence (seed ``seeds-dv6r``), and the
+# only one that catches the case that started it. The other two leave a hole
+# between them: ``tool-config-includes-store`` catches the tools we can *name*,
+# and ``non-canonical-bytes`` compares a file against a render of what the file
+# NOW says -- a render of itself -- so it catches serialization drift and is
+# blind to any rewrite of the body TEXT that leaves the layout canonical. ruff
+# 0.16 reformatting a Python code block inside a body produces exactly that: a
+# still-perfectly-canonical file whose prose moved. It tried it on
+# ``.seeds/seeds/seeds-154.md`` minutes after this repo's store was converted,
+# and ``test_a_body_rewritten_within_canonical_layout_is_NOT_caught`` pins the
+# blindness.
+#
+# The signature is a *pair*, not a value: the body differs from its committed
+# version WHILE ``updated_at`` did not move. Every edit path goes through
+# ``Store.save``, which bumps the stamp, so "content moved, timestamp did not"
+# is the fingerprint of something other than seeds writing the file. That makes
+# it a git question, which is why it lives here and not in the file-local
+# smells tier.
+
+
+def _prefix_rename(
+    before: dict[str, SeedRecord], after: dict[str, SeedRecord]
+) -> tuple[str, str, frozenset[str]] | None:
+    """The ``(old, new, renamed)`` a prefix rename in this diff would need.
+
+    ``seeds rename-prefix`` rewrites id references *inside* bodies and
+    deliberately writes ``updated_at`` verbatim (``store.py``: a rename is not
+    an edit to the deliberation, and bumping it corpus-wide would destroy the
+    ``updated_at == created_at`` "never edited" test). So a sanctioned rename
+    wears this rule's signature, and needs an exemption.
+
+    The exemption is **computed, never assumed**. A commit that touched many
+    files is not evidence of a rename; trusting that it was would be a hole
+    shaped exactly like the thing this guards. The pair is derived from the ids
+    that actually moved: every departing id must carry one single prefix, every
+    arrival must account for them, and the two prefixes must differ. Returns
+    ``None`` -- no exemption at all -- when any of that fails.
+
+    Extra arrivals are tolerated, because a rename and a ``seeds jot`` can land
+    in one commit and a seed that did not exist before cannot have been
+    rewritten. The looseness costs nothing: the pair only ever *silences* a
+    body difference that prefix substitution reproduces exactly, and a
+    formatter's reflow is not that.
+    """
+    gone = set(before) - set(after)
+    arrived = set(after) - set(before)
+    if not gone or not arrived:
+        return None
+    old = _sole_prefix(gone)
+    new = _sole_prefix(arrived)
+    if old is None or new is None or old == new:
+        return None
+    if not {f"{new}{seed_id[len(old) :]}" for seed_id in gone} <= arrived:
+        return None
+    return old, new, frozenset(seed_id.split(".", 1)[0] for seed_id in gone)
+
+
+def _sole_prefix(ids: set[str]) -> str | None:
+    """The one prefix every id in ``ids`` carries, or ``None`` if they differ.
+
+    An id's suffix is base36 and holds no hyphen (§1.1), so the last hyphen of
+    the top-level segment is the prefix boundary even for a hyphenated prefix
+    such as ``my-proj-154``.
+    """
+    prefixes = {seed_id.split(".", 1)[0].rpartition("-")[0] for seed_id in ids}
+    if len(prefixes) != 1:
+        return None
+    return prefixes.pop() or None
+
+
+def _rewritten_bodies(
+    reldir: str,
+    before: dict[str, SeedRecord],
+    after: dict[str, SeedRecord],
+    before_label: str,
+    after_label: str,
+) -> list[Finding]:
+    """One finding per seed whose body moved without its ``updated_at``.
+
+    Per seed and unthresholded, unlike the mass rule above: one file quietly
+    reformatted is the whole incident, and waiting for a fraction of the corpus
+    would mean waiting for the tool to be run repo-wide a second time.
+    """
+    rename = _prefix_rename(before, after)
+    findings: list[Finding] = []
+    for seed_id in sorted(before):
+        record = before[seed_id]
+        current = after.get(seed_id)
+        if current is None or current.body == record.body:
+            continue
+        if current.updated_at != record.updated_at:
+            continue
+        if rename is not None:
+            old, new, renamed = rename
+            # The same substitution engine `rename_prefix` itself used, given
+            # the same `known_ids`, so "explained by the rename" means
+            # reproduced exactly rather than merely resembling one.
+            if rewrite_id_refs(record.body, old, new, renamed)[0] == current.body:
+                continue
+        relpath = f"{reldir}/{seed_id}{FILE_SUFFIX}"
+        findings.append(
+            Finding(
+                path=Path(relpath),
+                code="body-rewritten-in-place",
+                seed_id=seed_id,
+                message=(
+                    f"body differs from {before_label} while updated_at did "
+                    f"not move (still {record.updated_at.isoformat()}) — "
+                    f"{_first_body_change(record.body, current.body)}"
+                ),
+                remediation=(
+                    f"every edit through seeds bumps updated_at, so a body that "
+                    f"moved without it was written by something other than "
+                    f"seeds — a repo-wide formatter or linter reaching into "
+                    f"the store (seeds-dv6r: ruff reformatted a code block "
+                    f"inside seeds-154 this way). Exclude .seeds/ from that "
+                    f"tool, then `git checkout {before_label} -- {relpath}` "
+                    f"puts the deliberation back. If the edit was wanted, "
+                    f"`seeds update {seed_id} --content-file -` records it and "
+                    f"stamps it"
+                ),
+            )
+        )
+    return findings
+
+
+def _first_body_change(before: str, after: str) -> str:
+    """Name the first line the two bodies part company on.
+
+    A bare "the body changed" sends the reader back to diffing by eye, which is
+    what every remediation in this module exists to avoid.
+    """
+    old_lines = before.split("\n")
+    new_lines = after.split("\n")
+    for number, (a, b) in enumerate(zip(old_lines, new_lines, strict=False), 1):
+        if a != b:
+            return f"first change at line {number}: {_clip(a)!r} → {_clip(b)!r}"
+    number = min(len(old_lines), len(new_lines)) + 1
+    if len(new_lines) > len(old_lines):
+        return f"line {number} added: {_clip(new_lines[number - 1])!r}"
+    return f"line {number} removed: {_clip(old_lines[number - 1])!r}"
 
 
 # --- Reporting ---------------------------------------------------------------
