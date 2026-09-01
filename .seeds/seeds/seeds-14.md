@@ -4,7 +4,7 @@ title: "Mind racing problem: capturing tangents without losing focus"
 status: captured
 type: concern
 created_at: 2026-01-28T05:55:38.391240+00:00
-updated_at: 2026-01-28T23:11:10.758087+00:00
+updated_at: 2026-09-01T16:29:52.728507+00:00
 tags:
   - workflow
   - philosophy
@@ -15,6 +15,9 @@ relationships:
   - target_id: seeds-45
     rel_type: relates-to
     created_at: 2026-01-28T05:55:38.391240+00:00
+  - target_id: seeds-h5rq
+    rel_type: relates-to
+    created_at: 2026-09-01T16:29:52.726491+00:00
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 

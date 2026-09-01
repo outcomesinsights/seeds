@@ -5,12 +5,16 @@ status: captured
 type: exploration
 parent: seeds-112
 created_at: 2026-02-27T16:00:05.759562+00:00
-updated_at: 2026-02-27T16:00:05.759571+00:00
+updated_at: 2026-09-01T16:29:52.874249+00:00
 tags:
   - workflow
   - capture-gap
   - ai-ux
   - friction
+relationships:
+  - target_id: seeds-h5rq
+    rel_type: relates-to
+    created_at: 2026-09-01T16:29:52.871912+00:00
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
