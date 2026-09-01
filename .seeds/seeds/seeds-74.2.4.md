@@ -1,0 +1,82 @@
+---
+id: seeds-74.2.4
+title: Harvest seeds is source-agnostic deliberation extraction
+status: captured
+type: idea
+parent: seeds-74.2
+created_at: 2026-02-09T14:31:38.746545+00:00
+updated_at: 2026-03-12T20:07:06.759210+00:00
+tags:
+  - architecture
+  - harvest
+  - integration
+relationships:
+  - target_id: seeds-125
+    rel_type: relates-to
+    created_at: 2026-03-12T20:06:55.221328+00:00
+converted_at: 2026-09-01T05:20:22.746832+00:00
+---
+
+**Key insight:** Harvesting seeds from Claude conversations is the same process as harvesting from ANY deliberation source.
+
+**Potential sources:**
+- Claude conversation logs
+- Meeting transcripts (Zoom, Teams, etc.)
+- Email threads
+- Slack/Discord channels
+- PR discussions / code review comments
+- Document comments (Google Docs, Notion)
+- Voice memos / audio transcripts
+
+**Common pattern:**
+All are unstructured/semi-structured text containing:
+- Decisions made (and rationale)
+- Questions raised (answered or not)
+- Investigations and findings
+- User/participant insights
+
+**Architecture implication:**
+- Harvest logic should be source-agnostic
+- 'Sweep' = point extractor at a text source
+- Different sources may have different markers, but core extraction is same
+- `seeds harvest <source>` where source could be:
+  - `--conversation` (Claude JSONL)
+  - `--transcript <file>` (meeting)
+  - `--email <mbox/thread>`
+  - `--slack <export>`
+  - `--stdin` (pipe anything)
+
+**This makes seeds a general deliberation→structure tool, not just Claude-specific.**
+
+
+
+## CORRECTION: User pushback
+
+Too hard a pivot. Overlaps with intent.build's positioning.
+
+**Seeds' actual secret sauce:**
+Not 'capture from anywhere' but the **structured database** around deliberation:
+- Hierarchical seeds (parent/child for drilling down)
+- Questions as first-class objects attached to seeds
+- Lifecycle: captured → exploring → resolved/deferred/abandoned
+- Blocked/dependency relationships
+- Records the *discovery and exploration process*, not just decisions
+
+**The difference:**
+- Intent.build: System of record for *decisions* (the outputs)
+- Seeds: Structured tracking of the *deliberation process* (the journey)
+
+Seeds answers: 'How did we get here? What did we explore? What questions led to this decision? What's still open?'
+
+
+
+---
+**Terminology refinement (Mar 2026):**
+
+The user identified that 'harvest' and 'gather' are overloaded — seeds is both the tool and the thing being extracted. Agriculture vocabulary offers more precision:
+
+- **Glean**: pick through existing material to find valuable seeds (best fit for document extraction)
+- **Thresh**: separate seeds from chaff (filtering noise from signal)
+- **Winnow**: separate wanted from unwanted (project-scoping step)
+
+'Glean' is the strongest candidate for the primary extraction command: `seeds glean <source>`. It implies methodical examination of existing material, not generation of new material. It also carries the connotation of 'picking up what others missed' — fitting for re-ingestion where later passes find seeds the first pass didn't.

@@ -1,0 +1,12 @@
+---
+id: seeds-30
+title: AI suggesting status changes during conversation feels like natural collaboration - draws attention to next steps
+status: abandoned
+type: idea
+created_at: 2026-01-28T17:22:09.539187+00:00
+updated_at: 2026-01-28T23:10:22.156509+00:00
+resolved_at: 2026-01-28T23:10:22.156499+00:00
+converted_at: 2026-09-01T05:20:22.746832+00:00
+---
+
+Abandoned: Consolidated into seed-91f2
