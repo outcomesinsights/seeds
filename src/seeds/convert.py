@@ -870,6 +870,10 @@ class ConversionReport:
     dropped_fixtures: list[str] = field(default_factory=list)
     kept_fixtures: list[str] = field(default_factory=list)
     dropped_legacy_rows: dict[str, int] = field(default_factory=dict)
+    #: How many distinct ids the two source stores held between them, before
+    #: any drop. Printed so "308 converted" can be checked against it by eye
+    #: rather than taken on trust.
+    source_ids: int = 0
     dropped_edges: list[str] = field(default_factory=list)
     field_divergences: list[FieldDivergence] = field(default_factory=list)
     stale_files: list[str] = field(default_factory=list)
@@ -902,7 +906,8 @@ def format_report(report: ConversionReport) -> str:
         sources.append(JSONL_FILE)
     out.append(f"Converted {' + '.join(sources)} -> {report.out_dir}")
     out.append(
-        f"  {report.total} seeds: {len(report.written)} written, "
+        f"  {report.source_ids} seed(s) in the source stores -> "
+        f"{report.total} converted: {len(report.written)} written, "
         f"{len(report.unchanged)} already current"
     )
     for classification in Classification:
@@ -963,15 +968,108 @@ def format_report(report: ConversionReport) -> str:
 # --- Verification ------------------------------------------------------------
 
 
+def _assert_complete(
+    out_dir: Path,
+    unions: Sequence[UnionRecord],
+    db_sides: dict[str, _Side],
+    jsonl_sides: dict[str, _Side],
+    drop_ids: frozenset[str],
+) -> None:
+    """Every source id has a file, and the declared drops are the ONLY absences.
+
+    This is the assertion that makes every other check in this module worth
+    running, and it exists because ``seeds check`` **exits 0 on an empty
+    store**. Measured on the merged checker: an empty ``.seeds/seeds/`` reports
+    "0 files, no violations" and exits 0, while the same corpus rendered in
+    full reports 57 violations and exits 1. So "the converter ran check on its
+    output and it passed" is not evidence that the conversion produced
+    anything — a run that emitted zero files, or silently skipped most ids,
+    passes its own verification cleanly.
+
+    That is exactly the failure class this project keeps hitting: a gate
+    measuring something adjacent to the artifact and reporting green while the
+    artifact is broken. The cheap set comparison here is what makes the
+    expensive one downstream mean something.
+
+    Sets, never counts. Equal counts still hide a swap — one id lost and
+    another invented lands on the same total — so every comparison below is a
+    set difference and every failure names the ids rather than a number.
+    """
+    source_ids = set(db_sides) | set(jsonl_sides)
+    expected = source_ids - drop_ids
+    produced = {u.record.id for u in unions}
+
+    if produced != expected:
+        raise ConversionError(
+            "completeness verification failed: the union does not cover the "
+            "source stores. "
+            + _set_detail("in a source store and not in the union", expected - produced)
+            + _set_detail("in the union and in no source store", produced - expected)
+        )
+
+    present = {
+        path.name[: -len(FILE_SUFFIX)] for path in out_dir.glob(f"*{FILE_SUFFIX}")
+    }
+
+    if expected and not present & expected:
+        raise ConversionError(
+            f"completeness verification failed: the source stores hold "
+            f"{len(expected)} seed(s) to convert and {out_dir} holds none of "
+            f"them. A zero-file conversion passes 'seeds check' — an empty "
+            f"store has nothing to violate — so it is caught here instead"
+        )
+
+    missing = expected - present
+    if missing:
+        raise ConversionError(
+            f"completeness verification failed: {len(expected)} seed(s) should "
+            f"be in {out_dir} and {len(missing)} have no file. "
+            + _set_detail("missing from the tree", missing)
+        )
+
+    # The deliberate drops are the only ids allowed to be absent. An id in a
+    # source store, absent from the tree, and absent from the drop list is a
+    # record that vanished, which is the one outcome no report may downgrade to
+    # a warning.
+    unexplained = source_ids - present - drop_ids
+    if unexplained:
+        raise ConversionError(
+            "completeness verification failed: id(s) absent from the tree that "
+            "the converter never said it dropped. "
+            + _set_detail("unexplained absence", unexplained)
+        )
+
+
+#: How many ids a failure names before it starts counting instead.
+_NAME_LIMIT = 20
+
+
+def _set_detail(label: str, ids: set[str]) -> str:
+    """Name the ids behind a set-comparison failure, not just how many."""
+    if not ids:
+        return ""
+    names = sorted(ids)
+    shown = ", ".join(names[:_NAME_LIMIT])
+    if len(names) > _NAME_LIMIT:
+        shown += f", ... (+{len(names) - _NAME_LIMIT} more)"
+    return f"{len(names)} {label}: {shown}. "
+
+
 def verify(
     out_dir: Path,
     unions: Sequence[UnionRecord],
     db_sides: dict[str, _Side],
     jsonl_sides: dict[str, _Side],
+    *,
+    drop_ids: frozenset[str] = frozenset(),
 ) -> int:
     """Re-read the tree and prove it holds what the sources held.
 
-    Two passes, because they catch different failures.
+    Three passes, because they catch different failures.
+
+    The **completeness** pass compares id SETS: the sources' ids, the union's
+    ids, and the files on disk. It runs first and it is the one that makes the
+    other two mean anything — see :func:`_assert_complete`.
 
     The **round-trip** pass re-reads every emitted file and diffs the rebuilt
     record against the union record field by field. That catches a writer and
@@ -987,6 +1085,7 @@ def verify(
     records verified, which is the whole corpus and not a sample — a gate that
     scores part of the deliverable reports green on a broken one.
     """
+    _assert_complete(out_dir, unions, db_sides, jsonl_sides, drop_ids)
     by_id = {u.record.id: u for u in unions}
     rebuilt: dict[str, SeedRecord] = {}
     for union in unions:
@@ -1247,6 +1346,7 @@ def convert(
     edges, dangling = _resolve_edges(halves, known)
     report.dropped_edges = [f"{a} -{rel}-> {b}" for rel, a, b in dangling]
 
+    report.source_ids = len(set(db_sides) | set(jsonl_sides))
     unions, divergences = union_records(db_sides, jsonl_sides, edges, drop_ids=drop_ids)
     report.field_divergences = divergences
     for union in unions:
@@ -1258,7 +1358,7 @@ def convert(
 
     _write_tree(seeds_dir, unions, stamp, report)
     _verify_edges(unions, halves, dangling)
-    report.verified = verify(out_dir, unions, db_sides, jsonl_sides)
+    report.verified = verify(out_dir, unions, db_sides, jsonl_sides, drop_ids=drop_ids)
     report.stale_files = _stale_files(out_dir, {u.record.id for u in unions})
     report.prefix_written = _write_config(seeds_dir, db_path, known)
     report.check_findings = _gate(seeds_dir, set(report.forks))
