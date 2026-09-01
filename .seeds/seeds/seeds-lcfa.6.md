@@ -5,7 +5,7 @@ status: captured
 type: exploration
 parent: seeds-lcfa
 created_at: 2026-08-26T03:58:49.667056+00:00
-updated_at: 2026-08-26T03:58:49.667056+00:00
+updated_at: 2026-09-01T15:56:08.830877+00:00
 tags:
   - duckdb
   - per-seed-files
@@ -31,6 +31,9 @@ relationships:
   - target_id: seeds-sdhc
     rel_type: relates-to
     created_at: 2026-08-28T17:36:41.653428+00:00
+  - target_id: seeds-29ar
+    rel_type: relates-to
+    created_at: 2026-09-01T15:56:08.828435+00:00
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
