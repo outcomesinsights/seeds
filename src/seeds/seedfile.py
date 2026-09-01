@@ -114,7 +114,17 @@ class SeedFileError(Exception):
     Always names the file. Field-level failures also name the field and the
     offending value, because "invalid frontmatter" on its own sends the
     operator back to reading the file by eye.
+
+    ``code`` is a stable machine-readable name for the failure, carried so
+    ``seeds check`` can attach the right remediation to a strict-read refusal
+    without pattern-matching on the message. It is set explicitly only for the
+    cases ``docs/storage-format.md`` calls out by name; everything else keeps
+    the default.
     """
+
+    def __init__(self, message: str, *, code: str = "parse-error") -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def _fail(
@@ -124,6 +134,7 @@ def _fail(
     field_name: str | None = None,
     value: object | None = None,
     line: int | None = None,
+    code: str = "parse-error",
 ) -> SeedFileError:
     """Build a :class:`SeedFileError` naming file, line, field and value."""
     parts = [str(path) if path is not None else "<record>"]
@@ -135,7 +146,7 @@ def _fail(
     tail = ""
     if field_name is not None and value is not None:
         tail = f" (value: {value!r})"
-    return SeedFileError(f"{head}: {message}{tail}")
+    return SeedFileError(f"{head}: {message}{tail}", code=code)
 
 
 # --- Records -----------------------------------------------------------------
@@ -597,7 +608,11 @@ def _build_record(path: Path, values: dict[str, _Block], body: str) -> SeedRecor
     title = title_pair[0]
     if not title.strip() or "\n" in title:
         raise _fail(
-            path, "title must be one non-empty line", field_name="title", value=title
+            path,
+            "title must be one non-empty line",
+            field_name="title",
+            value=title,
+            code="title-empty",
         )
 
     status_pair = _scalar(path, values, "status")
@@ -612,6 +627,7 @@ def _build_record(path: Path, values: dict[str, _Block], body: str) -> SeedRecor
             field_name="status",
             value=status_pair[0],
             line=status_pair[1],
+            code="status-unknown",
         ) from exc
 
     type_pair = _scalar(path, values, "type")
@@ -632,12 +648,14 @@ def _build_record(path: Path, values: dict[str, _Block], body: str) -> SeedRecor
                 "parent is forbidden on a top-level id",
                 field_name="parent",
                 value=parent,
+                code="parent-mismatch",
             )
         raise _fail(
             path,
             f"parent must be {wanted_parent!r}, as the dotted id says",
             field_name="parent",
             value=parent,
+            code="parent-mismatch",
         )
 
     created_pair = _scalar(path, values, "created_at")
@@ -1047,6 +1065,7 @@ def _record_marker(
             f"body line {index + 1}: a supersede marker must be the first "
             "non-blank line after the heading it retires; there is no floating "
             "supersession",
+            code="supersede-position",
         )
     marker = _MARKER_RE.match(line)
     if not marker:
@@ -1054,6 +1073,7 @@ def _record_marker(
             path,
             f"body line {index + 1}: malformed supersede marker {line!r}; "
             "expected '> [!SUPERSEDED] YYYY-MM-DD — reason'",
+            code="supersede-malformed",
         )
     try:
         retired_on = date.fromisoformat(marker.group(1))
@@ -1062,6 +1082,7 @@ def _record_marker(
             path,
             f"body line {index + 1}: supersede marker carries an impossible "
             f"date {marker.group(1)!r}",
+            code="supersede-malformed",
         ) from exc
     # The marker may wrap onto further blockquote lines; the reason clause is
     # everything from the em dash to the end of the blockquote (§6.1).
@@ -1078,6 +1099,7 @@ def _record_marker(
             path,
             f"body line {index + 1}: supersede marker has no reason clause, and "
             "the reason clause is mandatory",
+            code="supersede-no-reason",
         )
     heading_line, level = pending
     scopes.append(
