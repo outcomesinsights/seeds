@@ -122,7 +122,8 @@ you mean (a habitat's root, `~/projects/<org>/`, or `..` from a sibling repo).
 ### Creating
 - `seeds create --title="..." --type=idea --tags=foo,bar` - Full creation
 - `seeds create --title="..." --parent=<id>` - Create child seed
-- Bodies referencing unknown `<prefix>-...` IDs are rejected, base36 hash IDs included; existing seeds, beads (from a sibling `.beads/issues.jsonl`) and a short allowlist of prose terms all count as known; pass `--allow-unknown-refs` to override
+- Bodies referencing unknown `<prefix>-...` IDs are rejected, base36 hash IDs included; existing seeds, beads and a short allowlist of prose terms all count as known; pass `--allow-unknown-refs` to override
+- Bead IDs are checked against a sibling `.beads/issues.jsonl`, and anything it does not vouch for is confirmed with `bd` itself before being called unknown -- that export is throttled, so a bead created seconds ago is real and missing from it
 
 ### Updating
 - `seeds explore <id>` - Start working on a seed

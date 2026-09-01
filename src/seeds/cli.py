@@ -12,7 +12,12 @@ from typing import Any, NamedTuple
 import click
 
 from seeds import __version__
-from seeds.beads import load_bead_ids
+from seeds.beads import (
+    beads_in_use,
+    beads_issues_path,
+    load_bead_ids,
+    query_bead_ids,
+)
 from seeds.check import (
     GitUnavailable,
     check_against_git,
@@ -127,8 +132,18 @@ def _validate_id_refs(
        ``<prefix>-<word>`` is ordinary English ("a seeds-native workflow") and
        no rule of shape separates it from a base36 hash.
 
+    Anything still unmatched then gets one last, authoritative check: beads
+    itself, via ``bd``. The export in step 2 is derived and throttled, so a
+    bead created seconds ago is real and missing from it — seeds rejected
+    exactly such an ID and made the author reach for ``--allow-unknown-refs``,
+    which switches off hallucination detection wholesale (bead seeds-4co.23).
+    Asking ``bd`` only about IDs the export did not vouch for keeps the
+    subprocess off the happy path and out of projects with no beads.
+
     Anything still unmatched is a hallucination: exit with an error listing it,
-    unless ``allow_unknown`` is true.
+    unless ``allow_unknown`` is true. When beads is in use but could not be
+    consulted, the error says so rather than implying the bead list was
+    complete.
     """
     if allow_unknown:
         return
@@ -148,21 +163,36 @@ def _validate_id_refs(
         and ref not in bead_ids
         and not is_allowlisted_prose(ref, prefix)
     )
-    if unknown:
+    if not unknown:
+        return
+
+    live_bead_ids = query_bead_ids(store.seeds_dir, unknown)
+    if live_bead_ids is not None:
+        unknown = [ref for ref in unknown if ref not in live_bead_ids]
+        if not unknown:
+            return
+
+    click.echo(
+        "Error: seed body references unknown IDs: " + ", ".join(unknown),
+        err=True,
+    )
+    if live_bead_ids is None and beads_in_use(store.seeds_dir):
         click.echo(
-            "Error: seed body references unknown IDs: " + ", ".join(unknown),
+            "  Note: beads could not be consulted, so the bead list came from"
+            f" {beads_issues_path(store.seeds_dir)}, a throttled export that"
+            " may be stale. A bead created moments ago may be missing from it.",
             err=True,
         )
-        click.echo(
-            "  Fix the references, or pass --allow-unknown-refs to override.",
-            err=True,
-        )
-        click.echo(
-            "  If one is prose rather than an ID, add its suffix to"
-            " PROSE_REF_ALLOWLIST in seeds/models.py.",
-            err=True,
-        )
-        sys.exit(1)
+    click.echo(
+        "  Fix the references, or pass --allow-unknown-refs to override.",
+        err=True,
+    )
+    click.echo(
+        "  If one is prose rather than an ID, add its suffix to"
+        " PROSE_REF_ALLOWLIST in seeds/models.py.",
+        err=True,
+    )
+    sys.exit(1)
 
 
 class GuardCopy(NamedTuple):
