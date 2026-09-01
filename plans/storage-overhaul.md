@@ -61,6 +61,25 @@ Settled. Freeze it in `docs/storage-format.md` before any code is written.
   read reintroduces exactly the silent wrongness this change exists to escape
   (`seeds-sdhc.2`).
 
+## Status: BUILT AND CONVERTED (2026-09-01)
+
+All fourteen beads under epic `seeds-4co` are closed and this repo's store is
+converted — 314 source records to 308 seed files, no forks, `seeds check` clean,
+byte-idempotent on a second run. `seeds.db` and `seeds.jsonl` are deliberately
+left in place: reverting is `rm -rf .seeds/seeds/`, and the JSONL's git history
+is the only source for anything before a seed's `converted_at`.
+
+What remains is genuinely open rather than unbuilt: `seeds-4co.15` (a
+git-history repair oracle, shaped as report-never-auto-apply), `seeds-4co.16`
+(two format rules with no check in any tier — promoted in importance by the
+ruff incident below), and sustained real use, which is @aguynamedryan's to
+report rather than anything an agent can close.
+
+One defect the plan did not anticipate and the conversion surfaced within
+minutes: files-as-truth puts the store inside every repo tool's default scope.
+ruff 0.16 formats Python code blocks inside markdown and tried to rewrite a
+seed body. Recorded as `seeds-dv6r`.
+
 ## Phases
 
 Ordered by what blocks what.
