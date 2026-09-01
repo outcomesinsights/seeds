@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import shlex
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -43,6 +44,7 @@ from seeds.store import (
     find_seeds_dir,
     has_been_edited,
     is_terminal,
+    needs_conversion,
     new_record,
     questions_asked_about,
     relates_to,
@@ -62,15 +64,19 @@ def _uninitialized_error(seeds_dir: Path) -> str:
     if not seeds_dir.exists():
         return "Error: seeds not initialized. Run 'seeds init' first."
 
-    jsonl_path = seeds_dir / JSONL_FILE
-    if jsonl_path.exists():
+    if needs_conversion(seeds_dir):
         return (
             f"Error: no seed files in {seed_files_dir(seeds_dir)}, but "
-            f"{jsonl_path} is present.\n"
+            f"{seeds_dir / JSONL_FILE} is present.\n"
             "This project has not been converted to the seed-file store yet. "
             "Run 'seeds convert'."
         )
     return "Error: seeds not initialized. Run 'seeds init' first."
+
+
+def _resolve_seeds_dir() -> Path:
+    """The ``.seeds`` this invocation is about, whether or not it is usable."""
+    return find_seeds_dir() or Path.cwd() / SEEDS_DIR
 
 
 class Context:
@@ -86,7 +92,7 @@ class Context:
         to read -- see :func:`_uninitialized_error`.
         """
         if self.store is None:
-            seeds_dir = find_seeds_dir() or Path.cwd() / SEEDS_DIR
+            seeds_dir = _resolve_seeds_dir()
             store = Store(seeds_dir)
             if not store.is_initialized():
                 click.echo(_uninitialized_error(seeds_dir), err=True)
@@ -519,7 +525,25 @@ def jot(ctx: Context, thought: str) -> None:
     """Quickly capture a thought with minimal friction.
 
     THOUGHT is the idea to capture (becomes the title).
+
+    Refusing on an unconverted store is right; losing the thought with it is
+    not. jot is the minimum-friction verb whose whole job is catching an idea
+    before it escapes, and first contact with an unconverted repo happens
+    mid-thought, so the refusal prints the text back and the exact command to
+    re-run (seeds-4co.18).
     """
+    seeds_dir = _resolve_seeds_dir()
+    if not Store(seeds_dir).is_initialized():
+        click.echo(_uninitialized_error(seeds_dir), err=True)
+        click.echo("", err=True)
+        click.echo("Nothing was written. Your thought, so it survives:", err=True)
+        click.echo("", err=True)
+        click.echo(f"  {thought}", err=True)
+        click.echo("", err=True)
+        click.echo("Re-run it once the store is usable:", err=True)
+        click.echo(f"  seeds jot {shlex.quote(thought)}", err=True)
+        sys.exit(1)
+
     store = ctx.get_store()
 
     seed_id = store.next_id(seed_text=thought)
@@ -1511,6 +1535,13 @@ def prime(no_digest: bool, digest_limit: int) -> None:
     Silently exits with code 0 if not in a seeds project.
     This enables cross-platform hook integration where both
     seeds and beads hooks can coexist.
+
+    On an UNCONVERTED project it still emits the full document and still exits
+    0 -- but the document carries the conversion notice twice, once at the top
+    and once where the project-state block would have been. Returning
+    normal-looking context there was the defect (seeds-4co.18): the static half
+    rendered, the state block vanished silently, and an agent reading it
+    concluded the project had no seeds.
     """
     from seeds.prime import get_prime_output
 
@@ -1525,8 +1556,14 @@ def prime(no_digest: bool, digest_limit: int) -> None:
     if not store.is_initialized():
         # A .seeds/ that holds no seed files yet -- an unconverted project, or
         # one mid-init. The static workflow text is still the right answer;
-        # only the digest needs a store.
-        click.echo(get_prime_output(include_digest=False))
+        # only the digest needs a store. Which of the two it is decides whether
+        # the reader is told a block is missing.
+        click.echo(
+            get_prime_output(
+                include_digest=False,
+                unconverted=needs_conversion(seeds_dir),
+            )
+        )
         return
 
     click.echo(
@@ -1745,6 +1782,11 @@ def check_cmd(smells: bool, against_git: bool) -> None:
     if seeds_dir is None:
         click.echo("Error: seeds not initialized. Run 'seeds init' first.", err=True)
         sys.exit(1)
+    if needs_conversion(seeds_dir):
+        # Otherwise this reports store-missing as a bare path, which is a true
+        # statement of a symptom and no help at all on an unconverted repo.
+        click.echo(_uninitialized_error(seeds_dir), err=True)
+        sys.exit(1)
 
     findings = check_violations(seeds_dir)
     if findings:
@@ -1888,6 +1930,11 @@ def export_cmd(as_json: bool) -> None:
     seeds_dir = find_seeds_dir()
     if seeds_dir is None:
         click.echo("Error: seeds not initialized. Run 'seeds init' first.", err=True)
+        sys.exit(1)
+    if needs_conversion(seeds_dir):
+        # Ahead of export_json, which would otherwise report the missing tree
+        # as a bare path and leave the reader to work out the recovery.
+        click.echo(_uninitialized_error(seeds_dir), err=True)
         sys.exit(1)
 
     try:
