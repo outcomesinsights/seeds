@@ -41,7 +41,11 @@ cd seeds
 pip install .
 ```
 
-Requires Python 3.11+.
+Requires Python 3.11+ and [ripgrep](https://github.com/BurntSushi/ripgrep)
+(`rg`) on `PATH` — `seeds search` is a ripgrep pass over the seed files. Every
+other command works without it, and `seeds search` says so rather than failing
+obscurely. The Nix package wraps the binary with its own ripgrep, so `nix run`
+needs nothing installed.
 
 ## Usage
 

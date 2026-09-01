@@ -37,6 +37,10 @@
           # nativeCheckInputs below. Threaded in as an argument because
           # python3Packages does not reach back to the top-level package set.
           git,
+          # `ripgrep` IS a runtime dependency: `seeds search` shells out to `rg`
+          # (bead seeds-4co.10). Same threading reason as git.
+          ripgrep,
+          makeWrapper,
           runTests ? false,
         }:
         python3Packages.buildPythonApplication {
@@ -55,6 +59,21 @@
             click
           ];
 
+          # `seeds search` is a ripgrep pass over .seeds/seeds/, so `rg` has to
+          # be on PATH for the installed binary -- not merely on the user's.
+          # Without this wrap, `nix run github:outcomesinsights/seeds -- search`
+          # works on a machine that happens to have ripgrep and fails on one
+          # that does not, which is a dependency the package declared nowhere.
+          # The Python side still raises a message naming ripgrep, for the
+          # `pip install` / `uv tool install` routes that cannot wrap anything.
+          nativeBuildInputs = [ makeWrapper ];
+          makeWrapperArgs = [
+            "--prefix"
+            "PATH"
+            ":"
+            "${nixpkgs.lib.makeBinPath [ ripgrep ]}"
+          ];
+
           # Tests are wired through checks.default, not the package: home-manager
           # consumes packages.default and should not run pytest on every rebuild.
           doCheck = runTests;
@@ -65,9 +84,16 @@
           # guard, so the sandbox needs the binary. Without it 19 tests fail with
           # FileNotFoundError while `nix build` and every local run stay green --
           # which is exactly how this was found (seeds-ww8, 2026-08-26).
+          # `ripgrep` is here as well as in makeWrapperArgs: the check phase
+          # runs pytest against the source tree, not the wrapped binary, so the
+          # wrapper's PATH does not reach it. Without it the twelve
+          # tests/test_store.py TestSearch cases fail in the sandbox while
+          # every local run stays green -- the same shape as the git omission
+          # above, found the same way.
           nativeCheckInputs = nixpkgs.lib.optionals runTests [
             python3Packages.pytestCheckHook
             git
+            ripgrep
           ];
 
           pythonImportsCheck = [ "seeds" ];
@@ -82,12 +108,26 @@
     in
     {
       packages = forAllSystems (system: {
-        default = mkSeeds { inherit (nixpkgs.legacyPackages.${system}) python3Packages git; };
+        default = mkSeeds {
+          inherit (nixpkgs.legacyPackages.${system})
+            python3Packages
+            git
+            ripgrep
+            makeWrapper
+            ;
+        };
       });
 
       # Consumed by ~/.config/home-manager via `overlays = [ seeds.overlays.default ];`
       overlays.default = final: _prev: {
-        seeds = mkSeeds { inherit (final) python3Packages git; };
+        seeds = mkSeeds {
+          inherit (final)
+            python3Packages
+            git
+            ripgrep
+            makeWrapper
+            ;
+        };
       };
 
       apps = forAllSystems (system: {
@@ -101,7 +141,12 @@
       # `nix flake check` (and CI) runs it; `nix build .#default` does not.
       checks = forAllSystems (system: {
         default = mkSeeds {
-          inherit (nixpkgs.legacyPackages.${system}) python3Packages git;
+          inherit (nixpkgs.legacyPackages.${system})
+            python3Packages
+            git
+            ripgrep
+            makeWrapper
+            ;
           runTests = true;
         };
       });
@@ -119,6 +164,7 @@
               ruff
               just
               git
+              ripgrep
             ];
           };
         }
