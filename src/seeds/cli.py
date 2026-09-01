@@ -13,6 +13,7 @@ import click
 from seeds import __version__
 from seeds.beads import load_bead_ids
 from seeds.check import check_violations, format_findings
+from seeds.convert import ConversionError, convert, format_report
 from seeds.db import SEEDS_DIR, Database, find_seeds_dir
 from seeds.export import (
     JSONL_FILE,
@@ -2037,6 +2038,50 @@ def check_cmd() -> None:
     click.echo()
     click.echo(f"seeds check: {len(findings)} violation(s).")
     sys.exit(1)
+
+
+@main.command("convert")
+@click.option(
+    "--keep-fixtures",
+    is_flag=True,
+    help=("Convert the six ruled test-fixture seeds too, instead of dropping them."),
+)
+def convert_cmd(keep_fixtures: bool) -> None:
+    """Convert the SQLite + JSONL store into the .seeds/seeds/ markdown tree.
+
+    Reads the UNION of the two stores, per id and per field. Never "the
+    database, reconciled against the file" -- that would rebuild the
+    derived-store-overwrites-durable-store shape inside the migration itself.
+
+    Every id is classified before anything is written: db-only, jsonl-only,
+    db-extends-disk, or fork. Only the first three are resolved by rule. A fork
+    -- two bodies where neither is a prefix of the other -- lands as a file
+    carrying both, with git conflict markers, for ordinary merge tooling.
+
+    Non-destructive. The tree is written alongside seeds.db and seeds.jsonl and
+    neither is touched, so reverting the whole conversion is `rm -rf
+    .seeds/seeds/`. Re-running against an unchanged store rewrites nothing.
+
+    Exits non-zero while a fork is unresolved or `seeds check` reports a
+    violation on the output: the data landed, but the store is not finished.
+    """
+    seeds_dir = find_seeds_dir()
+    if seeds_dir is None:
+        click.echo("Error: seeds not initialized. Run 'seeds init' first.", err=True)
+        sys.exit(1)
+
+    try:
+        report = convert(seeds_dir, keep_fixtures=keep_fixtures)
+    except ConversionError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    click.echo(format_report(report))
+    if report.check_findings:
+        click.echo()
+        click.echo(format_findings(report.check_findings), nl=False)
+    if not report.clean:
+        sys.exit(1)
 
 
 @main.command("retype")
