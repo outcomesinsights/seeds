@@ -20,86 +20,89 @@ from seeds.check import (
     format_findings,
 )
 from seeds.convert import ConversionError, convert, format_report
-from seeds.db import SEEDS_DIR, Database, find_seeds_dir
-from seeds.export import (
-    JSONL_FILE,
-    DivergentExportError,
-    ImportResult,
-    RefusedRecord,
-)
 from seeds.jsonexport import ExportError, export_json
+from seeds.legacy import JSONL_FILE
 from seeds.models import (
     DEFAULT_PREFIX,
     RelationType,
-    Seed,
     SeedStatus,
     SeedType,
     find_id_ref_candidates,
     is_allowlisted_prose,
+    now_utc,
     parse_since,
     sanitize_prefix,
 )
-from seeds.seedfile import seed_files_dir
+from seeds.seedfile import SeedFileError, SeedRecord, render_body, seed_files_dir
+from seeds.store import (
+    CONFIG_FILE,
+    SEEDS_DIR,
+    Store,
+    StoreError,
+    find_seeds_dir,
+    has_been_edited,
+    is_terminal,
+    new_record,
+    questions_asked_about,
+    relates_to,
+)
 
 
-def _uninitialized_error(db_path: Path) -> str:
-    """The right recovery to name when there is no database.
+def _uninitialized_error(seeds_dir: Path) -> str:
+    """The right recovery to name when there is no store.
 
-    Three states hide behind "no seeds.db", and sending all of them to `seeds
-    init` is wrong for the most common one. `.seeds/seeds.db` is gitignored
-    while `seeds.jsonl` is tracked, so a fresh clone has the file and not the
-    database -- and `seeds init` refuses there, reporting the directory as
-    already initialized. That closed loop is what this exists to break
-    (bead seeds-1j3).
+    Three states hide behind "no seed files", and sending all of them to
+    `seeds init` is wrong for the one that matters most. A repo that has not
+    converted yet still carries the pre-0.7 `.seeds/seeds.jsonl`, and `seeds
+    init` refuses there, reporting the directory as already initialized -- the
+    same closed loop bead seeds-1j3 broke for the database, in its new shape.
+    That repo needs `seeds convert`, not `seeds init`.
     """
-    seeds_dir = db_path.parent
     if not seeds_dir.exists():
         return "Error: seeds not initialized. Run 'seeds init' first."
 
     jsonl_path = seeds_dir / JSONL_FILE
     if jsonl_path.exists():
         return (
-            f"Error: no database, but {jsonl_path} is present.\n"
-            "Run 'seeds import' to rehydrate it (the fresh-clone path -- the "
-            "database is gitignored, the JSONL is tracked)."
+            f"Error: no seed files in {seed_files_dir(seeds_dir)}, but "
+            f"{jsonl_path} is present.\n"
+            "This project has not been converted to the seed-file store yet. "
+            "Run 'seeds convert'."
         )
     return "Error: seeds not initialized. Run 'seeds init' first."
 
 
 class Context:
-    """CLI context object holding database connection."""
+    """CLI context object holding the seed-file store."""
 
     def __init__(self) -> None:
-        self.db: Database | None = None
+        self.store: Store | None = None
 
-    def get_db(self, bootstrap: bool = False) -> Database:
-        """Get database, initializing if needed.
+    def get_store(self) -> Store:
+        """The store for the nearest ``.seeds`` directory.
 
-        By default, exits with an error when the DB file is absent (seeds not
-        initialized). Pass ``bootstrap=True`` to bypass that guard and return
-        the (uninitialized) ``Database`` so an import caller can create the
-        schema and recover the prefix from JSONL itself — the fresh-clone
-        rehydration path, where ``.seeds/seeds.jsonl`` exists but the gitignored
-        DB does not. The caller is responsible for actually bootstrapping
-        (e.g. ``import_from_jsonl(db, bootstrap=True)``).
+        Exits with an error naming the right recovery when there is no store
+        to read -- see :func:`_uninitialized_error`.
         """
-        if self.db is None:
-            self.db = Database()
-            if not bootstrap and not self.db.is_initialized():
-                click.echo(_uninitialized_error(self.db.path), err=True)
+        if self.store is None:
+            seeds_dir = find_seeds_dir() or Path.cwd() / SEEDS_DIR
+            store = Store(seeds_dir)
+            if not store.is_initialized():
+                click.echo(_uninitialized_error(seeds_dir), err=True)
                 sys.exit(1)
-        return self.db
+            self.store = store
+        return self.store
 
-    def ensure_init(self) -> Database:
-        """Ensure database is initialized, error if not."""
-        return self.get_db()
+    def ensure_init(self) -> Store:
+        """Ensure the store exists, error if not."""
+        return self.get_store()
 
 
 pass_context = click.make_pass_decorator(Context, ensure=True)
 
 
 def _validate_id_refs(
-    db: Database, texts: list[str | None], allow_unknown: bool
+    store: Store, texts: list[str | None], allow_unknown: bool
 ) -> None:
     """Verify every project-prefixed token in ``texts`` names something real.
 
@@ -108,7 +111,7 @@ def _validate_id_refs(
     an ID that never existed. Each ``<prefix>-…`` token is a candidate, checked
     in turn against:
 
-    1. **seed IDs** — the database;
+    1. **seed IDs** — the store;
     2. **bead IDs** — the sibling ``.beads/`` export, since beads share the
        project prefix and recording bead lineage in a seed is a supported
        workflow, not a hallucination (projects without beads are unaffected;
@@ -122,7 +125,7 @@ def _validate_id_refs(
     """
     if allow_unknown:
         return
-    prefix = db.get_prefix()
+    prefix = store.get_prefix()
     candidates: set[str] = set()
     for text in texts:
         if not text:
@@ -130,11 +133,11 @@ def _validate_id_refs(
         candidates.update(find_id_ref_candidates(text, prefix))
     if not candidates:
         return
-    bead_ids = load_bead_ids(db.path.parent)
+    bead_ids = load_bead_ids(store.seeds_dir)
     unknown = sorted(
         ref
         for ref in candidates
-        if db.get_seed(ref) is None
+        if not store.exists(ref)
         and ref not in bead_ids
         and not is_allowlisted_prose(ref, prefix)
     )
@@ -183,7 +186,7 @@ class GuardCopy(NamedTuple):
     """A ready-to-paste command that discards the body on purpose."""
 
 
-def _guard_content_replacement(seed: Seed, copy: GuardCopy) -> None:
+def _guard_content_replacement(record: SeedRecord, copy: GuardCopy) -> None:
     """Refuse a wholesale body replacement that would discard accumulated thinking.
 
     ``-c`` sits one keystroke from ``-a`` and replaces the whole body without
@@ -202,24 +205,24 @@ def _guard_content_replacement(seed: Seed, copy: GuardCopy) -> None:
     arrives in ``copy``. See :class:`GuardCopy` for why that is mandatory
     rather than defaulted.
     """
-    if not seed.content.strip() or not seed.has_been_edited():
+    if not record.body.strip() or not has_been_edited(record):
         return
 
-    first_line = seed.content.strip().splitlines()[0]
+    first_line = record.body.strip().splitlines()[0]
     if len(first_line) > 72:
         first_line = first_line[:69] + "..."
 
     click.echo(
-        f"Error: {seed.id} {copy.reason} -- {copy.subject} "
-        f"would discard {len(seed.content)} characters of deliberation.",
+        f"Error: {record.id} {copy.reason} -- {copy.subject} "
+        f"would discard {len(record.body)} characters of deliberation.",
         err=True,
     )
     click.echo(f"  Would discard: {first_line}", err=True)
     click.echo(f"  Add to it instead:      {copy.append_cmd}", err=True)
     click.echo(f"  Discard it on purpose:  {copy.replace_cmd}", err=True)
     click.echo(
-        "  --replace does not erase anything: the old body survives in git "
-        "history (.seeds/seeds.jsonl) and needs separate scrubbing.",
+        "  --replace does not erase anything: the old body survives in the "
+        "seed file's git history and needs separate scrubbing.",
         err=True,
     )
     sys.exit(1)
@@ -328,12 +331,14 @@ def _resolve_content(content: str | None, content_file: str | None) -> str | Non
     return content
 
 
-def _apply_tag_edits(seed: Seed, add: Sequence[str], remove: Sequence[str]) -> str:
+def _apply_tag_edits(
+    record: SeedRecord, add: Sequence[str], remove: Sequence[str]
+) -> str:
     """Add/remove individual tags in place; return a report of what happened.
 
     Removals run first and additions append to the tail, so tags the command
     did not name keep their authored positions -- re-sorting would churn the
-    ``.seeds/seeds.jsonl`` diff of every touched seed for no reason.
+    diff of every touched seed file for no reason.
 
     Naming a tag the seed does not carry (or one it already has) is a silent
     no-op, per the locked decision on this command: with an agent driving a
@@ -343,15 +348,15 @@ def _apply_tag_edits(seed: Seed, add: Sequence[str], remove: Sequence[str]) -> s
     to_add = _clean_tags(add)
     to_remove = _clean_tags(remove)
 
-    removed = sum(1 for t in to_remove if t in seed.tags)
+    removed = sum(1 for t in to_remove if t in record.tags)
     if to_remove:
         drop = set(to_remove)
-        seed.tags = [t for t in seed.tags if t not in drop]
+        record.tags = [t for t in record.tags if t not in drop]
 
     added = 0
     for tag in to_add:
-        if tag not in seed.tags:
-            seed.tags.append(tag)
+        if tag not in record.tags:
+            record.tags.append(tag)
             added += 1
 
     return f"Tags: {added} added, {removed} removed"
@@ -391,22 +396,26 @@ def main(ctx: click.Context) -> None:
 def init(prefix: str | None) -> None:
     """Initialize seeds in the current directory."""
     seeds_dir = Path.cwd() / SEEDS_DIR
+    store = Store(seeds_dir)
     if seeds_dir.exists():
         # The directory existing is not the same as the project being usable.
-        # Only the database settles that, and it is the gitignored half.
-        if Database().is_initialized():
+        # The seed-file store settles that.
+        if store.is_initialized():
             click.echo(f"seeds already initialized in {seeds_dir}")
             return
         jsonl_path = seeds_dir / JSONL_FILE
         if jsonl_path.exists():
             click.echo(
-                f"{seeds_dir} exists but holds no database, and "
+                f"{seeds_dir} exists but holds no seed files, and "
                 f"{jsonl_path.name} is present."
             )
-            click.echo("Run 'seeds import' to rehydrate it.")
+            click.echo(
+                "This project has not been converted to the seed-file store "
+                "yet. Run 'seeds convert'."
+            )
             return
-        # An empty .seeds/ with nothing to rehydrate from: carry on and
-        # initialize, rather than refusing over a bare directory.
+        # An empty .seeds/ with nothing to convert: carry on and initialize,
+        # rather than refusing over a bare directory.
 
     if prefix is None:
         derived = sanitize_prefix(Path.cwd().name)
@@ -431,11 +440,11 @@ def init(prefix: str | None) -> None:
             sys.exit(1)
         prefix = sanitized
 
-    db = Database()
-    db.init(prefix=prefix)
+    store.files_dir.mkdir(parents=True, exist_ok=True)
+    store.set_prefix(prefix)
     click.echo(f"Initialized seeds in {seeds_dir}")
     click.echo(f"  Project prefix: {prefix}")
-    click.echo("  .seeds/.gitignore created (SQLite ignored, JSONL tracked)")
+    click.echo(f"  Seed files live in {store.files_dir}/ and are tracked by git")
     click.echo("Run 'seeds jot \"Your first idea\"' to capture a thought.")
 
 
@@ -470,33 +479,32 @@ def create(
     allow_unknown_refs: bool,
 ) -> None:
     """Create a new seed."""
-    db = ctx.get_db()
+    store = ctx.get_store()
 
     # Generate ID (child ID if parent specified)
     if parent_id:
         # Verify parent exists
-        parent = db.get_seed(parent_id)
-        if parent is None:
+        if not store.exists(parent_id):
             click.echo(f"Error: Parent seed '{parent_id}' not found.", err=True)
             sys.exit(1)
-        seed_id = db.get_next_child_id(parent_id)
+        seed_id = store.next_child_id(parent_id)
     else:
-        seed_id = db.next_id(seed_text=title)
+        seed_id = store.next_id(seed_text=title)
 
-    _validate_id_refs(db, [title, content], allow_unknown_refs)
+    _validate_id_refs(store, [title, content], allow_unknown_refs)
 
     # Parse tags
     tag_list = [t.strip() for t in tags.split(",")] if tags else []
 
-    seed = Seed(
-        id=seed_id,
-        title=title,
-        content=content,
-        seed_type=seed_type,
-        tags=tag_list,
+    store.create(
+        new_record(
+            seed_id,
+            title,
+            body=content,
+            seed_type=seed_type,
+            tags=tag_list,
+        )
     )
-
-    db.create_seed(seed)
     click.echo(f"Created seed: {seed_id}")
     click.echo(f"  Title: {title}")
     if parent_id:
@@ -511,12 +519,10 @@ def jot(ctx: Context, thought: str) -> None:
 
     THOUGHT is the idea to capture (becomes the title).
     """
-    db = ctx.get_db()
+    store = ctx.get_store()
 
-    seed_id = db.next_id(seed_text=thought)
-    seed = Seed(id=seed_id, title=thought)
-
-    db.create_seed(seed)
+    seed_id = store.next_id(seed_text=thought)
+    store.create(new_record(seed_id, thought))
     click.echo(f"{seed_id}: {thought}")
 
 
@@ -524,20 +530,22 @@ def jot(ctx: Context, thought: str) -> None:
 SEED_STATUSES = [s.value for s in SeedStatus]
 
 
-def format_seed_line(seed: Seed, db: Database) -> str:
+STATUS_ICONS = {
+    SeedStatus.CAPTURED: "○",
+    SeedStatus.EXPLORING: "◐",
+    SeedStatus.DEFERRED: "◌",
+    SeedStatus.RESOLVED: "●",
+    SeedStatus.ABANDONED: "✗",
+}
+
+
+def format_seed_line(record: SeedRecord, store: Store) -> str:
     """Format a seed for list output."""
-    status_icon = {
-        SeedStatus.CAPTURED: "○",
-        SeedStatus.EXPLORING: "◐",
-        SeedStatus.DEFERRED: "◌",
-        SeedStatus.RESOLVED: "●",
-        SeedStatus.ABANDONED: "✗",
-    }.get(seed.status, "?")
+    status_icon = STATUS_ICONS.get(record.status, "?")
+    blocked = " [BLOCKED]" if store.is_blocked(record.id) else ""
+    tags = f" [{', '.join(record.tags)}]" if record.tags else ""
 
-    blocked = " [BLOCKED]" if db.is_blocked(seed.id) else ""
-    tags = f" [{', '.join(seed.tags)}]" if seed.tags else ""
-
-    return f"{status_icon} {seed.id}: {seed.title}{blocked}{tags}"
+    return f"{status_icon} {record.id}: {record.title}{blocked}{tags}"
 
 
 @main.command("list")
@@ -579,7 +587,7 @@ def list_seeds(
     sort_by: str,
 ) -> None:
     """List seeds with optional filters."""
-    db = ctx.get_db()
+    store = ctx.get_store()
 
     status_enum = SeedStatus(status) if status else None
 
@@ -591,7 +599,7 @@ def list_seeds(
             click.echo(f"Error: {exc}", err=True)
             sys.exit(1)
 
-    seeds = db.list_seeds(
+    records = store.list_seeds(
         status=status_enum,
         seed_type=seed_type,
         tag=tag,
@@ -600,12 +608,12 @@ def list_seeds(
         sort_by=sort_by,
     )
 
-    if not seeds:
+    if not records:
         click.echo("No seeds found.")
         return
 
-    for seed in seeds:
-        click.echo(format_seed_line(seed, db))
+    for record in records:
+        click.echo(format_seed_line(record, store))
 
 
 @main.command()
@@ -627,7 +635,7 @@ def recent(ctx: Context, since_value: str, include_all: bool) -> None:
     Thin alias for ``seeds list --since=<value> --sort=updated`` with a
     default window of 7 days.
     """
-    db = ctx.get_db()
+    store = ctx.get_store()
 
     try:
         since_dt = parse_since(since_value)
@@ -635,147 +643,88 @@ def recent(ctx: Context, since_value: str, include_all: bool) -> None:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
-    seeds = db.list_seeds(
+    records = store.list_seeds(
         since=since_dt,
         sort_by="updated",
         include_terminal=include_all,
     )
 
-    if not seeds:
+    if not records:
         click.echo(f"No seeds updated since {since_value}.")
         return
 
-    for seed in seeds:
-        click.echo(format_seed_line(seed, db))
+    for record in records:
+        click.echo(format_seed_line(record, store))
 
 
 def format_seed_detail(
-    seed: Seed, db: Database, include_questions: bool = False
+    record: SeedRecord,
+    store: Store,
+    include_questions: bool = False,
+    full: bool = False,
 ) -> str:
-    """Format seed details as a string."""
+    """Format seed details as a string.
+
+    The body is rendered *selectively* by default: text inside a superseded
+    scope is dropped, while the retired heading and its marker line stay, so a
+    reader sees that something was retired and why. ``full=True`` prints
+    everything. Nothing is ever removed from the file to achieve this — the
+    render is what is selective (docs/storage-format.md §7).
+    """
     lines = []
 
     # Header
-    lines.append(f"{seed.id}: {seed.title}")
-    lines.append(f"  Status: {seed.status.value}")
-    lines.append(f"  Type: {seed.seed_type}")
+    lines.append(f"{record.id}: {record.title}")
+    lines.append(f"  Status: {record.status.value}")
+    lines.append(f"  Type: {record.seed_type}")
 
-    if seed.resolution:
-        lines.append(f"  Resolution: {seed.resolution}")
+    if record.resolution:
+        lines.append(f"  Resolution: {record.resolution}")
 
-    if seed.tags:
-        lines.append(f"  Tags: {', '.join(seed.tags)}")
+    if record.tags:
+        lines.append(f"  Tags: {', '.join(record.tags)}")
 
-    if seed.parent_id:
-        lines.append(f"  Parent: {seed.parent_id}")
+    if record.parent:
+        lines.append(f"  Parent: {record.parent}")
 
     # Check if blocked
-    if db.is_blocked(seed.id):
+    if store.is_blocked(record.id):
         lines.append("  [BLOCKED by unresolved children]")
 
     # Show children
-    children = db.get_children(seed.id)
+    children = store.get_children(record.id)
     if children:
         lines.append(f"  Children: {len(children)}")
         for child in children:
-            status_mark = "●" if child.is_terminal() else "○"
+            status_mark = "●" if is_terminal(child) else "○"
             lines.append(f"    {status_mark} {child.id}: {child.title}")
 
-    # Show related (via relationships table)
-    relates_to = db.get_relationships(
-        seed.id, rel_type=RelationType.RELATES_TO, direction="outbound"
-    )
-    if relates_to:
-        related_ids = [r.target_id for r in relates_to]
+    # Show related (both ends of every relates-to edge are in this file)
+    related_ids = relates_to(record)
+    if related_ids:
         lines.append(f"  Related to: {', '.join(related_ids)}")
 
     # Content
-    if seed.content:
+    body = render_body(record.body, full=full).rstrip("\n")
+    if body:
         lines.append("")
         lines.append("Content:")
-        lines.append(seed.content)
+        lines.append(body)
 
     # Questions (question-seeds linked via 'questions' relationship)
     if include_questions:
-        question_seeds = db.get_questions_for_seed(seed.id)
+        question_seeds = store.questions_for(record.id)
         if question_seeds:
             lines.append("")
             lines.append("Questions:")
             for qs in question_seeds:
-                status_mark = "●" if qs.is_terminal() else "○"
+                status_mark = "●" if is_terminal(qs) else "○"
                 lines.append(f"  {status_mark} {qs.id}: {qs.title}")
-                if qs.content:
-                    lines.append(f"    → {qs.content}")
+                if qs.body.strip():
+                    body = render_body(qs.body, full=full).rstrip("\n")
+                    lines.append(f"    → {body}")
 
     return "\n".join(lines)
-
-
-@main.command()
-@click.argument("text")
-@click.option("--limit", type=int, default=5, show_default=True, help="Max results")
-@click.option(
-    "--open-only",
-    is_flag=True,
-    help="Restrict to non-terminal seeds (default includes resolved/abandoned)",
-)
-@click.option(
-    "--json",
-    "as_json",
-    is_flag=True,
-    help="Emit compact JSON for agent piping (pipe through jq to read it)",
-)
-@pass_context
-def suggest(
-    ctx: Context, text: str, limit: int, open_only: bool, as_json: bool
-) -> None:
-    """Find existing seeds related to natural-language TEXT.
-
-    Purpose-built dedup query for the transcript-incorporation workflow:
-    given a candidate item, answer 'does a seed about this already exist?'
-    Includes resolved/abandoned seeds by default — the question is about
-    deliberation history, not just actionable seeds.
-    """
-    db = ctx.get_db()
-    results = db.suggest(text, limit=limit, open_only=open_only)
-
-    if as_json:
-        import json as _json
-
-        payload = [
-            {
-                "id": r.seed.id,
-                "title": r.seed.title,
-                "status": r.seed.status.value,
-                "tags": r.seed.tags,
-                "snippet": r.snippet,
-                "score": round(r.score, 4),
-            }
-            for r in results
-        ]
-        # Compact, not pretty: this output exists to be piped into an agent,
-        # and indentation is tokens the model pays for. `separators` matters
-        # too — dropping `indent` alone still leaves ", " and ": " padding.
-        # Humans: pipe through `jq`. (seeds-d773)
-        click.echo(_json.dumps(payload, separators=(",", ":")))
-        return
-
-    if not results:
-        click.echo(f"No seeds matched '{text}'.")
-        return
-
-    status_icon = {
-        SeedStatus.CAPTURED: "○",
-        SeedStatus.EXPLORING: "◐",
-        SeedStatus.DEFERRED: "◌",
-        SeedStatus.RESOLVED: "●",
-        SeedStatus.ABANDONED: "✗",
-    }
-    for r in results:
-        icon = status_icon.get(r.seed.status, "?")
-        tags = f" [{', '.join(r.seed.tags)}]" if r.seed.tags else ""
-        click.echo(f"{icon} {r.seed.id}: {r.seed.title}{tags}")
-        if r.snippet:
-            click.echo(f"    …{r.snippet}…")
 
 
 @main.command()
@@ -783,30 +732,51 @@ def suggest(
 @click.option("--all", "include_all", is_flag=True, help="Include resolved/abandoned")
 @pass_context
 def search(ctx: Context, query: str, include_all: bool) -> None:
-    """Full-text search across seeds and questions.
+    """Search seed files with ripgrep.
 
-    QUERY is an FTS5 search string. Supports:
-      - Simple words: seeds search deliberation
-      - Phrases: seeds search '"agent reasoning"'
-      - Prefix: seeds search 'delib*'
-      - Boolean: seeds search 'agent OR sweep'
+    QUERY is a ripgrep regular expression, matched case-insensitively over the
+    whole seed file -- body, title and the rest of the frontmatter. Resolved
+    and abandoned seeds are excluded unless --all is passed, and that filter is
+    part of the ripgrep pass rather than a scan afterwards.
+
+      - Simple words:  seeds search deliberation
+      - Phrases:       seeds search 'agent reasoning'
+      - Alternation:   seeds search 'agent|sweep'
+      - Anchors, classes, and the rest of the regex vocabulary all work.
+
+    This replaced an FTS5 index, and the difference worth knowing is that there
+    is no stemmer: 'merging' no longer finds 'merge'. What FTS uniquely
+    provided was ranking, not recall -- measured on a real query, grep returned
+    72 hits to FTS's 77 and found one FTS missed.
     """
-    db = ctx.get_db()
+    store = ctx.get_store()
 
-    results = db.search(query, include_terminal=include_all)
+    try:
+        results = store.search(query, include_terminal=include_all)
+    except StoreError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
 
     if not results:
         click.echo(f"No seeds matching '{query}'.")
         return
 
     click.echo(f"Found {len(results)} seed(s):")
-    for seed in results:
-        click.echo(format_seed_line(seed, db))
+    for record in results:
+        click.echo(format_seed_line(record, store))
 
 
 @main.command()
 @click.argument("seed_id")
 @click.option("--questions", "-q", is_flag=True, help="Include attached questions")
+@click.option(
+    "--full",
+    is_flag=True,
+    help=(
+        "Print superseded text too. By default a superseded scope's text is "
+        "dropped and only its heading and marker line are shown."
+    ),
+)
 @click.option(
     "--output-file",
     "-o",
@@ -814,20 +784,27 @@ def search(ctx: Context, query: str, include_all: bool) -> None:
     help="Write to temp file, print path (for Claude Code)",
 )
 @pass_context
-def show(ctx: Context, seed_id: str, questions: bool, output_file: bool) -> None:
+def show(
+    ctx: Context, seed_id: str, questions: bool, full: bool, output_file: bool
+) -> None:
     """Show detailed information about a seed.
+
+    The body renders LIVE content: text inside a superseded scope is dropped,
+    while the retired heading and its marker line stay, so the reader can see
+    that a position was moved past and why. --full prints everything. Nothing
+    is removed from the file either way (docs/storage-format.md §7).
 
     Use --output-file to write output to a temp file and print the path.
     This works around Claude Code CLI terminal truncation issues.
     """
-    db = ctx.get_db()
+    store = ctx.get_store()
 
-    seed = db.get_seed(seed_id)
-    if seed is None:
+    record = store.get(seed_id)
+    if record is None:
         click.echo(f"Error: Seed '{seed_id}' not found.", err=True)
         sys.exit(1)
 
-    output = format_seed_detail(seed, db, include_questions=questions)
+    output = format_seed_detail(record, store, include_questions=questions, full=full)
 
     if output_file:
         import tempfile
@@ -845,73 +822,71 @@ def show(ctx: Context, seed_id: str, questions: bool, output_file: bool) -> None
 @pass_context
 def ready(ctx: Context) -> None:
     """Show captured seeds ready to explore."""
-    db = ctx.get_db()
+    store = ctx.get_store()
 
-    seeds = db.list_seeds(status=SeedStatus.CAPTURED)
+    records = store.list_seeds(status=SeedStatus.CAPTURED)
 
-    if not seeds:
+    if not records:
         click.echo("No captured seeds ready to explore.")
         return
 
     click.echo("Ready to explore:")
-    for seed in seeds:
-        click.echo(format_seed_line(seed, db))
+    for record in records:
+        click.echo(format_seed_line(record, store))
 
 
 @main.command()
 @pass_context
 def deferred(ctx: Context) -> None:
     """Show deferred seeds (backlog)."""
-    db = ctx.get_db()
+    store = ctx.get_store()
 
-    seeds = db.list_seeds(status=SeedStatus.DEFERRED)
+    records = store.list_seeds(status=SeedStatus.DEFERRED)
 
-    if not seeds:
+    if not records:
         click.echo("No deferred seeds.")
         return
 
     click.echo("Deferred (backlog):")
-    for seed in seeds:
-        click.echo(format_seed_line(seed, db))
+    for record in records:
+        click.echo(format_seed_line(record, store))
 
 
 @main.command()
 @pass_context
 def blocked(ctx: Context) -> None:
     """Show seeds blocked by unresolved children or questions."""
-    db = ctx.get_db()
+    store = ctx.get_store()
 
-    seeds = db.get_blocked_seeds()
+    records = store.blocked()
 
-    if not seeds:
+    if not records:
         click.echo("No blocked seeds.")
         return
 
     click.echo("Blocked seeds:")
-    for seed in seeds:
-        click.echo(f"  {seed.id}: {seed.title}")
+    for record in records:
+        click.echo(f"  {record.id}: {record.title}")
         # Show unresolved children
-        children = db.get_children(seed.id)
-        for child in children:
-            if not child.is_terminal():
+        for child in store.get_children(record.id):
+            if not is_terminal(child):
                 click.echo(f"    ○ {child.id}: {child.title}")
         # Show unresolved question-seeds
-        question_seeds = db.get_questions_for_seed(seed.id)
-        for qs in question_seeds:
-            if not qs.is_terminal():
+        for qs in store.questions_for(record.id):
+            if not is_terminal(qs):
                 click.echo(f"    ? {qs.id}: {qs.title}")
 
 
 # --- Status change commands ---
 
 
-def get_seed_or_exit(db: Database, seed_id: str) -> Seed:
+def get_seed_or_exit(store: Store, seed_id: str) -> SeedRecord:
     """Get a seed by ID or exit with error."""
-    seed = db.get_seed(seed_id)
-    if seed is None:
+    record = store.get(seed_id)
+    if record is None:
         click.echo(f"Error: Seed '{seed_id}' not found.", err=True)
         sys.exit(1)
-    return seed
+    return record
 
 
 @main.command()
@@ -919,14 +894,17 @@ def get_seed_or_exit(db: Database, seed_id: str) -> Seed:
 @pass_context
 def explore(ctx: Context, seed_id: str) -> None:
     """Start exploring a seed (captured → exploring)."""
-    db = ctx.get_db()
-    seed = get_seed_or_exit(db, seed_id)
+    store = ctx.get_store()
+    record = get_seed_or_exit(store, seed_id)
 
-    if seed.status != SeedStatus.CAPTURED:
-        click.echo(f"Warning: Seed is {seed.status.value}, not captured.")
+    if record.status != SeedStatus.CAPTURED:
+        click.echo(f"Warning: Seed is {record.status.value}, not captured.")
 
-    seed.status = SeedStatus.EXPLORING
-    db.update_seed(seed)
+    record.status = SeedStatus.EXPLORING
+    # Leaving a terminal state clears the stamp: resolved_at is forbidden
+    # unless the status is terminal (docs/storage-format.md §3).
+    record.resolved_at = None
+    store.save(record)
     click.echo(f"◐ {seed_id}: Now exploring")
 
 
@@ -935,11 +913,12 @@ def explore(ctx: Context, seed_id: str) -> None:
 @pass_context
 def defer(ctx: Context, seed_id: str) -> None:
     """Defer a seed to the backlog."""
-    db = ctx.get_db()
-    seed = get_seed_or_exit(db, seed_id)
+    store = ctx.get_store()
+    record = get_seed_or_exit(store, seed_id)
 
-    seed.status = SeedStatus.DEFERRED
-    db.update_seed(seed)
+    record.status = SeedStatus.DEFERRED
+    record.resolved_at = None
+    store.save(record)
     click.echo(f"◌ {seed_id}: Deferred to backlog")
 
 
@@ -949,16 +928,14 @@ def defer(ctx: Context, seed_id: str) -> None:
 @pass_context
 def resolve(ctx: Context, seed_id: str, resolution: str | None) -> None:
     """Mark a seed as resolved."""
-    db = ctx.get_db()
-    seed = get_seed_or_exit(db, seed_id)
+    store = ctx.get_store()
+    record = get_seed_or_exit(store, seed_id)
 
-    from seeds.models import now_utc
-
-    seed.status = SeedStatus.RESOLVED
-    seed.resolved_at = now_utc()
+    record.status = SeedStatus.RESOLVED
+    record.resolved_at = now_utc()
     if resolution:
-        seed.resolution = resolution
-    db.update_seed(seed)
+        record.resolution = resolution
+    store.save(record)
     click.echo(f"● {seed_id}: Resolved")
     if resolution:
         click.echo(f"  Resolution: {resolution}")
@@ -970,16 +947,14 @@ def resolve(ctx: Context, seed_id: str, resolution: str | None) -> None:
 @pass_context
 def abandon(ctx: Context, seed_id: str, reason: str | None) -> None:
     """Abandon a seed (decided not to pursue)."""
-    db = ctx.get_db()
-    seed = get_seed_or_exit(db, seed_id)
+    store = ctx.get_store()
+    record = get_seed_or_exit(store, seed_id)
 
-    from seeds.models import now_utc
-
-    seed.status = SeedStatus.ABANDONED
-    seed.resolved_at = now_utc()
+    record.status = SeedStatus.ABANDONED
+    record.resolved_at = now_utc()
     if reason:
-        seed.resolution = reason
-    db.update_seed(seed)
+        record.resolution = reason
+    store.save(record)
     click.echo(f"✗ {seed_id}: Abandoned")
     if reason:
         click.echo(f"  Reason: {reason}")
@@ -1026,14 +1001,13 @@ def trellis(
     seed in the file; a resolution naming the file on the seed), tags the seed
     'trellis', and resolves it (unless --no-resolve is passed).
     """
-    from seeds.models import now_utc
     from seeds.trellis import append_to_managed_section
 
-    db = ctx.get_db()
-    seed = get_seed_or_exit(db, seed_id)
+    store = ctx.get_store()
+    record = get_seed_or_exit(store, seed_id)
 
     date_str = now_utc().strftime("%Y-%m-%d")
-    bullet = f"- {principle} — {seed.id}, {date_str}"
+    bullet = f"- {principle} — {record.id}, {date_str}"
 
     # Forward-provenance: file -> seed (the bullet cites the seed id).
     path = Path(target_file)
@@ -1044,23 +1018,23 @@ def trellis(
     )
 
     # Back-provenance: seed -> file (the resolution names the file + date).
-    seed.resolution = (
+    record.resolution = (
         f"Recorded as a trellis in `{target_file}` on {date_str}: {principle}"
     )
-    if "trellis" not in seed.tags:
-        seed.tags.append("trellis")
+    if "trellis" not in record.tags:
+        record.tags.append("trellis")
 
     if not no_resolve:
-        seed.status = SeedStatus.RESOLVED
-        seed.resolved_at = now_utc()
+        record.status = SeedStatus.RESOLVED
+        record.resolved_at = now_utc()
 
-    db.update_seed(seed)
+    store.save(record)
 
     # Echo both ends of the link: the appended bullet and the new resolution.
-    click.echo(f"● {seed.id}: trellis → {target_file}")
+    click.echo(f"● {record.id}: trellis → {target_file}")
     click.echo(f"  {bullet}")
-    click.echo(f"  Resolution: {seed.resolution}")
-    click.echo(f"  Status: {seed.status.value}")
+    click.echo(f"  Resolution: {record.resolution}")
+    click.echo(f"  Status: {record.status.value}")
 
 
 @main.command()
@@ -1159,62 +1133,65 @@ def update(
 
     --type accepts any string, matching `seeds create`. Before this existed a
     seed's type was write-once and the only way to change it was hand-editing
-    the JSONL -- which is how the malformed records in seed seeds-1x6b got in.
+    the store -- which is how the malformed records in seed seeds-1x6b got in.
     """
-    db = ctx.get_db()
-    seed = get_seed_or_exit(db, seed_id)
+    store = ctx.get_store()
+    record = get_seed_or_exit(store, seed_id)
 
     content = _resolve_content(content, content_file)
 
-    _validate_id_refs(db, [title, content, append_text], allow_unknown_refs)
+    _validate_id_refs(store, [title, content, append_text], allow_unknown_refs)
     _reject_ambiguous_tag_flags(tags, add_tags, remove_tags)
 
     if content is not None and not replace:
         _guard_content_replacement(
-            seed,
+            record,
             GuardCopy(
                 reason="has been edited since it was created",
                 subject="--content",
-                append_cmd=f'seeds update {seed.id} --append "..."',
-                replace_cmd=f'seeds update {seed.id} --content "..." --replace',
+                append_cmd=f'seeds update {record.id} --append "..."',
+                replace_cmd=f'seeds update {record.id} --content "..." --replace',
             ),
         )
 
     changed = False
 
     if title:
-        seed.title = title
+        record.title = title
         changed = True
 
     if content is not None:
-        seed.content = content
+        record.body = content
         changed = True
 
     if append_text:
-        seed.content = f"{seed.content}\n\n{append_text}".strip()
+        # rstrip first: a body read off disk ends with the file's trailing
+        # newline, and concatenating onto it would separate the append with
+        # three newlines instead of the one blank line an append means.
+        record.body = f"{record.body.rstrip()}\n\n{append_text}".strip()
         changed = True
 
     if tags is not None:
-        seed.tags = [t.strip() for t in tags.split(",")] if tags else []
+        record.tags = [t.strip() for t in tags.split(",")] if tags else []
         changed = True
 
     if seed_type:
-        seed.seed_type = seed_type
+        record.seed_type = seed_type
         changed = True
 
     tag_report = None
     if add_tags or remove_tags:
-        before = list(seed.tags)
-        tag_report = _apply_tag_edits(seed, add_tags, remove_tags)
+        before = list(record.tags)
+        tag_report = _apply_tag_edits(record, add_tags, remove_tags)
         # A request that matched nothing leaves updated_at alone, so it cannot
         # arm the --content guard on a seed nobody actually edited.
-        changed = changed or seed.tags != before
+        changed = changed or record.tags != before
 
     if not changed:
         click.echo(tag_report or "No changes specified.")
         return
 
-    db.update_seed(seed)
+    store.save(record)
     click.echo(f"Updated {seed_id}")
     if tag_report:
         click.echo(f"  {tag_report}")
@@ -1233,23 +1210,22 @@ def ask(ctx: Context, question_text: str, seed_id: str) -> None:
     Creates a question-type seed and links it via a 'questions' relationship.
     QUESTION_TEXT is the question to ask.
     """
-    db = ctx.get_db()
+    store = ctx.get_store()
 
     # Verify seed exists
-    seed = db.get_seed(seed_id)
-    if seed is None:
+    if not store.exists(seed_id):
         click.echo(f"Error: Seed '{seed_id}' not found.", err=True)
         sys.exit(1)
 
-    question_id = db.next_id()
-    question_seed = Seed(
-        id=question_id,
-        title=question_text,
-        seed_type=SeedType.QUESTION.value,
+    question_id = store.next_id(seed_text=question_text)
+    store.create(
+        new_record(
+            question_id,
+            question_text,
+            seed_type=SeedType.QUESTION.value,
+        )
     )
-
-    db.create_seed(question_seed)
-    db.create_relationship(question_id, seed_id, RelationType.QUESTIONS)
+    store.link(question_id, seed_id, RelationType.QUESTIONS)
     click.echo(f"○ {question_id}: {question_text}")
     click.echo(f"  Attached to: {seed_id}")
 
@@ -1271,8 +1247,8 @@ def ask(ctx: Context, question_text: str, seed_id: str) -> None:
     is_flag=True,
     help=(
         "Let a re-answer discard the previous answer wholesale. For a "
-        "deliberate correction only -- the old answer stays in git history "
-        "(.seeds/seeds.jsonl) and needs separate scrubbing."
+        "deliberate correction only -- the old answer stays in the seed "
+        "file's git history and needs separate scrubbing."
     ),
 )
 @pass_context
@@ -1301,11 +1277,9 @@ def answer(
         )
         sys.exit(1)
 
-    db = ctx.get_db()
+    store = ctx.get_store()
 
-    from seeds.models import now_utc
-
-    question_seed = db.get_seed(question_id)
+    question_seed = store.get(question_id)
     if question_seed is None:
         click.echo(f"Error: Question '{question_id}' not found.", err=True)
         sys.exit(1)
@@ -1322,12 +1296,12 @@ def answer(
         )
 
     if append:
-        question_seed.content = f"{question_seed.content}\n\n{answer_text}".strip()
+        question_seed.body = f"{question_seed.body.rstrip()}\n\n{answer_text}".strip()
     else:
-        question_seed.content = answer_text
+        question_seed.body = answer_text
     question_seed.status = SeedStatus.RESOLVED
     question_seed.resolved_at = now_utc()
-    db.update_seed(question_seed)
+    store.save(question_seed)
     click.echo(f"● {question_id}: {question_seed.title}")
     click.echo(f"  → {answer_text}")
 
@@ -1337,14 +1311,14 @@ def answer(
 @pass_context
 def questions(ctx: Context, seed_id: str | None) -> None:
     """List open questions (question-type seeds that are unresolved)."""
-    db = ctx.get_db()
+    store = ctx.get_store()
 
     if seed_id:
         # Get question-seeds for a specific seed
-        qs = [q for q in db.get_questions_for_seed(seed_id) if not q.is_terminal()]
+        qs = [q for q in store.questions_for(seed_id) if not is_terminal(q)]
     else:
         # Get all unresolved question-type seeds
-        qs = db.list_seeds(seed_type=SeedType.QUESTION.value, include_terminal=False)
+        qs = store.list_seeds(seed_type=SeedType.QUESTION.value, include_terminal=False)
 
     if not qs:
         click.echo("No open questions.")
@@ -1353,14 +1327,12 @@ def questions(ctx: Context, seed_id: str | None) -> None:
     click.echo("Open questions:")
     for q in qs:
         # Find which seed this question is about
-        rels = db.get_relationships(
-            q.id, rel_type=RelationType.QUESTIONS, direction="outbound"
-        )
-        if rels:
-            target_seed = db.get_seed(rels[0].target_id)
-            target_title = target_seed.title if target_seed else "?"
+        asked_about = questions_asked_about(q)
+        if asked_about:
+            target = store.get(asked_about[0])
+            target_title = target.title if target else "?"
             click.echo(f"  ○ {q.id}: {q.title}")
-            click.echo(f"    └─ {rels[0].target_id}: {target_title}")
+            click.echo(f"    └─ {asked_about[0]}: {target_title}")
         else:
             click.echo(f"  ○ {q.id}: {q.title}")
 
@@ -1388,25 +1360,28 @@ RELATIONSHIP_TYPES = [RelationType.RELATES_TO.value, RelationType.QUESTIONS.valu
 @pass_context
 def link(ctx: Context, seed_id: str, related_id: str, rel_type: str) -> None:
     """Link a seed to another seed via typed relationship."""
-    db = ctx.get_db()
+    store = ctx.get_store()
 
-    get_seed_or_exit(db, seed_id)
-    related = db.get_seed(related_id)
-    if related is None:
+    record = get_seed_or_exit(store, seed_id)
+    if not store.exists(related_id):
         click.echo(f"Error: Seed '{related_id}' not found.", err=True)
         sys.exit(1)
 
     rel_type_enum = RelationType(rel_type)
 
     # Check if already linked
-    existing = db.get_relationships(
-        seed_id, rel_type=rel_type_enum, direction="outbound"
-    )
-    if any(r.target_id == related_id for r in existing):
+    if any(
+        edge.target_id == related_id and edge.rel_type is rel_type_enum
+        for edge in record.relationships
+    ):
         click.echo(f"Already linked: {seed_id} ↔ {related_id}")
         return
 
-    db.create_relationship(seed_id, related_id, rel_type_enum)
+    try:
+        store.link(seed_id, related_id, rel_type_enum)
+    except StoreError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
 
     if rel_type_enum == RelationType.RELATES_TO:
         click.echo(f"Linked: {seed_id} ↔ {related_id}")
@@ -1419,29 +1394,23 @@ def link(ctx: Context, seed_id: str, related_id: str, rel_type: str) -> None:
 @pass_context
 def tree(ctx: Context, seed_id: str) -> None:
     """Show hierarchy and relationships for a seed."""
-    db = ctx.get_db()
+    store = ctx.get_store()
 
-    seed = get_seed_or_exit(db, seed_id)
+    record = get_seed_or_exit(store, seed_id)
 
-    def print_seed(s: Seed, indent: int = 0) -> None:
+    def print_seed(s: SeedRecord, indent: int = 0) -> None:
         prefix = "  " * indent
-        status_icon = {
-            SeedStatus.CAPTURED: "○",
-            SeedStatus.EXPLORING: "◐",
-            SeedStatus.DEFERRED: "◌",
-            SeedStatus.RESOLVED: "●",
-            SeedStatus.ABANDONED: "✗",
-        }.get(s.status, "?")
+        status_icon = STATUS_ICONS.get(s.status, "?")
         click.echo(f"{prefix}{status_icon} {s.id}: {s.title}")
 
     # Show parent chain
-    parent_chain: list[Seed] = []
-    current_id = seed.parent_id
+    parent_chain: list[SeedRecord] = []
+    current_id = record.parent
     while current_id:
-        parent = db.get_seed(current_id)
+        parent = store.get(current_id)
         if parent:
             parent_chain.insert(0, parent)
-            current_id = parent.parent_id
+            current_id = parent.parent
         else:
             break
 
@@ -1453,324 +1422,30 @@ def tree(ctx: Context, seed_id: str) -> None:
     # Show current seed
     click.echo()
     click.echo("Current:")
-    print_seed(seed, 0)
+    print_seed(record, 0)
 
     # Show children
-    children = db.get_children(seed_id)
+    children = store.get_children(seed_id)
     if children:
         click.echo()
         click.echo("Children:")
         for child in children:
             print_seed(child, 1)
             # Show grandchildren
-            grandchildren = db.get_children(child.id)
-            for gc in grandchildren:
+            for gc in store.get_children(child.id):
                 print_seed(gc, 2)
 
-    # Show related (via relationships)
-    relates_to = db.get_relationships(
-        seed_id, rel_type=RelationType.RELATES_TO, direction="outbound"
-    )
-    if relates_to:
+    # Show related (both ends of every edge live in this seed's own file)
+    related_ids = relates_to(record)
+    if related_ids:
         click.echo()
         click.echo("Related:")
-        for rel in relates_to:
-            related = db.get_seed(rel.target_id)
+        for related_id in related_ids:
+            related = store.get(related_id)
             if related:
                 click.echo(f"  ↔ {related.id}: {related.title}")
             else:
-                click.echo(f"  ↔ {rel.target_id}: (not found)")
-
-
-# --- Sync and export commands ---
-
-
-def _format_refusal(rec: RefusedRecord) -> str:
-    """One refusal line: where the record is, which one it is, what is wrong."""
-    where = f"record {rec.record_number}"
-    if rec.seed_id:
-        where += f" ({rec.seed_id})"
-    return f"  {where}: {rec.field} — {rec.reason}"
-
-
-def _format_import_summary(result: ImportResult) -> str:
-    """Created/updated/skipped summary shared by import and sync.
-
-    Stays a single unchanged line when nothing was refused. Refusals are the
-    exception, and each one names the record's position in the file, its ID,
-    the field that failed and why — everything needed to go fix it without a
-    second command.
-
-    The import is best-effort (seed seeds-hao9): everything else in the file
-    landed, so this report is the ONLY trace a refused record leaves. Both
-    callers exit non-zero when it is non-empty, because a refusal that scrolls
-    past unnoticed is the defect being fixed, not a cosmetic one.
-    """
-    summary = (
-        f"Imported: {result.created} created, "
-        f"{result.updated} updated, {result.skipped} skipped"
-    )
-    if not result.refused:
-        return summary
-
-    lines = [f"{summary}, {len(result.refused)} refused"]
-    lines.append(
-        "Refused (DB left unchanged by these records; everything else landed):"
-    )
-    lines.extend(_format_refusal(rec) for rec in result.refused)
-    return "\n".join(lines)
-
-
-@main.command("import")
-@click.argument("path", required=False)
-@pass_context
-def import_(ctx: Context, path: str | None) -> None:
-    """Rehydrate seeds from JSONL (last-write-wins upsert).
-
-    PATH defaults to .seeds/seeds.jsonl. Pass '-' to read JSONL from stdin.
-    Uses the bootstrap seam so it works on a fresh clone with no DB: the
-    schema is created and the project prefix recovered from the JSONL itself.
-    DB rows fresher than their JSONL record are never clobbered, and DB-only
-    seeds (absent from the JSONL) are never deleted.
-
-    Best-effort: a record seeds cannot read is refused and named, and every
-    other record in the file still imports. Exits non-zero when anything was
-    refused, so a script notices.
-    """
-    from seeds.export import import_from_jsonl, import_lines
-
-    db = ctx.get_db(bootstrap=True)
-
-    reported_path = (
-        Path(path) if path not in (None, "-") else db.path.parent / JSONL_FILE
-    )
-    if path == "-":
-        result = import_lines(db, sys.stdin, bootstrap=True)
-    else:
-        input_path = Path(path) if path is not None else None
-        result = import_from_jsonl(db, input_path, bootstrap=True)
-
-    click.echo(_format_import_summary(result))
-    if result.refused:
-        click.echo(
-            f"Fix the records named above in "
-            f"{Path('<stdin>') if path == '-' else reported_path} and re-run.",
-            err=True,
-        )
-        sys.exit(1)
-
-
-def _format_divergence_error(exc: DivergentExportError) -> str:
-    """Render a refused export so the operator can act on it without guessing.
-
-    Names every affected seed, shows what each side holds, and states the two
-    ways forward. seeds did not write the on-disk content, so it cannot say
-    where it came from — it can only say that overwriting would destroy it.
-
-    A content divergence still has to be resolved by a person: only they can
-    say what the merged body should read. What this must NOT do is make them
-    pay for that twice — the remediation used to print a ``-c '<on-disk
-    text><newer text>'`` template, which asked for the entire rebuilt body as
-    one shell word. For the agent that actually runs this, that is the whole
-    seed read into context and re-emitted verbatim, where a truncation or a
-    mangled quote corrupts deliberation silently, and the seeds most likely to
-    diverge are the long ones. So the rebuild is still theirs; the delivery
-    points at ``--content-file``/``--content -`` (seeds-lf5) instead.
-    """
-    path = exc.output_path
-    lines = [
-        f"Error: refusing to overwrite {path} — it holds content the database "
-        "has never seen.",
-        "",
-    ]
-    for div in exc.divergences:
-        lines.append(f"  {div.seed_id}: {div.detail}")
-        if div.on_disk:
-            lines.append(f"      on disk: {div.on_disk}")
-        if div.in_db:
-            lines.append(f"      in db:   {div.in_db}")
-    lines.extend(
-        [
-            "",
-            "Nothing was written; the file is byte-for-byte unchanged.",
-            "",
-            "seeds did not write that content, so it cannot tell you where it "
-            "came from —",
-            "a resolved git conflict, a hand edit, or a peer's export are the "
-            "usual sources.",
-            "",
-            "To keep it, fold it into the database, then re-run the sync:",
-            "  # see what arrived",
-            f"  git diff -- {path}",
-        ]
-    )
-    kinds = {div.kind for div in exc.divergences}
-    if "missing" in kinds:
-        lines.append("  # absorb the records the database is missing")
-        lines.append(f"  seeds import {path}")
-    if "content" in kinds:
-        lines.append("  # compare, then rebuild the body: the on-disk text FIRST,")
-        lines.append("  # then whatever the database added after it")
-        lines.append("  seeds show <id>")
-        lines.append("  # hand the rebuilt body over as a file -- not through argv")
-        lines.append("  seeds update <id> --replace --content-file <file>")
-        lines.append("  # or on stdin: ... | seeds update <id> --replace --content -")
-    if "unreadable" in kinds:
-        lines.append("  # unreadable lines have to be repaired in the file by hand")
-    lines.extend(
-        [
-            "",
-            "Only if that content is genuinely disposable — this destroys it:",
-            "  seeds sync --allow-divergence",
-        ]
-    )
-    return "\n".join(lines)
-
-
-def _detect_mixed_stage(db: Database) -> list[str] | None:
-    """Staged paths outside .seeds/ that a flush would fold into their commit.
-
-    Returns ``None`` when the guard should NOT fire: no git commit context
-    (see :func:`seeds.gitstage.staged_paths_outside`), nothing staged outside
-    .seeds/, or the flush would not change seeds.jsonl at all — a clean sync
-    has nothing pending to bake into anything. A non-empty list names the
-    staged paths and means the guard fires.
-
-    Order matters for cost, not correctness: the git query runs first only
-    because it's the cheaper way to rule the common case out (no commit in
-    progress at all).
-    """
-    from seeds.export import export_would_change
-    from seeds.gitstage import staged_paths_outside
-
-    staged = staged_paths_outside(SEEDS_DIR)
-    if not staged:
-        return None
-    if not export_would_change(db):
-        return None
-    return staged
-
-
-def _format_mixed_stage_error(staged_paths: list[str]) -> str:
-    """Render the mixed-stage refusal (seeds-ww8) with the approved wording.
-
-    The first two lines are the exact text Ryan approved verbatim. Everything
-    after names the staged paths that triggered the refusal and restates
-    --allow-mixed-stage, so the escape hatch is discoverable at the moment
-    it's needed — the bead's own point is that noisy pre-commit output makes a
-    bare warning easy to miss, which is exactly why this exits non-zero
-    instead of just printing a line.
-    """
-    lines = [
-        "seeds: refusing to flush -- the export would modify .seeds/seeds.jsonl "
-        "but staged code is unrelated.",
-        "Resolve with EITHER `git commit` the code first then re-run, OR `git "
-        "stash --keep-index` and create a dedicated `chore(seeds): ...` commit.",
-        "",
-        "Staged outside .seeds/:",
-    ]
-    lines.extend(f"  {path}" for path in staged_paths)
-    lines.extend(
-        [
-            "",
-            "Only for an intentional combined seed+code commit:",
-            "  seeds sync --allow-mixed-stage",
-        ]
-    )
-    return "\n".join(lines)
-
-
-@main.command()
-@click.option("--flush-only", is_flag=True, help="Only export to JSONL (no git ops)")
-@click.option(
-    "--allow-divergence",
-    is_flag=True,
-    help=(
-        "Overwrite .seeds/seeds.jsonl even when it holds records the database "
-        "cannot account for. Destroys that content. Off by default; use only "
-        "after reading what the refusal names."
-    ),
-)
-@click.option(
-    "--allow-mixed-stage",
-    is_flag=True,
-    help=(
-        "Flush even when other, unrelated files are staged for commit. Off by "
-        "default: a flush that changes .seeds/seeds.jsonl while code is staged "
-        "would otherwise bake pending seed-database changes into whatever "
-        "commit fires next. Use only for an intentional combined seed+code "
-        "commit."
-    ),
-)
-@pass_context
-def sync(
-    ctx: Context, flush_only: bool, allow_divergence: bool, allow_mixed_stage: bool
-) -> None:
-    """Round-trip seeds with JSONL: import (LWW) then export.
-
-    The import half rehydrates any seeds present in .seeds/seeds.jsonl but
-    missing or staler in the DB, without clobbering fresher DB rows or
-    deleting DB-only seeds. Pass --flush-only to skip the import and export
-    only (the original behaviour).
-
-    The export half rewrites the file wholesale, so it first checks that the
-    database accounts for everything already on disk and refuses rather than
-    destroying a record it has never seen — a resolved merge conflict, a hand
-    edit, or a peer's seed that no import absorbed. --flush-only gets the same
-    check: skipping the import does not make the overwrite any less
-    destructive. Pass --allow-divergence to overwrite anyway.
-
-    Before writing, also refuses when the flush would change .seeds/seeds.jsonl
-    while other files are staged for commit outside .seeds/ — that combination
-    means a `git commit` right now would fold pending seed-database changes
-    into whatever commit fires next, regardless of topic (seeds-ww8). This
-    only fires inside a git working tree with something staged, and only when
-    the flush would actually change the file; a seed-only commit or a no-op
-    sync is never blocked. Pass --allow-mixed-stage to flush anyway.
-
-    The import half is best-effort: a record it cannot read is refused and
-    named, and every other record still imports. Sync then finishes normally
-    and exits non-zero at the END, rather than stopping at the refusal — a bad
-    record must not also block the flush, or one unreadable line silently
-    freezes the whole round-trip, which is the failure this policy replaced
-    (seed seeds-hao9).
-    """
-    db = ctx.get_db()
-
-    from seeds.export import export_to_jsonl, import_from_jsonl
-
-    refused: list[RefusedRecord] = []
-    if not flush_only:
-        import_result = import_from_jsonl(db)
-        refused = import_result.refused
-        click.echo(_format_import_summary(import_result))
-
-    if not allow_mixed_stage:
-        contaminating_paths = _detect_mixed_stage(db)
-        if contaminating_paths is not None:
-            click.echo(_format_mixed_stage_error(contaminating_paths), err=True)
-            sys.exit(1)
-
-    try:
-        output_path = export_to_jsonl(db, allow_divergence=allow_divergence)
-    except DivergentExportError as exc:
-        click.echo(_format_divergence_error(exc), err=True)
-        sys.exit(1)
-
-    # Count seeds
-    seeds = db.list_seeds(include_terminal=True)
-    click.echo(f"Exported {len(seeds)} seeds to {output_path}")
-
-    # Deferred to the very end so the flush still happens, but still non-zero
-    # so a script or hook driving `seeds sync` cannot mistake a lossy round
-    # trip for a clean one.
-    if refused:
-        click.echo(
-            f"{len(refused)} record(s) were refused on import (listed above) and "
-            "are not in the database.",
-            err=True,
-        )
-        sys.exit(1)
+                click.echo(f"  ↔ {related_id}: (not found)")
 
 
 @main.command()
@@ -1802,10 +1477,17 @@ def prime(no_digest: bool, digest_limit: int) -> None:
         # CRITICAL: No output, exit 0 to enable hook coexistence
         return
 
-    db = Database()
+    store = Store(seeds_dir)
+    if not store.is_initialized():
+        # A .seeds/ that holds no seed files yet -- an unconverted project, or
+        # one mid-init. The static workflow text is still the right answer;
+        # only the digest needs a store.
+        click.echo(get_prime_output(include_digest=False))
+        return
+
     click.echo(
         get_prime_output(
-            db=db,
+            store=store,
             include_digest=not no_digest,
             digest_limit=digest_limit,
         )
@@ -1815,7 +1497,13 @@ def prime(no_digest: bool, digest_limit: int) -> None:
 @main.command()
 @pass_context
 def doctor(ctx: Context) -> None:
-    """Check for issues with seeds installation and data."""
+    """Check for issues with the seeds installation and store.
+
+    Reports what is true of this project: the store is there, the prefix is
+    recorded, the seeds read, no edge names a missing seed, the type
+    vocabulary has not drifted. It does NOT verify the files themselves --
+    that is `seeds check`, which reads the same tree and gates on it.
+    """
     passed = 0
     warnings = 0
     failed = 0
@@ -1838,29 +1526,25 @@ def doctor(ctx: Context) -> None:
     click.echo("seeds Doctor")
     click.echo()
 
-    # Check database
-    click.echo("Database:")
-    db = ctx.get_db()
-    if db.is_initialized():
-        check_pass("Database exists")
-    else:
-        check_fail("Database", "Not initialized")
-        return
+    # Check the store
+    click.echo("Store:")
+    store = ctx.get_store()
+    check_pass(f"Seed files at {store.files_dir}")
 
     # Report project prefix and nudge the user when the default doesn't
     # match the project directory name.
     click.echo()
     click.echo("Project:")
-    current_prefix = db.get_prefix()
-    if db.has_prefix_configured():
+    current_prefix = store.get_prefix()
+    if store.has_prefix_configured():
         check_pass(f"Prefix configured: {current_prefix!r}")
     else:
         check_warn(
             "Prefix",
             f"Using fallback {current_prefix!r}; run 'seeds rename-prefix "
-            "<name>' to set one explicitly",
+            f"<name>' to record one in {store.seeds_dir / CONFIG_FILE}",
         )
-    derived = sanitize_prefix(db.path.parent.parent.name)
+    derived = sanitize_prefix(store.seeds_dir.parent.name)
     if current_prefix == DEFAULT_PREFIX and derived and derived != DEFAULT_PREFIX:
         check_warn(
             "Prefix",
@@ -1868,38 +1552,53 @@ def doctor(ctx: Context) -> None:
             f"run 'seeds rename-prefix {derived}' to customize",
         )
 
-    # Check seeds
+    # Check seeds. A strict read refuses the whole corpus on one bad file, so
+    # this is also where an unreadable seed surfaces -- and it names the file,
+    # which is the only thing doctor could usefully say about it.
     click.echo()
     click.echo("Seeds:")
-    all_seeds = db.list_seeds(include_terminal=True)
+    try:
+        all_seeds = store.all()
+    except (SeedFileError, StoreError) as exc:
+        check_fail("Seeds", str(exc))
+        click.echo("      Run 'seeds check' to see every bad file at once.")
+        click.echo()
+        click.echo("─" * 40)
+        click.echo(f"✓ {passed} passed  ✗ {failed} failed")
+        sys.exit(1)
+
     check_pass(f"{len(all_seeds)} seeds total")
 
-    open_seeds = db.list_seeds(include_terminal=False)
+    open_seeds = store.list_seeds(include_terminal=False)
     if open_seeds:
         check_pass(f"{len(open_seeds)} open seeds")
     else:
         check_warn("Seeds", "No open seeds")
 
-    # Check for orphaned relationships
+    # Edges whose far end names a file that is not there. The foreign key
+    # SQLite used to enforce is a file-existence test now, so it has to be
+    # asked rather than assumed.
     click.echo()
     click.echo("Relationships:")
-    conn = db._get_conn()
-    all_rels = conn.execute("SELECT * FROM relationships").fetchall()
-    orphaned_rels = []
-    for rel in all_rels:
-        if (
-            db.get_seed(rel["source_id"]) is None
-            or db.get_seed(rel["target_id"]) is None
-        ):
-            orphaned_rels.append(rel)
-
-    if not orphaned_rels:
-        check_pass(f"{len(all_rels)} relationships, no orphans")
+    edges = 0
+    dangling: list[str] = []
+    for record in all_seeds:
+        for edge in record.relationships:
+            edges += 1
+            if not store.exists(edge.target_id):
+                dangling.append(f"{record.id} -> {edge.target_id}")
+    if not dangling:
+        check_pass(f"{edges} edges, none dangling")
     else:
-        check_warn("Relationships", f"{len(orphaned_rels)} orphaned relationships")
+        check_fail("Relationships", f"{len(dangling)} edge(s) name a missing seed")
+        for pair in dangling[:10]:
+            click.echo(f"      {pair}")
+        if len(dangling) > 10:
+            click.echo(f"      ... and {len(dangling) - 10} more")
+        click.echo("      Run 'seeds check' for the full picture.")
 
     # Check for open question-seeds
-    open_questions = db.list_seeds(
+    open_questions = store.list_seeds(
         seed_type=SeedType.QUESTION.value, include_terminal=False
     )
     if open_questions:
@@ -1909,9 +1608,9 @@ def doctor(ctx: Context) -> None:
     # only thing that surfaces a typo, so it is load-bearing rather than
     # cosmetic. A non-standard type is legal, hence a warning and not a failure.
     nonstandard: dict[str, int] = {}
-    for seed in db.list_seeds(include_terminal=True):
-        if seed.seed_type not in SEED_TYPES:
-            nonstandard[seed.seed_type] = nonstandard.get(seed.seed_type, 0) + 1
+    for record in all_seeds:
+        if record.seed_type not in SEED_TYPES:
+            nonstandard[record.seed_type] = nonstandard.get(record.seed_type, 0) + 1
     if nonstandard:
         click.echo()
         click.echo("Vocabulary:")
@@ -1927,76 +1626,17 @@ def doctor(ctx: Context) -> None:
         # "right" type would presume a typo doctor cannot actually detect.
         click.echo("      Remap one with: seeds retype --from <type> --to <type>")
 
-    # Check JSONL sync
+    # There is no second store to disagree with, so there is nothing here to
+    # check. `seeds doctor` used to end with a JSONL/DB comparison, and every
+    # question it answered -- do the two agree, will an import refuse a record
+    # -- stopped existing with the store that made them possible. Leaving those
+    # checks in place, passing, would be the exact "green while broken" shape
+    # they were written to prevent: a check that cannot fail is not a check.
+    # File-level plausibility now lives in `seeds check`, which reads the same
+    # files this does and gates on them.
     click.echo()
-    click.echo("Sync:")
-    jsonl_path = Path.cwd() / SEEDS_DIR / JSONL_FILE
-    if jsonl_path.exists():
-        check_pass("JSONL file exists")
-
-        # Compare CONTENT, not mtimes. The mtime check this replaces was not
-        # merely a weak proxy -- it was anti-correlated with the failure it
-        # should have caught. A failed import leaves the JSONL holding records
-        # the database lacks, i.e. JSONL newer than DB, which is exactly what
-        # it certified as "up to date". That is how Mark Danese's sync stayed
-        # broken for five weeks with doctor reporting all clear (seeds-1x6b).
-        #
-        # The ID comparison alone was ALSO a proxy, and blind to the other half
-        # of the same failure: an edit to a record's body in the file leaves
-        # every ID matching, so doctor passed while `seeds sync` refused on
-        # every run, permanently. find_divergence is the check the export
-        # itself refuses on, so asking it here makes doctor agree with sync by
-        # construction rather than by a second, weaker approximation.
-        from seeds.export import find_divergence, find_refused_records, read_record_ids
-
-        # Records the import will not apply. Since the import became
-        # best-effort (seed seeds-hao9) these no longer stop a sync, so nothing
-        # else makes noise about them: `seeds sync` reports them once and the
-        # line scrolls away, and every one of doctor's other checks can be
-        # perfectly green while the file quietly loses records on every round
-        # trip. This is the check that keeps that from reading as clean.
-        refused_records = find_refused_records(jsonl_path)
-        if refused_records:
-            check_fail(
-                "Records", f"{len(refused_records)} record(s) the import will refuse"
-            )
-            for rec in refused_records[:10]:
-                click.echo(f"    {_format_refusal(rec)}")
-            if len(refused_records) > 10:
-                click.echo(f"      ... and {len(refused_records) - 10} more")
-        else:
-            check_pass("All records readable")
-
-        disk_ids = read_record_ids(jsonl_path)
-        db_ids = {seed.id for seed in db.list_seeds(include_terminal=True)}
-        missing_from_db = sorted(disk_ids - db_ids)
-        missing_from_disk = sorted(db_ids - disk_ids)
-        divergences = find_divergence(db, jsonl_path)
-        # 'missing' divergences are the same records as missing_from_db; report
-        # each fact once, under the heading that explains what to do about it.
-        content_divergences = [d for d in divergences if d.kind != "missing"]
-
-        if not missing_from_db and not missing_from_disk and not content_divergences:
-            check_pass("JSONL and DB agree")
-        else:
-            check_fail("Sync", "JSONL and DB disagree")
-            if missing_from_db:
-                click.echo(f"      {len(missing_from_db)} records in JSONL not in DB")
-                click.echo(f"        {', '.join(missing_from_db[:10])}")
-            if missing_from_disk:
-                click.echo(f"      {len(missing_from_disk)} seeds in DB not in JSONL")
-                click.echo(f"        {', '.join(missing_from_disk[:10])}")
-            if content_divergences:
-                click.echo(
-                    f"      {len(content_divergences)} records whose on-disk body "
-                    "the database has not seen"
-                )
-                click.echo(
-                    f"        {', '.join(d.seed_id for d in content_divergences[:10])}"
-                )
-            click.echo("      Run 'seeds sync'; if it fails, fix the records it names.")
-    else:
-        check_warn("Sync", "No JSONL file, run 'seeds sync'")
+    click.echo("Verification:")
+    click.echo("  → Run 'seeds check' to verify the files themselves.")
 
     # Summary
     click.echo()
@@ -2223,14 +1863,18 @@ def retype(ctx: Context, from_type: str, to_type: str, dry_run: bool) -> None:
     Note the same openness applies to --to: a typo there is not catchable
     either. Use --dry-run first, and `seeds doctor` lists non-standard types
     afterwards.
+
+    There is no backup step. The seed files are tracked, so `git diff` shows
+    exactly what changed and `git checkout` undoes it -- which is a better
+    backup than the sidecar copy this used to take of a gitignored database.
     """
-    db = ctx.get_db()
+    store = ctx.get_store()
 
     if from_type == to_type:
         click.echo(f"--from and --to are both {from_type!r}; nothing to do.")
         return
 
-    ids = db.retype_seeds(from_type, to_type, dry_run=dry_run)
+    ids = store.retype(from_type, to_type, dry_run=dry_run)
 
     if not ids:
         click.echo(f"No seeds have type {from_type!r}; nothing to do.")
@@ -2238,12 +1882,6 @@ def retype(ctx: Context, from_type: str, to_type: str, dry_run: bool) -> None:
 
     if dry_run:
         click.echo("DRY RUN — no changes will be written.")
-    else:
-        import shutil
-
-        backup_path = db.path.with_suffix(".db.bak")
-        shutil.copy2(db.path, backup_path)
-        click.echo(f"Backed up database to {backup_path}")
 
     verb = "Would retype" if dry_run else "Retyped"
     click.echo(f"{verb} {len(ids)} seed(s) from {from_type!r} to {to_type!r}:")
@@ -2252,12 +1890,6 @@ def retype(ctx: Context, from_type: str, to_type: str, dry_run: bool) -> None:
 
     if dry_run:
         click.echo("\nRun without --dry-run to apply.")
-        return
-
-    from seeds.export import export_to_jsonl
-
-    output_path = export_to_jsonl(db)
-    click.echo(f"\nRe-exported to {output_path}")
 
 
 @main.command("rename-prefix")
@@ -2284,13 +1916,14 @@ def rename_prefix(
     """Rename the project prefix and rewrite all seed IDs to use it.
 
     NEW_PREFIX must start with a lowercase letter and contain only lowercase
-    letters, digits, and hyphens. The current prefix is read from the database
-    config; all top-level IDs (and their children/relationships) using the old
-    prefix are rewritten in place. ID references inside seed bodies
-    (``title``, ``content``, ``resolution``) are also rewritten unless
+    letters, digits, and hyphens. The current prefix is read from
+    ``.seeds/config.yaml``; all top-level IDs (and their children, and every
+    edge at both ends) using the old prefix are rewritten, and the seed files
+    are renamed to match. ID references inside seed bodies (``title``,
+    ``body``, ``resolution``) are also rewritten unless
     ``--no-rewrite-bodies`` is passed.
     """
-    db = ctx.get_db()
+    store = ctx.get_store()
 
     sanitized = sanitize_prefix(new_prefix)
     if not sanitized:
@@ -2304,30 +1937,24 @@ def rename_prefix(
     if sanitized != new_prefix:
         click.echo(f"Note: sanitized prefix to {sanitized!r}")
 
-    old_prefix = db.get_prefix()
+    old_prefix = store.get_prefix()
     if old_prefix == sanitized:
         click.echo(f"Prefix already set to {sanitized!r}; nothing to do.")
         return
 
     try:
-        id_map, body_changes = db.rename_prefix(
+        id_map, body_changes = store.rename_prefix(
             sanitized,
             old_prefix=old_prefix,
             rewrite_bodies=rewrite_bodies,
             dry_run=dry_run,
         )
-    except ValueError as exc:
+    except StoreError as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
     if dry_run:
         click.echo("DRY RUN — no changes will be written.")
-    elif id_map or body_changes:
-        import shutil
-
-        backup_path = db.path.with_suffix(".db.bak")
-        shutil.copy2(db.path, backup_path)
-        click.echo(f"Backed up database to {backup_path}")
 
     if id_map:
         verb = "Would rename" if dry_run else "Renamed"
@@ -2351,24 +1978,19 @@ def rename_prefix(
         click.echo("\nRun without --dry-run to apply.")
         return
 
-    from seeds.export import export_to_jsonl
-
-    # The only sanctioned bypass of the divergence guard. A prefix rename
-    # renumbers every ID at once, so every record on disk is "absent from the
-    # database" by construction — the guard would fire on all of them and say
-    # nothing the operator has not just been shown above, ID by ID. The
-    # divergence here is self-inflicted, already reported, and the database was
-    # backed up before the rename.
-    output_path = export_to_jsonl(db, allow_divergence=True)
-    click.echo(f"\nRe-exported to {output_path}")
+    if id_map:
+        click.echo(
+            f"\nRenamed {len(id_map)} file(s) under {store.files_dir}. "
+            "`git status` shows the renames; `seeds check` verifies them."
+        )
 
 
 @main.command("prefix")
 @pass_context
 def show_prefix(ctx: Context) -> None:
     """Show the current project prefix."""
-    db = ctx.get_db()
-    click.echo(db.get_prefix())
+    store = ctx.get_store()
+    click.echo(store.get_prefix())
 
 
 @main.group()

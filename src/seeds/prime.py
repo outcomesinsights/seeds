@@ -6,10 +6,11 @@ from collections import Counter
 from typing import TYPE_CHECKING
 
 from seeds.models import SeedStatus, SeedType
+from seeds.store import is_terminal
 
 if TYPE_CHECKING:
-    from seeds.db import Database
-    from seeds.models import Seed
+    from seeds.seedfile import SeedRecord
+    from seeds.store import Store
 
 
 PRIME_OUTPUT = """# seeds Workflow Context
@@ -21,8 +22,12 @@ PRIME_OUTPUT = """# seeds Workflow Context
 **CRITICAL**: Before saying "done" or "complete", you MUST run:
 
 ```
-[ ] seeds sync --flush-only    (export seeds to JSONL)
+[ ] seeds check                (verify the seed files you wrote)
 ```
+
+There is no export step. A seed IS its file at `.seeds/seeds/<id>.md`, written
+the moment the command returns — nothing is buffered and nothing needs
+flushing. Commit those files like any other source change.
 
 ## Core Rules
 - Use seeds to capture ideas, questions, and deliberation
@@ -64,8 +69,7 @@ Seeds should capture the **journey**, not just conclusions. When investigating:
 - `seeds deferred` - Review backlog
 - `seeds blocked` - Seeds with unresolved children
 - `seeds recent [--since=7d]` - Recently touched (any status)
-- `seeds suggest "<text>"` - Rank existing seeds by relevance to a candidate item
-- `seeds search '<fts5-query>'` - FTS5 keyword search
+- `seeds search '<regex>'` - ripgrep over the seed files (case-insensitive; no stemming, so search for the stem: `merg` finds both `merge` and `merging`)
 
 ### Creating
 - `seeds create --title="..." --type=idea --tags=foo,bar` - Full creation
@@ -85,8 +89,10 @@ Seeds should capture the **journey**, not just conclusions. When investigating:
 
 ### Viewing
 - `seeds list` - All non-terminal seeds
-- `seeds show <id>` - Detailed view
+- `seeds show <id>` - Detailed view; the body renders live content, with superseded text dropped and its heading + marker line kept
+- `seeds show <id> --full` - Detailed view including superseded text
 - `seeds tree <id>` - Hierarchy and relationships
+- `seeds export --json` - The whole corpus as JSONL on stdout (for grep/DuckDB)
 
 ### Displaying Seeds to User
 Claude Code CLI truncates bash output, so users can't see full seed content from `seeds show`.
@@ -102,20 +108,21 @@ Claude Code CLI truncates bash output, so users can't see full seed content from
 - `seeds link <id> --relates-to <other-id> --type=questions` - Typed relationship
 
 ### Session End
-- `seeds sync --flush-only` - Export to JSONL
+- `seeds check` - Verify the seed files; exits non-zero on a violation
 
 ### Project Prefix
-Every seed ID carries a project prefix (e.g., `myproj-7`). `seeds init`
-defaults the prefix to the project directory name; `seeds rename-prefix`
-changes it later.
+Every seed ID carries a project prefix (e.g., `myproj-7`), recorded in
+`.seeds/config.yaml`. `seeds init` defaults the prefix to the project
+directory name; `seeds rename-prefix` changes it later.
 
 - `seeds prefix` - Show the current project prefix
 - `seeds rename-prefix <new>` - Rewrite all IDs (including children +
-  relationships) and ID references inside seed bodies to use a new prefix
+  relationships), rename the seed files, and rewrite ID references inside
+  seed bodies to use a new prefix
 - `seeds rename-prefix <new> --dry-run` - Preview the rename without
   writing; lists ID renames and snippet pairs for each body reference
 - `seeds rename-prefix <new> --no-rewrite-bodies` - Skip rewriting ID
-  references inside title/content/resolution
+  references inside title/body/resolution
 """
 
 
@@ -128,15 +135,15 @@ _STATUS_ICONS = {
 }
 
 
-def _format_line(seed: Seed) -> str:
+def _format_line(record: SeedRecord) -> str:
     """Render a seed as a compact one-liner for the digest."""
-    icon = _STATUS_ICONS.get(seed.status, "?")
-    tags = f" [{', '.join(seed.tags)}]" if seed.tags else ""
-    return f"- {icon} {seed.id}: {seed.title}{tags}"
+    icon = _STATUS_ICONS.get(record.status, "?")
+    tags = f" [{', '.join(record.tags)}]" if record.tags else ""
+    return f"- {icon} {record.id}: {record.title}{tags}"
 
 
 def build_digest(
-    db: Database,
+    store: Store,
     *,
     limit_recent: int = 20,
     limit_tag_clusters: int = 15,
@@ -148,14 +155,14 @@ def build_digest(
     questions, and the tag-cluster shape of the project. Body content is
     intentionally omitted — agents can ``seeds show <id>`` for detail.
     """
-    all_seeds = db.list_seeds(include_terminal=True)
+    all_seeds = store.list_seeds(include_terminal=True)
     if not all_seeds:
         return (
             "\n## Current Seeds\n\n"
             '_Project is empty. Start with `seeds jot "first idea"`._\n'
         )
 
-    open_seeds = [s for s in all_seeds if not s.is_terminal()]
+    open_seeds = [s for s in all_seeds if not is_terminal(s)]
     status_counts = Counter(s.status for s in open_seeds)
 
     lines: list[str] = []
@@ -170,7 +177,7 @@ def build_digest(
     )
 
     # Recently updated (any status) — only show meaningful section if there's data
-    recent_seeds = db.list_seeds(include_terminal=True, sort_by="updated")[
+    recent_seeds = store.list_seeds(include_terminal=True, sort_by="updated")[
         :limit_recent
     ]
     if recent_seeds:
@@ -180,7 +187,7 @@ def build_digest(
             lines.append(_format_line(seed))
 
     # Active exploration
-    exploring = db.list_seeds(status=SeedStatus.EXPLORING)
+    exploring = store.list_seeds(status=SeedStatus.EXPLORING)
     if exploring:
         lines.append("")
         lines.append(f"### Active Exploration ({len(exploring)})")
@@ -188,7 +195,7 @@ def build_digest(
             lines.append(_format_line(seed))
 
     # Open questions (question-type, not terminal)
-    open_questions = db.list_seeds(
+    open_questions = store.list_seeds(
         seed_type=SeedType.QUESTION.value, include_terminal=False
     )
     if open_questions:
@@ -213,19 +220,19 @@ def build_digest(
 
 
 def get_prime_output(
-    db: Database | None = None,
+    store: Store | None = None,
     *,
     include_digest: bool = True,
     digest_limit: int = 20,
 ) -> str:
     """Get the prime output for AI context injection.
 
-    If ``db`` is supplied and ``include_digest`` is true, appends a digest
+    If ``store`` is supplied and ``include_digest`` is true, appends a digest
     of project state (counts, recent activity, exploration, questions, tag
     clusters) after the static workflow text. ``digest_limit`` caps the
     "Recently Updated" entries.
     """
     body = PRIME_OUTPUT.strip()
-    if db is None or not include_digest:
+    if store is None or not include_digest:
         return body
-    return body + "\n\n" + build_digest(db, limit_recent=digest_limit).lstrip("\n")
+    return body + "\n\n" + build_digest(store, limit_recent=digest_limit).lstrip("\n")

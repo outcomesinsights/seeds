@@ -46,7 +46,7 @@ import subprocess
 import sys
 
 from seeds.check import check_violations
-from seeds.db import find_seeds_dir
+from seeds.store import find_seeds_dir
 
 # The full three-tier run. --against-git is not optional here: without it,
 # `rm <seed-file>` is the de facto delete verb (the format has no delete verb

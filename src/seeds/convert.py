@@ -410,10 +410,12 @@ def _load_jsonl(jsonl_path: Path) -> tuple[dict[str, _Side], list[_Half]]:
                 raise ConversionError(
                     f"{jsonl_path}: line {lineno} is format_version "
                     f"{data.get('format_version')!r}, and the converter reads "
-                    "version 2 only. A v1 record has to be migrated first "
-                    "(`seeds import` turns its embedded questions into "
-                    "question-seeds with new ids, which is a migration and not "
-                    "a conversion)"
+                    "version 2 only. A v1 record has to be migrated first, and "
+                    "seeds no longer can: `seeds import` was the migration "
+                    "(it turned a record's embedded questions into "
+                    "question-seeds with new ids) and it went with the store "
+                    "it wrote into. Run `uvx seeds==0.6.1 import` against this "
+                    "file, then convert"
                 )
             seed_id = data.get("id")
             if not isinstance(seed_id, str) or not is_valid_id(seed_id):

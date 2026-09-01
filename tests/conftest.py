@@ -6,12 +6,8 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from seeds.db import Database
-from seeds.models import (
-    Seed,
-    SeedStatus,
-    SeedType,
-)
+from seeds.models import SeedStatus, SeedType
+from seeds.store import Store, new_record
 
 
 @pytest.fixture
@@ -22,24 +18,24 @@ def temp_dir():
 
 
 @pytest.fixture
-def db(temp_dir):
-    """Create an initialized test database."""
-    db_path = temp_dir / ".seeds" / "seeds.db"
-    database = Database(path=db_path)
-    database.init()
-    yield database
-    database.close()
+def store(temp_dir):
+    """An initialized, empty seed-file store in a temp directory."""
+    seeds_dir = temp_dir / ".seeds"
+    store = Store(seeds_dir)
+    store.files_dir.mkdir(parents=True, exist_ok=True)
+    store.set_prefix("seeds")
+    return store
 
 
 @pytest.fixture
-def sample_seed():
-    """Create a sample seed for testing."""
-    return Seed(
-        id="seed-test",
-        title="Test Seed",
-        content="This is test content",
+def sample_record():
+    """A sample seed record for testing."""
+    return new_record(
+        "seed-test",
+        "Test Seed",
+        body="This is test content",
         status=SeedStatus.CAPTURED,
-        seed_type=SeedType.IDEA,
+        seed_type=SeedType.IDEA.value,
         tags=["test", "sample"],
     )
 
