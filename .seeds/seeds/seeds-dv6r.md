@@ -4,7 +4,7 @@ title: Files-as-truth puts the seed store inside every repo tool's default scope
 status: captured
 type: concern
 created_at: 2026-09-01T05:23:43.302048+00:00
-updated_at: 2026-09-01T05:24:08.678446+00:00
+updated_at: 2026-09-01T14:32:08.669347+00:00
 tags:
   - storage
   - files-as-truth
@@ -53,3 +53,14 @@ Three specific costs, in increasing order of how quietly they bite:
 Moving data into the working tree buys legibility and merge behaviour, and it also enrols the data in every convention that applies to the tree. The plan costed the benefits precisely and did not enumerate the enrolment. Same family as the other gate defects recorded here: a check measuring something adjacent to what it claims to protect.
 
 Relates to seeds-4co.16, seeds-sdhc, seeds-fkb8.
+
+CORRECTION (2026-09-01, measured while building bead seeds-4co.16). The claim above — that a byte-canonicality check is "the POSITIVE assertion that catches 'some tool rewrote a seed' whatever the tool was" — is half wrong, and the motivating case falls in the wrong half.
+
+The check compares a file against render_seed_file(what the file NOW says): a render of itself. So it catches SERIALIZATION drift — an extra trailing newline, blank lines around the body, reordered frontmatter keys — and is blind to any rewrite of the body TEXT that leaves the layout canonical. ruff reformatting a Python code block inside a seed body produces a still-perfectly-canonical file; only the prose changed. Trimming trailing whitespace off a body line is the same shape. Both directions are now pinned by tests.
+
+So the defence needs THREE rules, not two, and two of them exist:
+- tool-config-includes-store — catches the tools we can NAME (shipped)
+- non-canonical-bytes — catches SERIALIZATION rewrites (shipped)
+- content-rewritten-without-a-timestamp-bump — catches a CONTENT rewrite that preserves layout (NOT built, filed as a bead)
+
+The third is the one that would actually have caught ruff. Its signature is 'body differs from its committed version while updated_at is unchanged', since every legitimate edit goes through the CLI and bumps the timestamp — which makes it git-comparison work belonging with check --against-git rather than the file-local smells tier.
