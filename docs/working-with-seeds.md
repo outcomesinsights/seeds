@@ -231,10 +231,10 @@ seeds list                                      # what's open
 seeds show seeds-a1b2                           # one seed in detail
 seeds tree                                      # hierarchy view
 seeds prime                                     # context for an AI agent
-seeds sync                                      # round trip: import, then export
-seeds sync --flush-only                         # export only, no import
-seeds import                                    # rebuild the DB from the JSONL
-seeds doctor                                    # check the DB and JSONL agree
+seeds search "<regex>"                          # ripgrep over the seed files
+seeds check                                     # verify the seed files
+seeds doctor                                    # store and installation health
+seeds export --json                             # the corpus as JSONL on stdout
 ```
 
 You will rarely type any of these yourself. That is fine.
@@ -360,30 +360,30 @@ may vary.
 
 ## Maintenance
 
-A few small habits keep the seed database healthy.
+A few small habits keep the seed store healthy.
 
-- **Sync at end of session.** `seeds sync --flush-only` writes the JSONL
-  export so the day's deliberation is git-trackable. Commit it. Plain `seeds
-  sync` round-trips — it imports the JSONL first, then exports — which is what
-  you want after pulling someone else's seeds.
-- **On a fresh clone, run `seeds import`.** The database is gitignored and the
-  JSONL is tracked, so a clone has the file and no database. That is the normal
-  state. `seeds import` rebuilds the database from the JSONL, recovering the
-  schema and the project prefix from the file itself.
-- **`seeds doctor` answers "is my sync actually healthy?"** It compares the
-  records in the JSONL against the database and names what each side is
-  missing, exiting non-zero when they disagree — so it can gate a pre-commit
-  or CI hook. Worth running when seeds seem to have gone missing.
-- **If a sync refuses, read what it names.** The export rewrites the JSONL
-  wholesale from the database, so it stops rather than destroy a record the
-  database has never seen — a merge conflict you resolved in the file, a hand
-  edit, or a peer's seed that no import absorbed. Fold the content in and
-  re-run: `seeds import` for a record the database lacks entirely, or — when
-  both sides hold a body — rebuild the merged body with the on-disk text
-  first, write it to a file, and pass it as
-  `seeds update <id> --replace --content-file <file>` rather than through the
-  shell. `--allow-divergence` skips the
-  check and destroys that content; it is not a shortcut past the message.
+- **Commit the seed files like code.** A seed IS its file at
+  `.seeds/seeds/<id>.md`, written the moment the command returns. There is no
+  export step and nothing to flush; `git add .seeds/seeds/` and commit the
+  day's deliberation with everything else.
+- **`seeds check` before you commit.** It verifies the files are *plausible*,
+  not merely parseable — a title that is a filesystem path, an edge written at
+  one end only, a timestamp ahead of the clock. It exits non-zero, so it can
+  gate a pre-commit or CI hook. `--smells` adds advisory findings that never
+  affect the exit code.
+- **`seeds doctor` answers "is my install and store healthy?"** The store is
+  there, the prefix is recorded, every seed reads, no edge names a missing
+  seed, the type vocabulary has not drifted. Worth running when seeds seem to
+  have gone missing.
+- **A merge conflict is an ordinary merge conflict.** One seed per file means
+  two people editing different seeds never collide at all, and two people
+  editing the same one collide in git, in the file, with the usual markers and
+  the usual tools. There is no second store to reconcile it against.
+- **On a project created before 0.7, run `seeds convert` once.** It reads the
+  union of the old SQLite database and the tracked JSONL and writes the tree
+  alongside them, touching neither. Keep `.seeds/seeds.jsonl` in the repository
+  afterwards: its git history is the only source for anything that happened
+  before the conversion.
 - **Triage `captured` seeds occasionally.** Once a week or so, ask the
   agent to walk the captured list and either promote, defer, or abandon
   each one. Things shouldn't sit in captured for months.

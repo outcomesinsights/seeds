@@ -64,10 +64,24 @@ seeds create -t "Sub-idea" --parent <id> # Create a child seed
 ```bash
 seeds list                               # List active seeds
 seeds show <id>                          # Show seed details with questions
+seeds show <id> --full                   # ...including superseded text
 seeds tree                               # Hierarchical view
 seeds ready                              # Seeds ready for attention
 seeds blocked                            # Seeds blocked by unresolved children
+seeds search "<regex>"                   # ripgrep over the seed files
 ```
+
+`seeds show` renders **live** content: text inside a superseded scope is
+dropped, while the retired heading and its `> [!SUPERSEDED]` marker line stay,
+so you can see that a position was moved past and why. `--full` prints
+everything. Nothing is removed from the file either way — the render is what is
+selective.
+
+`seeds search` is a ripgrep pass over `.seeds/seeds/`, case-insensitive, with
+the resolved/abandoned filter inline (`--all` includes them). The query is an
+ordinary regular expression, so hyphens, quotes and punctuation are literal.
+There is no stemmer, so search for the stem: `merg` finds both `merge` and
+`merging`.
 
 ### Evolve
 
@@ -103,7 +117,7 @@ sweeps them up:
 ```bash
 seeds retype --from ideea --to idea      # Clean up a typo
 seeds retype --from concern --to risk    # Or evolve the vocabulary
-seeds retype --from x --to y --dry-run   # Preview; backs up the DB when applied
+seeds retype --from x --to y --dry-run   # Preview before applying
 ```
 
 ### Trellis
@@ -126,35 +140,52 @@ seeds questions                          # List open questions
 seeds link <id1> <id2>                   # Create bidirectional relationship
 ```
 
-### Sync
+### Storage
 
-`.seeds/seeds.db` is gitignored; `.seeds/seeds.jsonl` is tracked. The JSONL is
-what travels between machines and through code review.
+**A seed is a file.** Each one lives at `.seeds/seeds/<id>.md` — YAML
+frontmatter, then a markdown body — and those files are tracked by git like any
+other source. The filename stem is the id verbatim, so `seeds show` is one path
+computation and one file read. The project prefix lives beside them in a tracked
+`.seeds/config.yaml`. The full normative description is
+[docs/storage-format.md](docs/storage-format.md).
+
+There is nothing to sync, export, or flush. A command writes the file before it
+returns; commit it like a code change.
 
 ```bash
-seeds sync                               # Round trip: import the JSONL, then export
-seeds sync --flush-only                  # Export only, no import
-seeds import                             # Rehydrate the database from the JSONL
-seeds import -                           # Read JSONL from stdin
-seeds doctor                             # Check DB and JSONL agree (exits non-zero if not)
+seeds check                              # Verify the files (exits non-zero on a violation)
+seeds check --smells                     # ...plus advisory findings that never gate
+seeds doctor                             # Installation and store health
+seeds export --json                      # The whole corpus as JSONL on stdout
 ```
 
-**On a fresh clone you have the JSONL and no database** — that is the normal
-state, not a broken one. Run `seeds import` to rebuild the database from it;
-the schema and the project prefix are both recovered from the file.
+For machine consumers, `seeds export --json` is a pipe rather than a tracked
+file — one JSON object per line, so a `grep` hit is a whole record and several
+repos' output concatenates into one stream:
 
-`seeds sync` refuses rather than overwrite a record on disk the database has
-never seen — a merge resolution, a hand edit, or a peer's seed. Read what it
-names and fold the content in; `--allow-divergence` skips the check and
-destroys that content.
+```bash
+seeds export --json | duckdb -c "SELECT status, count(*)
+  FROM read_json_auto('/dev/stdin') GROUP BY 1"
+```
 
-A record the import cannot read no longer stops the file. Each bad record is
-refused **individually** and named — its record number, id, failing field and
-reason — while every other record imports, and the command exits non-zero so a
-script notices. This matters because the old behaviour aborted where it stood:
-records above a bad line landed, records below it silently did not, and nothing
-said so. `seeds doctor` reports refusable records too, so the state is
-discoverable before an import is ever run.
+#### Converting a pre-0.7 project
+
+Projects created before 0.7 hold a gitignored `.seeds/seeds.db` and a tracked
+`.seeds/seeds.jsonl`. Run `seeds convert` once:
+
+```bash
+seeds convert                            # SQLite + JSONL -> .seeds/seeds/*.md
+```
+
+It reads the UNION of the two stores, per id and per field, and writes the tree
+alongside them without touching either — reverting the whole conversion is `rm
+-rf .seeds/seeds/`. Where the two stores genuinely disagree, the seed lands with
+git conflict markers for ordinary merge tooling, and the command exits non-zero
+until a human resolves it.
+
+`.seeds/seeds.jsonl` stops being written on conversion day but **must never be
+deleted or filtered out of the repository**: its git history is the only source
+for anything before a seed's `converted_at`.
 
 ### AI Context
 
