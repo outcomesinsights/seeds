@@ -1,4 +1,4 @@
-"""``seeds check`` — the violations tier.
+"""``seeds check`` — violations, smells, and the comparison against git.
 
 Under files-as-truth there is no second store, so nearly everything today's
 ``seeds doctor`` verifies — JSONL readable, JSONL and DB agreeing, no
@@ -17,13 +17,30 @@ foreign key, a transaction, a closed status column — into verification after
 the fact. This module is where those guarantees now live. A rule in the spec
 with no check here is enforced by nothing.
 
-Two tiers are planned; this module is the first.
+Three tiers live here now.
 
-* **Violations** (here) exit non-zero and block a commit. Each one is either a
-  file the reader would refuse, or a value that parses fine and is not
+* **Violations** (the default) exit non-zero and block a commit. Each one is
+  either a file the reader would refuse, or a value that parses fine and is not
   plausible.
-* **Smells** (``seeds check --smells``, bead ``seeds-4co.4``) report and never
-  fail: an empty body, a long unsuperseded body, a duplicated body.
+* **Smells** (``seeds check --smells``) report and never fail: an empty body, a
+  long unsuperseded body, a duplicated body. The tier exists because some
+  things worth noticing cannot support being a gate — a long body with no
+  ``[!SUPERSEDED]`` marker is a *candidate for attention*, never an error, and
+  naming the tier keeps discipline-shaped checks from being promoted into gates
+  they cannot carry. It is also all that survives of the designed-but-never-
+  built ``tend`` verb (@aguynamedryan, 2026-08-31: *"let's remove suggest/tend
+  for now … tend never really got used"*): with supersession marked at write
+  time by the agent that learned it, nothing editorial is left, only noticing.
+  **There is no ``tend`` verb and there is not to be one.**
+* **Against git** (``seeds check --against-git``) compares every field of every
+  seed with its value at the previous commit and flags one field rewritten
+  across a large fraction of the corpus. That is the ``seeds-wurl`` shape
+  exactly, and it *does* gate: a commit rewriting 87 files has no cheap human
+  review, and demanding confirmation for it subsumes gating ``D`` and ``R`` in
+  ``git diff --name-status`` — a deleted seed counts here as changing every
+  field, so ``rm <seed-file>`` at scale trips the same rule. Detection at commit
+  is not immutability, and that is accepted: it bounds the damage to one
+  working session rather than five weeks.
 
 Two things deliberately absent, so a later reader does not file them as gaps:
 
@@ -54,11 +71,20 @@ sample.
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from seeds.githistory import (
+    GitUnavailable,
+    commit_counts,
+    read_blobs,
+    repo_root,
+    rev_exists,
+    tree_files,
+)
 from seeds.seedfile import (
     FILE_SUFFIX,
     SeedFileError,
@@ -66,14 +92,20 @@ from seeds.seedfile import (
     expected_parent,
     inverse_relation,
     is_valid_id,
+    parse_seed_file,
     read_seed_file,
     seed_files_dir,
+    superseded_scopes,
 )
 
 __all__ = [
     "Finding",
+    "GitComparison",
+    "GitUnavailable",
+    "check_against_git",
     "check_corpus",
     "check_record",
+    "check_smells",
     "check_violations",
     "format_findings",
 ]
@@ -81,13 +113,17 @@ __all__ = [
 
 @dataclass(frozen=True)
 class Finding:
-    """One violation: the file it is in, what is wrong, and how to fix it.
+    """One finding: the file it is in, what is wrong, and how to fix it.
 
     ``code`` is the stable machine-readable name — the converter and the tests
     match on it, never on ``message``. ``remediation`` is mandatory and is the
     reason this is a dataclass rather than a string: a finding that names a
     problem without naming its fix sends the operator back to reading the file
     by eye, which is what the pre-0.7 divergence report did.
+
+    All three tiers use this one type. A smell is not a weaker kind of object,
+    it is the same object reported without an exit code, and giving it its own
+    class would have meant a second formatter that could drift from this one.
     """
 
     path: Path
@@ -488,6 +524,20 @@ def check_violations(seeds_dir: Path, *, now: datetime | None = None) -> list[Fi
             )
         ]
 
+    entries, findings = _load_store(files_dir)
+    findings.extend(check_corpus(entries, now=now))
+    return sorted(findings, key=lambda f: (str(f.path), f.code, f.message))
+
+
+def _load_store(files_dir: Path) -> tuple[list[tuple[Path, SeedRecord]], list[Finding]]:
+    """Read every seed file under ``files_dir``: the records, and what refused.
+
+    Shared by all three tiers so there is exactly one walk of the store and one
+    call into the reader. The smells tier discards the second half of the pair:
+    a file that will not parse is the violations tier's business, and reporting
+    it twice under two headings would make the same corpus look worse than it
+    is.
+    """
     findings: list[Finding] = []
     entries: list[tuple[Path, SeedRecord]] = []
     for path in sorted(files_dir.glob(f"*{FILE_SUFFIX}")):
@@ -509,9 +559,7 @@ def check_violations(seeds_dir: Path, *, now: datetime | None = None) -> list[Fi
         record = _read_one(path, findings)
         if record is not None:
             entries.append((path, record))
-
-    findings.extend(check_corpus(entries, now=now))
-    return sorted(findings, key=lambda f: (str(f.path), f.code, f.message))
+    return entries, findings
 
 
 def _read_one(path: Path, findings: list[Finding]) -> SeedRecord | None:
@@ -566,11 +614,409 @@ def _read_one(path: Path, findings: list[Finding]) -> SeedRecord | None:
         return None
 
 
+# --- The smells tier ---------------------------------------------------------
+
+# A body this many bytes or more counts as long. Measured, not guessed: over
+# this repo's 308 converted seeds the median body is 1197 bytes and the 75th
+# percentile is 2621, so 2000 selects roughly the top third (104 of 308). It is
+# deliberately permissive because it is only ever half of an AND — on its own a
+# long body is a well-deliberated seed, which is the point of the tool.
+LONG_BODY_BYTES = 2000
+
+# …and this many commits or more counts as a long history. A body that has
+# survived five commits has been edited across several sessions, which is when
+# a position gets moved past without anyone marking it. Below that, "nobody has
+# superseded anything yet" is simply true.
+MANY_COMMITS = 5
+
+
+def check_smells(seeds_dir: Path, *, now: datetime | None = None) -> list[Finding]:
+    """Everything worth noticing in the store that must never fail a build.
+
+    Nothing here is an error, and the caller must not let any of it reach an
+    exit code. The empty-body smell alone stands at ~25 entries on this repo's
+    own corpus — most of them legitimately-open ``question`` seeds where the
+    title *is* the question — and a tier that fails on 8% of a healthy corpus
+    trains everyone to pass ``--no-verify``, which is how a real violation
+    later goes through unread.
+
+    ``now`` is accepted and unused, so the three tiers share one signature and
+    a caller can pass a pinned clock without special-casing this one.
+    """
+    del now
+    files_dir = seed_files_dir(seeds_dir)
+    if not files_dir.is_dir():
+        return []
+    entries, _ = _load_store(files_dir)
+
+    findings: list[Finding] = []
+    findings.extend(_empty_bodies(entries))
+    findings.extend(_unsuperseded_long_bodies(seeds_dir, files_dir, entries))
+    findings.extend(_duplicate_bodies(entries))
+    return sorted(findings, key=lambda f: (str(f.path), f.code, f.message))
+
+
+def _empty_bodies(entries: Sequence[tuple[Path, SeedRecord]]) -> list[Finding]:
+    """A seed with no deliberation under its title (§6.4).
+
+    Moved out of the violations tier by ruling (@aguynamedryan, 2026-08-31):
+    ``seeds jot`` creates a title-only seed by design — ``Seed(id=…,
+    title=thought)`` with no body at all — so as a violation this would fail on
+    the output of the primary capture verb.
+    """
+    findings = []
+    for path, record in entries:
+        if record.body.strip():
+            continue
+        findings.append(
+            Finding(
+                path=path,
+                code="empty-body",
+                message="the seed has a title and no body",
+                remediation=(
+                    "often correct — 'seeds jot' makes title-only seeds by "
+                    "design, and for a question-type seed the title IS the "
+                    "question. Worth a look only if the thinking happened "
+                    "somewhere else and never landed here"
+                ),
+                seed_id=record.id,
+            )
+        )
+    return findings
+
+
+def _unsuperseded_long_bodies(
+    seeds_dir: Path, files_dir: Path, entries: Sequence[tuple[Path, SeedRecord]]
+) -> list[Finding]:
+    """A long body, edited across many commits, carrying no supersede marker.
+
+    The clearest thing that could not survive being a gate. A seed can be long
+    and much-edited and still hold no retired position — plenty of deliberation
+    only ever accumulates — so this is a candidate for attention and nothing
+    more.
+
+    The commit count is the half that makes it worth reading. Length alone
+    selects a third of this corpus; length *plus* a history of separate edits
+    is the shape where a claim was replaced and the replacement was written as
+    if the old one had never been made.
+
+    Silent when git cannot answer: with no history there is no second half of
+    the AND, and inventing one from length alone would report the third of the
+    corpus this deliberately refuses to report.
+    """
+    try:
+        root = repo_root(seeds_dir)
+        counts = commit_counts(root, _relpath(root, files_dir))
+    except (GitUnavailable, ValueError):
+        return []
+    if not counts:
+        return []
+
+    findings = []
+    for path, record in entries:
+        size = len(record.body.encode("utf-8"))
+        if size < LONG_BODY_BYTES:
+            continue
+        try:
+            commits = counts.get(_relpath(root, path), 0)
+        except ValueError:  # pragma: no cover - path is under files_dir
+            continue
+        if commits < MANY_COMMITS:
+            continue
+        if superseded_scopes(record.body, path):
+            continue
+        findings.append(
+            Finding(
+                path=path,
+                code="unsuperseded-long-body",
+                message=(
+                    f"{size} bytes of body across {commits} commits, with no "
+                    f"[!SUPERSEDED] marker anywhere in it"
+                ),
+                remediation=(
+                    "read it for a position that was moved past and never "
+                    "marked; if you find one, mark it in place under its "
+                    "heading with '> [!SUPERSEDED] YYYY-MM-DD — reason' (§6.1). "
+                    "A seed that genuinely only accumulated is fine as it is"
+                ),
+                seed_id=record.id,
+            )
+        )
+    return findings
+
+
+def _duplicate_bodies(entries: Sequence[tuple[Path, SeedRecord]]) -> list[Finding]:
+    """Two seeds holding byte-identical bodies.
+
+    Either one seed was copied over another, or two seeds are the same
+    deliberation recorded twice and one should point at the other. Empty bodies
+    are excluded: they are all identical to each other by definition, and
+    ``_empty_bodies`` already reports them one by one.
+    """
+    by_body: dict[str, list[tuple[Path, SeedRecord]]] = defaultdict(list)
+    for path, record in entries:
+        if record.body.strip():
+            by_body[record.body].append((path, record))
+
+    findings = []
+    for group in by_body.values():
+        if len(group) < 2:
+            continue
+        ids = [record.id for _, record in group]
+        for path, record in group:
+            others = [other for other in ids if other != record.id]
+            findings.append(
+                Finding(
+                    path=path,
+                    code="duplicate-body",
+                    message=(
+                        f"body is byte-identical to {len(others)} other seed(s): "
+                        f"{', '.join(others)}"
+                    ),
+                    remediation=(
+                        "if one was copied over the other, git holds the "
+                        "original — `git log -p " + str(path) + "`. If they are "
+                        "genuinely the same deliberation, keep one and link the "
+                        "rest to it"
+                    ),
+                    seed_id=record.id,
+                )
+            )
+    return findings
+
+
+def _relpath(root: Path, path: Path) -> str:
+    """``path`` as a repo-relative POSIX path, which is how git names things."""
+    return path.resolve().relative_to(root).as_posix()
+
+
+# --- The against-git tier ----------------------------------------------------
+
+# A field has to change on at least this fraction of the corpus before the
+# shape counts as a mass rewrite. seeds-wurl was 83 of 306 titles = 27.1%, so
+# 20% clears the real incident with margin while leaving ordinary bulk work
+# alone: retyping a dozen seeds in a 300-seed store is 4%.
+MASS_CHANGE_FRACTION = 0.20
+
+# …and at least this many seeds in absolute terms, so a three-seed store cannot
+# trip the rule by having one seed edited.
+MASS_CHANGE_MINIMUM = 10
+
+# The fields compared, as (attribute, the name the format calls it). ``id`` is
+# absent because it is the join key, not a value: a seed whose id changed is a
+# different file, and shows up here as a deletion plus an addition.
+_COMPARED_FIELDS: tuple[tuple[str, str], ...] = (
+    ("title", "title"),
+    ("status", "status"),
+    ("seed_type", "type"),
+    ("created_at", "created_at"),
+    ("updated_at", "updated_at"),
+    ("parent", "parent"),
+    ("resolved_at", "resolved_at"),
+    ("resolution", "resolution"),
+    ("tags", "tags"),
+    ("relationships", "relationships"),
+    ("converted_at", "converted_at"),
+    ("body", "body"),
+)
+
+
+@dataclass
+class GitComparison:
+    """What ``--against-git`` compared, and what it found.
+
+    The two revisions are reported even when nothing is found, because "no
+    findings" is only reassuring once you know what was actually compared. A
+    checker that quietly compared a commit with itself and printed a clean line
+    is the failure mode the whole tier exists to prevent.
+    """
+
+    before: str
+    after: str
+    corpus: int
+    findings: list[Finding] = field(default_factory=list)
+
+
+def check_against_git(seeds_dir: Path) -> GitComparison:
+    """Flag any one field rewritten across a large fraction of the corpus.
+
+    Compares the working store against ``HEAD`` — which is what a pre-commit
+    hook needs, since there "the previous commit" is ``HEAD`` and the state
+    being committed is on disk. When the store is identical to ``HEAD`` there
+    is nothing uncommitted to gate, so it falls back to ``HEAD~1`` against
+    ``HEAD`` and audits the commit that just landed. seeds-wurl needed exactly
+    that second reading: the rewrite was committed and then survived three days
+    and three further commits, so a tool that only ever looked at uncommitted
+    work would have had nothing to say for any of them.
+
+    Raises :class:`GitUnavailable` when there is no git to ask. An unborn
+    ``HEAD`` is not that case — it means the before-state is empty, nothing can
+    have been rewritten, and the answer is a clean comparison against nothing.
+    """
+    files_dir = seed_files_dir(seeds_dir)
+    root = repo_root(seeds_dir)
+    reldir = _relpath(root, files_dir)
+
+    after = _state_on_disk(files_dir)
+    if not rev_exists(root, "HEAD"):
+        return _compare(reldir, {}, after, "the empty tree", "the working tree")
+
+    before = _state_at_rev(root, "HEAD", reldir)
+    if before == after and rev_exists(root, "HEAD~1"):
+        return _compare(
+            reldir,
+            _state_at_rev(root, "HEAD~1", reldir),
+            _state_at_rev(root, "HEAD", reldir),
+            "HEAD~1",
+            "HEAD",
+        )
+    return _compare(reldir, before, after, "HEAD", "the working tree")
+
+
+def _state_on_disk(files_dir: Path) -> dict[str, SeedRecord]:
+    """Every seed the store currently holds, keyed by id."""
+    if not files_dir.is_dir():
+        return {}
+    entries, _ = _load_store(files_dir)
+    return {record.id: record for _, record in entries}
+
+
+def _state_at_rev(root: Path, rev: str, reldir: str) -> dict[str, SeedRecord]:
+    """Every seed the store held at ``rev``, keyed by id.
+
+    A file that will not parse at ``rev`` is skipped rather than reported: the
+    violations tier owns whether the store is well-formed *now*, and history is
+    not editable, so a finding about it would name no fix.
+    """
+    blobs = tree_files(root, rev, reldir)
+    texts = read_blobs(root, list(blobs.values()))
+    out: dict[str, SeedRecord] = {}
+    for relpath, sha in blobs.items():
+        path = root / relpath
+        if not path.name.endswith(FILE_SUFFIX):
+            continue
+        if not is_valid_id(path.name[: -len(FILE_SUFFIX)]):
+            continue
+        text = texts.get(sha)
+        if text is None:
+            continue
+        try:
+            record = parse_seed_file(path, text)
+        except SeedFileError:
+            continue
+        out[record.id] = record
+    return out
+
+
+def _field_value(record: SeedRecord, attr: str) -> object:
+    """One field, normalized so that only a real change reads as a change.
+
+    ``tags`` and ``relationships`` are compared order-insensitively. A reordered
+    block sequence is the same set of tags and the same set of edges, and a
+    detector that counted a reorder as a rewrite would report a mass change for
+    a no-op — the one thing this tier must never do, because it gates a commit.
+    """
+    value = getattr(record, attr)
+    if attr == "tags":
+        return sorted(value)
+    if attr == "relationships":
+        return sorted(
+            (edge.target_id, edge.rel_type.value, edge.created_at.isoformat())
+            for edge in value
+        )
+    return value
+
+
+def _compare(
+    reldir: str,
+    before: dict[str, SeedRecord],
+    after: dict[str, SeedRecord],
+    before_label: str,
+    after_label: str,
+) -> GitComparison:
+    """Score one field at a time across the whole before-corpus."""
+    comparison = GitComparison(
+        before=before_label, after=after_label, corpus=len(before)
+    )
+    if not before:
+        return comparison
+
+    deleted = sorted(seed_id for seed_id in before if seed_id not in after)
+    changed: dict[str, list[str]] = defaultdict(list)
+    for seed_id, record in before.items():
+        current = after.get(seed_id)
+        if current is None:
+            continue
+        for attr, _ in _COMPARED_FIELDS:
+            if _field_value(record, attr) != _field_value(current, attr):
+                changed[attr].append(seed_id)
+
+    total = len(before)
+    for attr, label in _COMPARED_FIELDS:
+        rewritten = sorted(changed[attr])
+        # A deleted seed lost every field, so it counts against every one of
+        # them. That is what makes this rule subsume gating D and R: there is
+        # no delete verb, and `rm` over a large slice of the store trips the
+        # same threshold as a mass rewrite does.
+        affected = len(rewritten) + len(deleted)
+        if affected < MASS_CHANGE_MINIMUM:
+            continue
+        if affected / total < MASS_CHANGE_FRACTION:
+            continue
+        comparison.findings.append(
+            _mass_finding(
+                reldir, label, rewritten, deleted, total, before_label, after_label
+            )
+        )
+    return comparison
+
+
+def _mass_finding(
+    reldir: str,
+    label: str,
+    rewritten: Sequence[str],
+    deleted: Sequence[str],
+    total: int,
+    before_label: str,
+    after_label: str,
+) -> Finding:
+    affected = len(rewritten) + len(deleted)
+    percent = 100.0 * affected / total
+    detail = f"{len(rewritten)} rewritten"
+    if deleted:
+        detail += f", {len(deleted)} deleted"
+    sample = ", ".join(list(rewritten)[:5] or list(deleted)[:5])
+    if affected > 5:
+        sample += ", …"
+    return Finding(
+        path=Path(reldir),
+        code="mass-field-rewrite",
+        message=(
+            f"{label} differs on {affected} of {total} seeds ({percent:.0f}% of "
+            f"the corpus, {detail}) between {before_label} and {after_label}: "
+            f"{sample}"
+        ),
+        remediation=(
+            f"a change this wide has no cheap human review, so it needs an "
+            f"explicit decision rather than a glance. If it was not intended, "
+            f"`git diff {before_label} -- {reldir}` shows it and "
+            f"`git checkout {before_label} -- {reldir}` puts it back — this is "
+            f"the shape that replaced 83 of 306 titles with a scratchpad path "
+            f"and went unread for three days (seeds-wurl)"
+        ),
+    )
+
+
 # --- Reporting ---------------------------------------------------------------
 
 
-def format_findings(findings: Iterable[Finding]) -> str:
-    """Render findings for a terminal, grouped by file, with every fix shown."""
+def format_findings(findings: Iterable[Finding], *, marker: str = "✗") -> str:
+    """Render findings for a terminal, grouped by file, with every fix shown.
+
+    ``marker`` is what separates a violation from a smell on screen. The smells
+    tier passes a warning sign, so a reader scanning the output cannot mistake
+    a line that failed the run for one that did not.
+    """
     grouped: dict[Path, list[Finding]] = {}
     for finding in findings:
         grouped.setdefault(finding.path, []).append(finding)
@@ -578,7 +1024,7 @@ def format_findings(findings: Iterable[Finding]) -> str:
     for path, group in grouped.items():
         out.append(str(path))
         for finding in group:
-            out.append(f"  ✗ {finding.code}: {finding.message}")
+            out.append(f"  {marker} {finding.code}: {finding.message}")
             out.append(f"    → {finding.remediation}")
         out.append("")
     return "\n".join(out)
