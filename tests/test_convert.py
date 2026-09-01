@@ -45,11 +45,19 @@ from seeds.convert import (
     split_legacy_title,
     verify,
 )
-from seeds.legacy import LegacyDatabase, LegacyRelationTypeError
+from seeds.legacy import (
+    LegacyDatabase,
+    LegacyMissingTableError,
+    LegacyRelationTypeError,
+)
 from seeds.models import RelationType, Seed, SeedStatus
 from seeds.seedfile import read_seed_file, seed_files_dir
 from tests.githelpers import git, git_init
-from tests.legacyhelpers import LegacyWriter, build_legacy_db
+from tests.legacyhelpers import (
+    LegacyWriter,
+    build_legacy_db,
+    build_pre_relationships_db,
+)
 
 REPO_JSONL = Path(__file__).resolve().parent.parent / ".seeds" / "seeds.jsonl"
 
@@ -784,6 +792,145 @@ class TestVestigialAnswersEdges:
         assert excinfo.value.target_id == "seeds-b2"
 
 
+# --- Legacy stores older than the reader's assumptions ------------------------
+
+
+class TestLegacyStoreMissingTables:
+    """A pre-0.7 store is whatever schema it happened to stop at.
+
+    ``mani`` and ``beads`` on titan never got past ``seeds`` + ``questions``:
+    no ``relationships`` table, no ``config`` table, and no ``seeds.jsonl``
+    beside the database. ``seeds.legacy`` queried ``relationships``
+    unconditionally, so the operator got a bare
+    ``sqlite3.OperationalError: no such table: relationships`` and 14 seeds
+    that could not be converted at all.
+
+    Ruled 2026-09-01 (@aguynamedryan): a missing ``relationships`` table means
+    "no relationships". The rule is general, not a carve-out — every table in
+    :data:`~seeds.legacy.OPTIONAL_TABLES` reads as empty, and a missing
+    :data:`~seeds.legacy.REQUIRED_TABLES` member is a ``ConversionError``
+    naming the store and the table rather than a SQLite traceback.
+    """
+
+    def test_a_store_predating_relationships_converts_with_no_edges(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        build_pre_relationships_db(
+            seeds_dir, [seed("seed-1aef"), seed("seed-2639")]
+        ).close()
+
+        report = convert(seeds_dir)
+
+        assert report.total == 2
+        assert report.dropped_edges == []
+        assert sorted(p.name for p in seed_files_dir(seeds_dir).glob("*.md")) == [
+            "seed-1aef.md",
+            "seed-2639.md",
+        ]
+        tree = "".join(
+            p.read_text(encoding="utf-8")
+            for p in seed_files_dir(seeds_dir).glob("*.md")
+        )
+        assert "relationships:" not in tree
+
+    def test_the_absent_tables_are_reported_rather_than_passed_over(self, temp_dir):
+        """A tree with no edges must be explained by the store, not left blank."""
+        seeds_dir = temp_dir / ".seeds"
+        build_pre_relationships_db(seeds_dir, [seed("seed-1aef")]).close()
+
+        report = convert(seeds_dir)
+
+        assert report.absent_legacy_tables == ["config", "relationships"]
+        rendered = format_report(report)
+        assert "the legacy store has no relationships table" in rendered
+        assert "the legacy store has no config table" in rendered
+
+    def test_the_prefix_still_comes_from_the_ids_with_no_config_table(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        build_pre_relationships_db(seeds_dir, [seed("seed-1aef")]).close()
+
+        report = convert(seeds_dir)
+
+        assert report.prefix_written == "seed"
+        assert (seeds_dir / "config.yaml").read_text(
+            encoding="utf-8"
+        ) == "prefix: seed\n"
+
+    def test_a_complete_store_reports_no_absent_tables(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        build_db(seeds_dir, [seed("seeds-a1")]).close()
+
+        report = convert(seeds_dir)
+
+        assert report.absent_legacy_tables == ["questions"]
+        assert "no relationships table" not in format_report(report)
+
+    def test_the_reader_reads_a_missing_relationships_table_as_empty(self, temp_dir):
+        """At the reader, not only through the converter.
+
+        The converter is not the only door: whatever the reader says here is
+        also what ``convert``'s own verification re-reads through.
+        """
+        seeds_dir = temp_dir / ".seeds"
+        build_pre_relationships_db(seeds_dir, [seed("seed-1aef")]).close()
+
+        db = LegacyDatabase(seeds_dir / "seeds.db")
+        try:
+            assert db.get_relationships("seed-1aef") == []
+            assert db.vestigial_relationship_keys() == []
+            assert db.absent_tables() == ["config", "relationships"]
+            assert [s.id for s in db.list_seeds()] == ["seed-1aef"]
+        finally:
+            db.close()
+
+    def test_a_missing_seeds_table_names_the_store_and_the_table(self, temp_dir):
+        """The load-bearing one. Refused, but never as a raw sqlite3 error."""
+        seeds_dir = temp_dir / ".seeds"
+        LegacyWriter(
+            seeds_dir / "seeds.db",
+            schema="CREATE TABLE questions (id TEXT PRIMARY KEY, text TEXT);",
+        ).close()
+
+        with pytest.raises(ConversionError) as excinfo:
+            convert(seeds_dir)
+
+        message = str(excinfo.value)
+        assert str(seeds_dir / "seeds.db") in message
+        assert "no seeds table" in message
+        assert "no such table" not in message
+
+    def test_the_reader_raises_its_own_error_for_a_missing_seeds_table(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        LegacyWriter(
+            seeds_dir / "seeds.db",
+            schema="CREATE TABLE questions (id TEXT PRIMARY KEY, text TEXT);",
+        ).close()
+
+        db = LegacyDatabase(seeds_dir / "seeds.db")
+        try:
+            with pytest.raises(LegacyMissingTableError) as excinfo:
+                db.list_seeds()
+        finally:
+            db.close()
+        assert excinfo.value.tables == ("seeds",)
+        assert excinfo.value.path == seeds_dir / "seeds.db"
+
+    def test_a_database_with_no_jsonl_beside_it_converts(self, temp_dir):
+        """The mirror of the fresh-clone case, and what mani actually is.
+
+        ``.seeds/seeds.jsonl`` postdates this schema, so the store predating
+        ``relationships`` has no export beside it either. Both halves have to
+        be optional or neither store converts.
+        """
+        seeds_dir = temp_dir / ".seeds"
+        build_pre_relationships_db(seeds_dir, [seed("seed-1aef")]).close()
+
+        report = convert(seeds_dir)
+
+        assert report.db_present is True
+        assert report.jsonl_present is False
+        assert report.total == 1
+
+
 # --- Multi-line legacy titles ------------------------------------------------
 
 
@@ -1074,7 +1221,8 @@ class TestVerificationCatchesLies:
     def _unions(self, seeds_dir: Path):
         from seeds.convert import _load_db, _load_jsonl, _resolve_edges, union_records
 
-        db_sides, db_halves, _, _ = _load_db(seeds_dir / "seeds.db")
+        db = _load_db(seeds_dir / "seeds.db")
+        db_sides, db_halves = db.sides, db.halves
         jsonl_sides, jsonl_halves, _ = _load_jsonl(seeds_dir / "seeds.jsonl")
         known = frozenset(set(db_sides) | set(jsonl_sides))
         edges, _ = _resolve_edges([*db_halves, *jsonl_halves], known)
@@ -1162,7 +1310,8 @@ class TestCompletenessOutranksCheck:
     def _unions(self, seeds_dir: Path):
         from seeds.convert import _load_db, _load_jsonl, _resolve_edges, union_records
 
-        db_sides, db_halves, _, _ = _load_db(seeds_dir / "seeds.db")
+        db = _load_db(seeds_dir / "seeds.db")
+        db_sides, db_halves = db.sides, db.halves
         jsonl_sides, jsonl_halves, _ = _load_jsonl(seeds_dir / "seeds.jsonl")
         known = frozenset(set(db_sides) | set(jsonl_sides))
         edges, _ = _resolve_edges([*db_halves, *jsonl_halves], known)

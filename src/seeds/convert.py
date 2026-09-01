@@ -69,6 +69,7 @@ from seeds.legacy import (
     JSONL_FILE,
     VESTIGIAL_REL_TYPES,
     LegacyDatabase,
+    LegacyMissingTableError,
     LegacyRelationTypeError,
     db_extends_disk,
     first_difference,
@@ -558,29 +559,60 @@ def _seed_to_utc(seed: Seed) -> Seed:
     return seed
 
 
-def _load_db(
-    db_path: Path,
-    splits: dict[str, str] | None = None,
-) -> tuple[dict[str, _Side], list[_Half], dict[str, int], list[_VestigialKey]]:
+@dataclass(frozen=True)
+class _DbLoad:
+    """Everything one pass over the legacy SQLite store yields.
+
+    A record rather than a tuple because the pass returns five unrelated
+    things and the last three are all "what was not read" — positional
+    unpacking made which-is-which a matter of counting commas.
+    """
+
+    #: Every seed, by id.
+    sides: dict[str, _Side] = field(default_factory=dict)
+    #: Every relationship half, deduplicated.
+    halves: list[_Half] = field(default_factory=list)
+    #: Row counts for the tables dropped without translating.
+    legacy_rows: dict[str, int] = field(default_factory=dict)
+    #: The vestigial edges the reader skipped — see
+    #: :data:`~seeds.legacy.VESTIGIAL_REL_TYPES`. Reported for the same reason
+    #: the legacy ``questions`` table's row count is: a drop the operator is
+    #: told about is a decision, and a drop nobody mentions is data loss.
+    vestigial: list[_VestigialKey] = field(default_factory=list)
+    #: Optional legacy tables this store does not have, read as empty — see
+    #: :data:`~seeds.legacy.OPTIONAL_TABLES`.
+    absent_tables: list[str] = field(default_factory=list)
+
+
+def _load_db(db_path: Path, splits: dict[str, str] | None = None) -> _DbLoad:
     """Read every seed, every relationship half, the table counts and the drops.
 
-    The fourth value names the vestigial edges the reader skipped — see
-    :data:`~seeds.legacy.VESTIGIAL_REL_TYPES`. Reported for the same reason the
-    legacy ``questions`` table's row count is: a drop the operator is told
-    about is a decision, and a drop nobody mentions is data loss.
+    Returns an empty :class:`_DbLoad` when there is no database at all — a repo
+    that has only ever had the JSONL (a fresh clone; ``.seeds/seeds.db`` is
+    gitignored) converts from the file alone. The mirror case — a database with
+    no JSONL beside it, which is what a store predating the export looks like —
+    is handled by :func:`_load_jsonl` returning empty in the same way.
 
-    Returns ``({}, [], {}, [])`` when there is no database at all — a repo that
-    has only ever had the JSONL (a fresh clone; ``.seeds/seeds.db`` is
-    gitignored) converts from the file alone.
+    Raises :class:`ConversionError` naming the store and the table when the
+    database lacks one of :data:`~seeds.legacy.REQUIRED_TABLES`; a missing
+    *optional* table reads as empty and is reported, not refused.
     """
     if not db_path.exists():
-        return {}, [], {}, []
+        return _DbLoad()
 
     splits = {} if splits is None else splits
     legacy = _legacy_table_counts(db_path)
 
     db = LegacyDatabase(db_path)
     try:
+        try:
+            absent = db.absent_tables()
+        except LegacyMissingTableError as exc:
+            raise ConversionError(
+                f"{exc.path}: the legacy store has no "
+                f"{', '.join(exc.tables)} table, so there is nothing here to "
+                "convert"
+            ) from exc
         vestigial = db.vestigial_relationship_keys()
         sides: dict[str, _Side] = {}
         for seed in db.list_seeds():
@@ -610,7 +642,13 @@ def _load_db(
                         created_at=_to_utc(rel.created_at),
                     )
                 )
-        return sides, halves, legacy, vestigial
+        return _DbLoad(
+            sides=sides,
+            halves=halves,
+            legacy_rows=legacy,
+            vestigial=vestigial,
+            absent_tables=absent,
+        )
     finally:
         db.close()
 
@@ -1179,6 +1217,12 @@ class ConversionReport:
     #: whole tables: these are individual edges inside a table the converter
     #: otherwise reads in full.
     dropped_legacy_edges: dict[str, int] = field(default_factory=dict)
+    #: Optional legacy tables the SQLite store did not have, read as empty
+    #: rather than refused (:data:`~seeds.legacy.OPTIONAL_TABLES`). Not a drop
+    #: — nothing was there to lose — but reported so a tree that came out with
+    #: no edges is explained by the store's shape rather than left looking like
+    #: something the converter discarded.
+    absent_legacy_tables: list[str] = field(default_factory=list)
     #: Legacy titles that spanned more than one line, mapped to the rule that
     #: cut each one. Named per seed rather than counted: the split moves text
     #: out of one field and into another, and two of its three rules have
@@ -1244,6 +1288,8 @@ def format_report(report: ConversionReport) -> str:
         out.append(f"  dropped the legacy {table} table ({rows} row(s), untranslated)")
     for rel_type, rows in sorted(report.dropped_legacy_edges.items()):
         out.append(f"  dropped {rows} legacy {rel_type!r} edge(s), untranslated")
+    for table in report.absent_legacy_tables:
+        out.append(f"  the legacy store has no {table} table; nothing was read from it")
     if report.split_titles:
         out.append(
             f"  split {len(report.split_titles)} multi-line legacy title(s); the "
@@ -1707,7 +1753,8 @@ def convert(
         )
 
     splits: dict[str, str] = {}
-    db_sides, db_halves, legacy, db_vestigial = _load_db(db_path, splits)
+    db_load = _load_db(db_path, splits)
+    db_sides, db_halves = db_load.sides, db_load.halves
     jsonl_sides, jsonl_halves, jsonl_vestigial = _load_jsonl(jsonl_path, splits)
 
     report = ConversionReport(
@@ -1715,8 +1762,9 @@ def convert(
         out_dir=out_dir,
         db_present=db_path.exists(),
         jsonl_present=jsonl_path.exists(),
-        dropped_legacy_rows=legacy,
-        dropped_legacy_edges=_tally_vestigial([*db_vestigial, *jsonl_vestigial]),
+        dropped_legacy_rows=db_load.legacy_rows,
+        dropped_legacy_edges=_tally_vestigial([*db_load.vestigial, *jsonl_vestigial]),
+        absent_legacy_tables=db_load.absent_tables,
         split_titles=dict(sorted(splits.items())),
     )
 

@@ -51,6 +51,46 @@ CREATE TABLE IF NOT EXISTS config (
 );
 """
 
+PRE_RELATIONSHIPS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS seeds (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    content TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'captured',
+    seed_type TEXT NOT NULL DEFAULT 'idea',
+    tags TEXT DEFAULT '[]',
+    related_to TEXT DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    resolved_at TEXT,
+    resolution TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS questions (
+    id TEXT PRIMARY KEY,
+    seed_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    answer TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at TEXT NOT NULL,
+    answered_at TEXT,
+    FOREIGN KEY (seed_id) REFERENCES seeds(id)
+);
+"""
+"""An older schema still: no ``relationships`` table, and no ``config``.
+
+Transcribed from ``~/projects/outins/mani/.seeds/seeds.db`` on 2026-09-01, one
+of the two stores on titan (with ``beads``) that never got past this shape.
+Edges lived in a ``related_to`` JSON column on the seed itself, before the
+``relationships`` table replaced it — and nothing has ever read that column,
+which is safe because across all 15 legacy stores measured the same day it
+holds **zero** edges whose two ends both still exist (100 rows in this repo's
+own store, every one of them naming ids from a retired prefix).
+
+Kept verbatim rather than derived from :data:`LEGACY_SCHEMA` by subtraction:
+the point of the fixture is that a real store looked exactly like this.
+"""
+
 
 def _stamp(value: datetime | None) -> str | None:
     return None if value is None else value.isoformat()
@@ -59,11 +99,11 @@ def _stamp(value: datetime | None) -> str | None:
 class LegacyWriter:
     """A writable handle on a legacy store. Tests only."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, schema: str = LEGACY_SCHEMA) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.path)
-        self.conn.executescript(LEGACY_SCHEMA)
+        self.conn.executescript(schema)
         self.conn.commit()
 
     def set_prefix(self, prefix: str) -> None:
@@ -162,6 +202,19 @@ def build_legacy_db(
     """A legacy store holding exactly ``seeds``, left open for the caller."""
     writer = LegacyWriter(Path(seeds_dir) / "seeds.db")
     writer.set_prefix(prefix)
+    for seed in seeds:
+        writer.create_seed(seed)
+    return writer
+
+
+def build_pre_relationships_db(seeds_dir: Path, seeds: list[Seed]) -> LegacyWriter:
+    """A store on :data:`PRE_RELATIONSHIPS_SCHEMA`, holding exactly ``seeds``.
+
+    No prefix is set, because that schema has nowhere to put one — the
+    converter derives it from the ids, which is the whole reason ``config`` is
+    optional too.
+    """
+    writer = LegacyWriter(Path(seeds_dir) / "seeds.db", schema=PRE_RELATIONSHIPS_SCHEMA)
     for seed in seeds:
         writer.create_seed(seed)
     return writer
