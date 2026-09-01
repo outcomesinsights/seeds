@@ -23,7 +23,10 @@ Three tiers live here now.
   either a file the reader would refuse, or a value that parses fine and is not
   plausible.
 * **Smells** (``seeds check --smells``) report and never fail: an empty body, a
-  long unsuperseded body, a duplicated body. The tier exists because some
+  long unsuperseded body, a duplicated body, a resolution on a seed that never
+  reached a terminal status, a file whose bytes are not the canonical ones, and
+  a repo-wide tool configured without excluding the store. The tier exists
+  because some
   things worth noticing cannot support being a gate — a long body with no
   ``[!SUPERSEDED]`` marker is a *candidate for attention*, never an error, and
   naming the tier keeps discipline-shaped checks from being promoted into gates
@@ -48,13 +51,18 @@ Two things deliberately absent, so a later reader does not file them as gaps:
   ``seeds jot`` creates a title-only seed by design and 31 of this repo's 314
   seeds have none, so as a violation it would fail on 10% of the corpus and on
   the output of the primary capture verb.
-* **Non-canonical bytes are not checked here.** §2 fixes the exact byte layout
-  and :func:`seeds.seedfile.render_seed_file` can produce it for comparison,
-  but the reader deliberately normalizes leading and trailing blank lines and
-  §2 calls canonicality "a ``check`` question, not a parse question" without
-  saying which tier. It belongs to smells: 282 of 314 records differ from
-  canonical form by a trailing newline alone, which is the same shape of
-  mistake the empty-body ruling just corrected.
+* **Non-canonical bytes are a smell, not a violation.** §2 fixes the exact byte
+  layout and :func:`seeds.seedfile.render_seed_file` produces it for
+  comparison, but the reader deliberately normalizes leading and trailing blank
+  lines, so a file can be readable and non-canonical at once. Gating on it
+  would have failed on 282 of the 314 pre-conversion records, which differed by
+  a trailing newline alone — the same shape of mistake the empty-body ruling
+  corrected. The converter normalizes, so the standing count on this repo's
+  309 converted files is zero (measured 2026-09-01), and that zero is the
+  point: it makes the smell a *positive assertion* that no tool has rewritten a
+  seed file's layout, whatever the tool was and whether or not anyone thought
+  to exclude it. A rewrite confined to the body's own text is outside its
+  reach, and belongs to ``--against-git``.
 
 The reading is not done here. :mod:`seeds.seedfile` is the single door to a
 seed file, and it already fails strictly, naming file, line, field and value.
@@ -71,6 +79,7 @@ sample.
 from __future__ import annotations
 
 import re
+import tomllib
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
@@ -85,6 +94,7 @@ from seeds.githistory import (
     rev_exists,
     tree_files,
 )
+from seeds.models import SeedStatus
 from seeds.seedfile import (
     FILE_SUFFIX,
     SeedFileError,
@@ -94,6 +104,7 @@ from seeds.seedfile import (
     is_valid_id,
     parse_seed_file,
     read_seed_file,
+    render_seed_file,
     seed_files_dir,
     superseded_scopes,
 )
@@ -630,6 +641,10 @@ LONG_BODY_BYTES = 2000
 # superseded anything yet" is simply true.
 MANY_COMMITS = 5
 
+# The two statuses §3 calls terminal, and the only two a `resolution` is
+# meaningful alongside.
+_TERMINAL_STATUSES = (SeedStatus.RESOLVED, SeedStatus.ABANDONED)
+
 
 def check_smells(seeds_dir: Path, *, now: datetime | None = None) -> list[Finding]:
     """Everything worth noticing in the store that must never fail a build.
@@ -640,6 +655,13 @@ def check_smells(seeds_dir: Path, *, now: datetime | None = None) -> list[Findin
     title *is* the question — and a tier that fails on 8% of a healthy corpus
     trains everyone to pass ``--no-verify``, which is how a real violation
     later goes through unread.
+
+    Two of the six rules are expected to score **zero** on a healthy store, and
+    that is what makes them worth running: ``non-canonical-bytes`` and
+    ``tool-config-includes-store`` are positive assertions that nothing has
+    reached into the store, not observations about how it was written. Both
+    stood at zero on this repo's 309 converted files when they landed
+    (2026-09-01), so a single line from either is a real event.
 
     ``now`` is accepted and unused, so the three tiers share one signature and
     a caller can pass a pinned clock without special-casing this one.
@@ -654,6 +676,9 @@ def check_smells(seeds_dir: Path, *, now: datetime | None = None) -> list[Findin
     findings.extend(_empty_bodies(entries))
     findings.extend(_unsuperseded_long_bodies(seeds_dir, files_dir, entries))
     findings.extend(_duplicate_bodies(entries))
+    findings.extend(_resolutions_without_a_terminal_status(entries))
+    findings.extend(_non_canonical_files(entries))
+    findings.extend(_unexcluded_tool_configs(seeds_dir))
     return sorted(findings, key=lambda f: (str(f.path), f.code, f.message))
 
 
@@ -784,6 +809,314 @@ def _duplicate_bodies(entries: Sequence[tuple[Path, SeedRecord]]) -> list[Findin
                 )
             )
     return findings
+
+
+def _resolutions_without_a_terminal_status(
+    entries: Sequence[tuple[Path, SeedRecord]],
+) -> list[Finding]:
+    """A ``resolution`` on a seed whose status is not terminal (§3).
+
+    §3 states the rule and states the tier in the same breath: "only meaningful
+    alongside a terminal ``status``, but carrying one on a non-terminal seed is
+    a smell rather than a violation — it is usually a seed someone reopened".
+    Reopening is the ordinary lifecycle of a seed and the resolution text is
+    the record of what the *last* conclusion was, so deleting it on reopen
+    would throw away the deliberation this tool exists to keep. Nothing here
+    asks for it to be deleted; the finding only asks whether the status is the
+    stale half of the pair.
+    """
+    findings = []
+    for path, record in entries:
+        if not record.resolution:
+            continue
+        if record.status in _TERMINAL_STATUSES:
+            continue
+        findings.append(
+            Finding(
+                path=path,
+                code="resolution-on-non-terminal",
+                message=(
+                    f"status is {record.status.value} but the seed carries a "
+                    f"resolution: {_clip(record.resolution)}"
+                ),
+                remediation=(
+                    "usually a seed that was reopened, and then the resolution "
+                    "is the previous conclusion and is worth keeping (§3). "
+                    "Worth a look only if it is the status that is stale — "
+                    "'seeds resolve' restamps both together"
+                ),
+                seed_id=record.id,
+            )
+        )
+    return findings
+
+
+def _non_canonical_files(
+    entries: Sequence[tuple[Path, SeedRecord]],
+) -> list[Finding]:
+    """A file whose bytes are not what :func:`render_seed_file` would write.
+
+    The **positive assertion** half of the store's defence against repo-wide
+    tooling. ``tool-config-includes-store`` covers the tools somebody thought
+    to name; this one needs no list, because a file that has been rewritten no
+    longer matches the render of itself. It is also what ``seeds convert``'s
+    byte-idempotence rests on: a file off canonical form makes the next
+    conversion report a diff nobody made.
+
+    **What it does and does not see, measured rather than assumed.** The
+    comparison is the file against the canonical render *of what the file now
+    says*, so what it catches is every rewrite of the file's **serialization**:
+    a second trailing newline, inserted or removed blank lines around the body,
+    reordered frontmatter keys, a re-encoded scalar. It does **not** catch a
+    rewrite of the body's own text while the layout stays canonical — ruff 0.16
+    reformatting a Python block inside a markdown body is exactly that shape
+    (``seeds-dv6r``, the incident that prompted this), and so is trimming
+    trailing whitespace off a body line. That case is ``--against-git``'s,
+    which compares the body field itself. Both halves are pinned by tests; do
+    not read this rule as covering more than it does.
+
+    It cannot be a violation. The reader deliberately normalizes leading and
+    trailing blank lines, so a readable file can be non-canonical — 282 of the
+    314 pre-conversion records differed by a trailing newline alone, and gating
+    on that would have failed on 90% of a healthy corpus. The bytes the reader
+    *does* refuse — a BOM, CRLF — never arrive here at all; they are
+    violations, and reporting them twice would make the corpus look worse than
+    it is.
+
+    A record the writer would refuse is skipped for the same reason: the
+    violations tier already names it, and ``render_seed_file`` validates before
+    it renders, so there are no canonical bytes to compare against.
+    """
+    findings = []
+    for path, record in entries:
+        try:
+            canonical = render_seed_file(record).encode("utf-8")
+        except SeedFileError:
+            continue
+        try:
+            raw = path.read_bytes()
+        except OSError:  # pragma: no cover - _load_store already read it
+            continue
+        if raw == canonical:
+            continue
+        findings.append(
+            Finding(
+                path=path,
+                code="non-canonical-bytes",
+                message=(
+                    f"the file's bytes are not the canonical form "
+                    f"({len(raw)} bytes on disk, {len(canonical)} canonical): "
+                    f"{_first_difference(raw, canonical)}"
+                ),
+                remediation=(
+                    "something rewrote the file — a formatter, a linter's "
+                    "--fix, or a hand edit. Check `git diff` first: if the "
+                    "content is right and only the layout moved, any 'seeds' "
+                    "write of this seed restores the canonical bytes (§2). If "
+                    "a repo-wide tool did it, exclude '.seeds/' from that tool "
+                    "as well — ruff 0.16 reached in this way (seeds-dv6r)"
+                ),
+                seed_id=record.id,
+            )
+        )
+    return findings
+
+
+def _first_difference(raw: bytes, canonical: bytes) -> str:
+    """Name the first line where the two forms part company.
+
+    A byte count alone sends the reader back to diffing by eye, which is what
+    every remediation in this module exists to avoid.
+    """
+    got = raw.decode("utf-8", errors="replace").split("\n")
+    want = canonical.decode("utf-8", errors="replace").split("\n")
+    for number, (a, b) in enumerate(zip(got, want, strict=False), 1):
+        if a != b:
+            return f"line {number} is {_clip(a)!r}, canonical is {_clip(b)!r}"
+    if len(got) > len(want):
+        return f"{len(got) - len(want)} trailing line(s) the canonical form has not"
+    if len(want) > len(got):
+        return f"{len(want) - len(got)} line(s) short of the canonical form"
+    return "the two forms differ in bytes that are not line content"
+
+
+def _clip(text: str, limit: int = 60) -> str:
+    """``text`` on one line, short enough to sit in a terminal report."""
+    flat = text.replace("\n", "\\n")
+    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+
+
+# --- Repo-wide tools that must not reach into the store ----------------------
+
+# The token a config has to name for the store to be excluded. Matching on the
+# directory name rather than a parsed exclude list is deliberate: five config
+# dialects would mean five more parsers in a module whose whole argument is
+# that a second implementation of a format can disagree with the first. This
+# layer names the tools we can think of; `non-canonical-bytes` is the layer
+# that catches the tool nobody thought of, which is why the looseness here is
+# affordable.
+_STORE_TOKEN = ".seeds"
+
+
+@dataclass(frozen=True)
+class _ToolConfig:
+    """One repo-wide tool, where its config lives, and how it is told to stop.
+
+    ``files`` and ``ignores`` are globs relative to the project root. The split
+    matters because several of these tools carry no exclusion in their config
+    at all — prettier and markdownlint are told what to skip in a companion
+    ignore file — so a config present with no ignore file anywhere is exactly
+    the unexcluded case.
+    """
+
+    tool: str
+    files: tuple[str, ...]
+    ignores: tuple[str, ...]
+    knob: str
+    pyproject_table: str | None = None
+
+
+# Only tools that walk a whole repo AND can read or rewrite markdown are here.
+# mypy, pytest and hatch are configured in this repo's pyproject too and are
+# deliberately absent: they are pointed at a path list, they never see
+# .seeds/, and reporting them would spend the tier's credibility on findings
+# with no fix.
+_TOOL_CONFIGS: tuple[_ToolConfig, ...] = (
+    _ToolConfig(
+        tool="ruff",
+        files=("ruff.toml", ".ruff.toml"),
+        ignores=(),
+        knob='extend-exclude = [".seeds/"] under [tool.ruff]',
+        pyproject_table="ruff",
+    ),
+    _ToolConfig(
+        tool="prettier",
+        files=(".prettierrc", ".prettierrc.*", "prettier.config.*"),
+        ignores=(".prettierignore",),
+        knob="a '.seeds/' line in .prettierignore",
+    ),
+    _ToolConfig(
+        tool="markdownlint",
+        files=(".markdownlint.*", ".markdownlintrc", ".markdownlint-cli2.*"),
+        ignores=(".markdownlintignore",),
+        knob="a '.seeds/' line in .markdownlintignore, or an 'ignores' entry",
+    ),
+    _ToolConfig(
+        tool="cspell",
+        files=("cspell.json", "cspell.jsonc", ".cspell.json", "cspell.config.*"),
+        ignores=(".cspellignore",),
+        knob="'.seeds/**' in ignorePaths",
+    ),
+    _ToolConfig(
+        tool="codespell",
+        files=(".codespellrc",),
+        ignores=(),
+        knob='skip = ".seeds"',
+        pyproject_table="codespell",
+    ),
+    _ToolConfig(
+        tool="EditorConfig",
+        files=(".editorconfig",),
+        ignores=(),
+        knob=(
+            "a [.seeds/**] section turning off trim_trailing_whitespace and "
+            "anything else that rewrites on save"
+        ),
+    ),
+)
+
+
+def _unexcluded_tool_configs(seeds_dir: Path) -> list[Finding]:
+    """A repo-wide tool configured here that has not been told to skip the store.
+
+    Asked for by @aguynamedryan on 2026-09-01, and it is preemptive on purpose:
+    the store looks like 309 markdown files to every formatter, linter and
+    spell-checker in the repo, and the one that found it did so within minutes.
+    ruff 0.16 formats Python code blocks inside markdown, so the moment the
+    converted tree landed its file count went 65 -> 385 and it offered to
+    reformat a seed body (``seeds-dv6r``). With ``--fix`` instead of
+    ``--check`` that is somebody's deliberation edited by a formatter, silently.
+
+    A smell rather than a gate for the same reason the rest of this tier is:
+    the answer to it lives in another tool's config file, and a check that
+    fails a commit over a file it does not own — one that a fresh clone or a
+    new dev-tool can introduce without touching a seed — is a check people
+    learn to bypass.
+    """
+    root = seeds_dir.parent
+    findings = []
+    for config in _TOOL_CONFIGS:
+        present = _config_files(root, config)
+        table = _pyproject_table(root, config.pyproject_table)
+        if not present and table is None:
+            continue
+        if table is not None and _STORE_TOKEN in table:
+            continue
+        if any(_mentions_store(path) for path in present):
+            continue
+        if any(_mentions_store(path) for path in _ignore_files(root, config)):
+            continue
+        where = present[0] if present else root / "pyproject.toml"
+        findings.append(
+            Finding(
+                path=where,
+                code="tool-config-includes-store",
+                message=(
+                    f"{config.tool} is configured for this repo and nothing "
+                    f"excludes {_STORE_TOKEN}/ from it"
+                ),
+                remediation=(
+                    f"add {config.knob}, with a comment saying why. The store "
+                    f"is DATA, not source: ruff 0.16 offered to reformat a seed "
+                    f"body within minutes of this repo's conversion, and a "
+                    f"reformatted body also breaks the byte-idempotence "
+                    f"'seeds convert' rests on (seeds-dv6r)"
+                ),
+            )
+        )
+    return findings
+
+
+def _config_files(root: Path, config: _ToolConfig) -> list[Path]:
+    """Every config file of ``config``'s tool that this repo actually has."""
+    found: list[Path] = []
+    for pattern in config.files:
+        found.extend(path for path in sorted(root.glob(pattern)) if path.is_file())
+    return found
+
+
+def _ignore_files(root: Path, config: _ToolConfig) -> list[Path]:
+    return [root / name for name in config.ignores if (root / name).is_file()]
+
+
+def _pyproject_table(root: Path, name: str | None) -> str | None:
+    """``[tool.<name>]`` from pyproject.toml, flattened, or ``None`` if absent.
+
+    An unparseable pyproject is not this module's business — it is a Python
+    packaging error the packaging tools will report far more usefully — so it
+    reads as "no table" rather than a finding about the seed store.
+    """
+    if name is None:
+        return None
+    path = root / "pyproject.toml"
+    if not path.is_file():
+        return None
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+        return None
+    tools = data.get("tool")
+    if not isinstance(tools, dict) or name not in tools:
+        return None
+    return str(tools[name])
+
+
+def _mentions_store(path: Path) -> bool:
+    """Whether ``path``'s text names the seed store at all."""
+    try:
+        return _STORE_TOKEN in path.read_text(encoding="utf-8", errors="replace")
+    except OSError:  # pragma: no cover - the caller checked is_file()
+        return False
 
 
 def _relpath(root: Path, path: Path) -> str:

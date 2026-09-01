@@ -39,7 +39,7 @@ from seeds.check import (
     format_findings,
 )
 from seeds.models import SeedStatus
-from seeds.seedfile import SeedRecord, write_seed
+from seeds.seedfile import SeedRecord, read_seed_file, write_seed
 from tests.githelpers import git, git_init
 
 NOW = datetime(2026, 8, 31, 12, 0, 0, tzinfo=UTC)
@@ -317,6 +317,295 @@ class TestThereIsNoTendVerb:
 
         result = cli_runner.invoke(main, ["check", "--help"])
         assert "--smells" in result.output
+
+
+class TestResolutionOnNonTerminalSmell:
+    """§3: "carrying one on a non-terminal seed is a smell rather than a violation".
+
+    Stated in the spec since the format was frozen and enforced by nothing
+    until ``seeds-4co.16``. The interesting half is the false-positive half:
+    the reopened seed §3 describes is *correct*, and every terminal seed with a
+    resolution — which is most of the resolved corpus — has to stay silent.
+    """
+
+    RESOLUTION = "Settled: files-as-truth, one file per seed."
+
+    def test_a_captured_seed_carrying_a_resolution_is_a_smell(self, tmp_path):
+        seeds_dir = store(
+            tmp_path,
+            record(status=SeedStatus.CAPTURED, resolution=self.RESOLUTION),
+        )
+        findings = check_smells(seeds_dir)
+        assert codes(findings) == ["resolution-on-non-terminal"]
+        assert "status is captured" in findings[0].message
+        assert "files-as-truth" in findings[0].message
+
+    @pytest.mark.parametrize(
+        "status", [SeedStatus.CAPTURED, SeedStatus.EXPLORING, SeedStatus.DEFERRED]
+    )
+    def test_every_non_terminal_status_is_reported(self, tmp_path, status):
+        seeds_dir = store(tmp_path, record(status=status, resolution=self.RESOLUTION))
+        assert codes(check_smells(seeds_dir)) == ["resolution-on-non-terminal"]
+
+    @pytest.mark.parametrize("status", [SeedStatus.RESOLVED, SeedStatus.ABANDONED])
+    def test_a_terminal_seed_with_a_resolution_is_silent(self, tmp_path, status):
+        """The ordinary shape of every resolved seed. Firing here ends the tier."""
+        seeds_dir = store(
+            tmp_path,
+            record(status=status, resolved_at=UPDATED, resolution=self.RESOLUTION),
+        )
+        assert check_smells(seeds_dir) == []
+
+    def test_a_non_terminal_seed_with_no_resolution_is_silent(self, tmp_path):
+        seeds_dir = store(tmp_path, record(status=SeedStatus.EXPLORING))
+        assert check_smells(seeds_dir) == []
+
+    def test_an_empty_resolution_string_is_not_a_resolution(self, tmp_path):
+        """§3: absent and empty are the same state, and the writer omits it."""
+        seeds_dir = store(tmp_path, record(status=SeedStatus.EXPLORING, resolution=""))
+        assert check_smells(seeds_dir) == []
+
+    def test_it_is_not_also_a_violation(self, tmp_path):
+        seeds_dir = store(
+            tmp_path,
+            record(status=SeedStatus.CAPTURED, resolution=self.RESOLUTION),
+        )
+        assert check_violations(seeds_dir, now=NOW) == []
+
+
+class TestNonCanonicalBytesSmell:
+    """The positive assertion that no tool has rewritten a seed (seeds-dv6r).
+
+    ruff 0.16 formats Python code blocks inside markdown; the night this repo's
+    store was converted its file count went 65 -> 385 and it offered to
+    reformat ``seeds-154.md``. Excluding ruff is one layer; this is the layer
+    that notices whatever the next tool turns out to be.
+    """
+
+    def path_of(self, seeds_dir: Path, seed_id: str = "seeds-abc") -> Path:
+        return seeds_dir / "seeds" / f"{seed_id}.md"
+
+    def test_a_file_written_by_the_writer_is_canonical(self, tmp_path):
+        seeds_dir = store(tmp_path, record(body="Real deliberation.\n"))
+        assert check_smells(seeds_dir) == []
+
+    def test_a_second_trailing_newline_is_a_smell(self, tmp_path):
+        """§2: the file ends with exactly one newline."""
+        seeds_dir = store(tmp_path, record(body="Real deliberation.\n"))
+        path = self.path_of(seeds_dir)
+        path.write_bytes(path.read_bytes() + b"\n")
+        findings = check_smells(seeds_dir)
+        assert codes(findings) == ["non-canonical-bytes"]
+        assert "1 trailing line(s)" in findings[0].message
+
+    def test_crlf_stays_a_violation_and_is_not_reported_here(self, tmp_path):
+        """§2 says LF, and the reader refuses CRLF outright — so it never
+        reaches this tier.
+
+        Worth pinning rather than assuming: the two rules overlap, and a file
+        counted once as a violation and again as a smell would make the corpus
+        look worse than it is.
+        """
+        seeds_dir = store(tmp_path, record(body="Real deliberation.\n"))
+        path = self.path_of(seeds_dir)
+        path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+        assert check_smells(seeds_dir) == []
+        assert codes(check_violations(seeds_dir, now=NOW)) == ["parse-error"]
+
+    def test_reordered_frontmatter_keys_are_a_smell(self, tmp_path):
+        """§3: order is not semantic for a reader, but a writer must produce it.
+
+        The file still parses and every value is right — which is exactly why
+        this belongs to smells and why nothing else in the module notices it.
+        """
+        seeds_dir = store(tmp_path, record(body="Real deliberation.\n"))
+        path = self.path_of(seeds_dir)
+        text = path.read_text(encoding="utf-8")
+        lines = text.split("\n")
+        # Hand-computed: line 0 is '---', 1 is id, 2 is title, 3 is status.
+        assert lines[2].startswith("title:") and lines[3].startswith("status:")
+        lines[2], lines[3] = lines[3], lines[2]
+        path.write_text("\n".join(lines), encoding="utf-8")
+        findings = check_smells(seeds_dir)
+        assert codes(findings) == ["non-canonical-bytes"]
+        assert "line 3" in findings[0].message
+
+    def test_an_extra_blank_line_under_the_frontmatter_is_a_smell(self, tmp_path):
+        """§2: exactly one blank line separates the closing --- from the body.
+
+        The reader normalizes leading blank lines away, so the file still reads
+        back correctly and nothing else in the module notices — which is both
+        why this rule exists and why it cannot gate.
+        """
+        seeds_dir = store(tmp_path, record(body="Real deliberation.\n"))
+        path = self.path_of(seeds_dir)
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("---\n\n", "---\n\n\n", 1),
+            encoding="utf-8",
+        )
+        findings = check_smells(seeds_dir)
+        assert codes(findings) == ["non-canonical-bytes"]
+        assert "seeds-dv6r" in findings[0].remediation
+
+    def test_a_body_rewritten_within_canonical_layout_is_NOT_caught(self, tmp_path):
+        """The measured limit of this rule, pinned so nobody over-trusts it.
+
+        The comparison is the file against the canonical render *of what the
+        file now says*, so a tool that rewrites body content while leaving the
+        layout canonical — ruff 0.16 reformatting a Python block inside a
+        markdown body is exactly that shape, and so is trimming trailing
+        whitespace off a body line — leaves nothing here to see. That case
+        belongs to ``--against-git``, which compares the body field itself.
+        This rule catches the serialization half: trailing newlines, the blank
+        lines around the body, frontmatter key order and scalar encoding.
+        """
+        body = "Consider:\n\n```python\nx = {'a':1}\n```\n"
+        seeds_dir = store(tmp_path, record(body=body))
+        path = self.path_of(seeds_dir)
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("x = {'a':1}", 'x = {"a": 1}'),
+            encoding="utf-8",
+        )
+        assert check_smells(seeds_dir) == []
+
+    def test_it_is_not_a_violation(self, tmp_path):
+        seeds_dir = store(tmp_path, record(body="Real deliberation.\n"))
+        path = self.path_of(seeds_dir)
+        path.write_bytes(path.read_bytes() + b"\n")
+        assert check_violations(seeds_dir, now=NOW) == []
+
+    def test_blank_lines_the_reader_normalizes_are_still_reported(self, tmp_path):
+        """The reason this cannot gate: the file reads back fine either way.
+
+        282 of the 314 pre-conversion records differed from canonical form by a
+        trailing newline alone, so as a violation this would have failed on
+        90% of a healthy corpus.
+        """
+        seeds_dir = store(tmp_path, record(body="Real deliberation.\n"))
+        path = self.path_of(seeds_dir)
+        path.write_bytes(path.read_bytes() + b"\n\n\n")
+        assert read_seed_file(path).body.strip() == "Real deliberation."
+        assert codes(check_smells(seeds_dir)) == ["non-canonical-bytes"]
+
+    def test_an_unwritable_record_is_skipped_not_reported(self, tmp_path):
+        """A parent that disagrees with the id: a violation, with no canonical form.
+
+        ``render_seed_file`` validates before it renders, so there is nothing to
+        compare against; reporting it here would double-count the one file.
+        """
+        seeds_dir = store(tmp_path, record("seeds-aaa", body="Fine.\n"))
+        path = seeds_dir / "seeds" / "seeds-aaa.md"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace(
+                "status:", "parent: seeds-zzz\nstatus:"
+            ),
+            encoding="utf-8",
+        )
+        assert check_smells(seeds_dir) == []
+        assert "parent-mismatch" in codes(check_violations(seeds_dir, now=NOW))
+
+
+class TestToolConfigSmell:
+    """@aguynamedryan, 2026-09-01: assert the repo's tools skip the store.
+
+    The store looks like 309 markdown files to every formatter and linter in
+    the repo. ruff found it within minutes of conversion; the point of this
+    rule is to have said so before the next tool does.
+    """
+
+    def build(self, tmp_path: Path, **files: str) -> Path:
+        seeds_dir = store(tmp_path, record(body="A body.\n"))
+        for name, text in files.items():
+            (tmp_path / name.replace("__", ".")).write_text(text, encoding="utf-8")
+        return seeds_dir
+
+    RUFF_BARE = "[tool.ruff]\nline-length = 88\n"
+    RUFF_EXCLUDING = '[tool.ruff]\nline-length = 88\nextend-exclude = [".seeds/"]\n'
+
+    def test_ruff_configured_without_an_exclusion_is_a_smell(self, tmp_path):
+        seeds_dir = self.build(tmp_path, pyproject__toml=self.RUFF_BARE)
+        findings = check_smells(seeds_dir)
+        assert codes(findings) == ["tool-config-includes-store"]
+        assert "ruff" in findings[0].message
+        assert findings[0].path == tmp_path / "pyproject.toml"
+
+    def test_ruff_excluding_the_store_is_silent(self, tmp_path):
+        """This repo's own state since the night of the conversion."""
+        seeds_dir = self.build(tmp_path, pyproject__toml=self.RUFF_EXCLUDING)
+        assert check_smells(seeds_dir) == []
+
+    def test_a_ruff_toml_carries_the_exclusion_too(self, tmp_path):
+        seeds_dir = self.build(tmp_path, ruff__toml='extend-exclude = [".seeds/"]\n')
+        assert check_smells(seeds_dir) == []
+
+    def test_a_bare_ruff_toml_is_a_smell(self, tmp_path):
+        seeds_dir = self.build(tmp_path, ruff__toml="line-length = 88\n")
+        findings = check_smells(seeds_dir)
+        assert codes(findings) == ["tool-config-includes-store"]
+        assert findings[0].path == tmp_path / "ruff.toml"
+
+    def test_prettier_with_no_ignore_file_is_a_smell(self, tmp_path):
+        """prettier's config carries no exclusion at all — the ignore file does."""
+        seeds_dir = self.build(tmp_path, __prettierrc='{"semi": false}\n')
+        findings = check_smells(seeds_dir)
+        assert codes(findings) == ["tool-config-includes-store"]
+        assert "prettier" in findings[0].message
+
+    def test_prettier_with_the_store_in_its_ignore_file_is_silent(self, tmp_path):
+        seeds_dir = self.build(
+            tmp_path,
+            __prettierrc='{"semi": false}\n',
+            __prettierignore="node_modules/\n.seeds/\n",
+        )
+        assert check_smells(seeds_dir) == []
+
+    def test_markdownlint_and_editorconfig_are_both_covered(self, tmp_path):
+        """Two configs, two findings — the report names each tool separately."""
+        seeds_dir = self.build(
+            tmp_path,
+            __markdownlint__json='{"MD013": false}\n',
+            __editorconfig="[*]\ntrim_trailing_whitespace = true\n",
+        )
+        findings = check_smells(seeds_dir)
+        assert codes(findings) == ["tool-config-includes-store"] * 2
+        reported = " ".join(finding.message for finding in findings)
+        assert "markdownlint" in reported
+        assert "EditorConfig" in reported
+
+    def test_a_repo_with_no_such_config_is_silent(self, tmp_path):
+        seeds_dir = self.build(tmp_path)
+        assert check_smells(seeds_dir) == []
+
+    def test_tools_that_never_see_the_store_are_not_reported(self, tmp_path):
+        """mypy and pytest are configured in this repo's pyproject too.
+
+        They are pointed at a path list and never walk .seeds/, so a finding
+        about them would name no fix — and a tier that reports unfixable things
+        stops being read.
+        """
+        seeds_dir = self.build(
+            tmp_path,
+            pyproject__toml=(
+                "[tool.mypy]\nstrict = true\n\n"
+                '[tool.pytest.ini_options]\ntestpaths = ["tests"]\n\n'
+                '[tool.hatch.version]\npath = "src/seeds/__init__.py"\n'
+            ),
+        )
+        assert check_smells(seeds_dir) == []
+
+    def test_an_unparseable_pyproject_is_not_this_check_s_business(self, tmp_path):
+        seeds_dir = self.build(tmp_path, pyproject__toml="[tool.ruff\nbroken = \n")
+        assert check_smells(seeds_dir) == []
+
+    def test_it_is_not_a_violation(self, tmp_path):
+        seeds_dir = self.build(tmp_path, pyproject__toml=self.RUFF_BARE)
+        assert check_violations(seeds_dir, now=NOW) == []
+
+    def test_the_remediation_names_the_knob_to_set(self, tmp_path):
+        seeds_dir = self.build(tmp_path, pyproject__toml=self.RUFF_BARE)
+        remediation = check_smells(seeds_dir)[0].remediation
+        assert "extend-exclude" in remediation
+        assert "seeds-dv6r" in remediation
 
 
 # --- The against-git tier ----------------------------------------------------

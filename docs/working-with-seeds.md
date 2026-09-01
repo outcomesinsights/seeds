@@ -372,6 +372,12 @@ A few small habits keep the seed store healthy.
   one end only, a timestamp ahead of the clock. It exits non-zero, so it can
   gate a pre-commit or CI hook. `--smells` adds advisory findings that never
   affect the exit code.
+- **Exclude `.seeds/` from every repo-wide tool.** The store is a few hundred
+  markdown files to a formatter or a linter, and one of them will eventually
+  offer to rewrite a seed body. `seeds check --smells` reports a tool
+  configured here with no exclusion, and reports a seed file whose bytes are no
+  longer the canonical ones — which is how you find out a tool nobody thought
+  of got there first.
 - **`seeds doctor` answers "is my install and store healthy?"** The store is
   there, the prefix is recorded, every seed reads, no edge names a missing
   seed, the type vocabulary has not drifted. Worth running when seeds seem to

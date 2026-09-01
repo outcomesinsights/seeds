@@ -1743,8 +1743,10 @@ def doctor(ctx: Context) -> None:
     is_flag=True,
     help=(
         "Also report smells: an empty body, a long body with many commits and "
-        "no supersede marker, a body byte-identical to another seed's. Never "
-        "affects the exit code."
+        "no supersede marker, a body byte-identical to another seed's, a "
+        "resolution on a non-terminal seed, a file whose bytes are not the "
+        "canonical form, and a repo-wide tool configured without excluding "
+        ".seeds/. Never affects the exit code."
     ),
 )
 @click.option(
