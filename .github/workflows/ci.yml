@@ -36,6 +36,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --dev
+      # `seeds search` shells out to ripgrep, and so do a dozen tests. The
+      # ubuntu-latest image ships it today; making the dependency explicit means
+      # a runner-image change fails here with one clear line instead of twelve
+      # obscure ones inside pytest.
+      - run: rg --version || (sudo apt-get update && sudo apt-get install -y ripgrep)
       - run: uv run pytest --cov=seeds --cov-report=term-missing
 
   # A flake that silently rots is worse than no flake: once the README documents

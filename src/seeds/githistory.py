@@ -8,16 +8,13 @@ of ``seeds-wurl`` is that when both live stores agreed and both were wrong,
 git was the only thing that still held the truth (``docs/storage-format.md``
 §11).
 
-This is a sibling of :mod:`seeds.gitstage`, not part of it: that module is
-scoped to "what is staged right now", answers ``None`` for everything it
-cannot determine, and must never be the reason ``seeds sync`` crashes. The
-contract here is the opposite for ``--against-git``, and deliberately so — a
-comparison the operator explicitly asked for that silently could not run is
-the "green while broken" shape this whole subsystem exists to prevent. So a
-missing git, or a directory that is not inside a work tree, raises
-:class:`GitUnavailable` and the caller decides. An *unborn* ``HEAD`` is not one
-of those cases: "there is no previous commit" is a real, complete answer, and
-the caller models it as an empty before-state.
+The contract for ``--against-git`` is loud, deliberately: a comparison the
+operator explicitly asked for that silently could not run is the "green while
+broken" shape this whole subsystem exists to prevent. So a missing git, or a
+directory that is not inside a work tree, raises :class:`GitUnavailable` and
+the caller decides. An *unborn* ``HEAD`` is not one of those cases: "there is
+no previous commit" is a real, complete answer, and the caller models it as an
+empty before-state.
 
 ``_subprocess_env`` is shared with :mod:`seeds.gitstage` because it describes
 git's hook contract — a hook has ``GIT_DIR`` and friends pointing at the commit

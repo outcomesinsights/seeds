@@ -5,7 +5,6 @@ import os
 import re
 import subprocess
 import tempfile
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,16 +12,14 @@ import pytest
 from click.testing import CliRunner
 
 from seeds.cli import main
-from seeds.db import SEEDS_DIR, Database
 from seeds.idgen import is_hash_suffix
 from seeds.models import (
     RelationType,
-    Seed,
     SeedStatus,
     SeedType,
 )
-from tests.githelpers import git as _git
-from tests.githelpers import git_init as _git_init
+from seeds.seedfile import SeedRecord
+from seeds.store import SEEDS_DIR, Store, new_record
 
 
 def _extract_created_id(output: str) -> str:
@@ -53,6 +50,42 @@ def _extract_jot_id(output: str) -> str:
     return match.group(1)
 
 
+def _store() -> Store:
+    """The store for the project the test has chdir'd into."""
+    return Store(Path.cwd() / SEEDS_DIR)
+
+
+def _record(
+    id: str,
+    title: str,
+    content: str = "",
+    status: SeedStatus = SeedStatus.CAPTURED,
+    seed_type: str = SeedType.IDEA.value,
+    tags: list[str] | None = None,
+) -> SeedRecord:
+    """A seed record, built with the field names these tests were written with.
+
+    ``content``/``id`` rather than ``body``/``seed_id`` so a test that predates
+    the seed-file store still reads the way its author wrote it. The record it
+    returns is the real thing -- there is no adapter under this, and
+    ``store.create`` writes it as a file like any other.
+    """
+    record = new_record(
+        id,
+        title,
+        body=content,
+        status=status,
+        seed_type=str(seed_type),
+        tags=tags,
+    )
+    if status in (SeedStatus.RESOLVED, SeedStatus.ABANDONED):
+        # resolved_at is required iff the status is terminal, and the writer
+        # refuses a record that breaks that -- so a terminal fixture has to
+        # carry one (docs/storage-format.md §3).
+        record.resolved_at = record.updated_at
+    return record
+
+
 @pytest.fixture
 def cli_runner():
     """Create a CLI runner for testing commands."""
@@ -61,17 +94,18 @@ def cli_runner():
 
 @pytest.fixture
 def initialized_env():
-    """Create a temp directory with initialized seeds (prefix='seeds')."""
+    """Create a temp directory with an initialized seed-file store.
+
+    The prefix is set explicitly so tests asserting on 'seeds-...' IDs stay
+    deterministic regardless of the random tmpdir name.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         original_cwd = os.getcwd()
         os.chdir(tmpdir)
         try:
-            # Initialize seeds with an explicit prefix so existing tests
-            # that assert on 'seeds-N' IDs stay deterministic regardless
-            # of the random tmpdir name.
-            db = Database()
-            db.init(prefix="seeds")
-            db.close()
+            store = Store(Path(tmpdir) / SEEDS_DIR)
+            store.files_dir.mkdir(parents=True, exist_ok=True)
+            store.set_prefix("seeds")
             yield Path(tmpdir)
         finally:
             os.chdir(original_cwd)
@@ -80,62 +114,101 @@ def initialized_env():
 @pytest.fixture
 def env_with_seeds(initialized_env):
     """Create env with some test seeds."""
-    db = Database()
-
-    # Create some test seeds
-    seeds = [
-        Seed(id="seed-test1", title="Test Seed 1", status=SeedStatus.CAPTURED),
-        Seed(id="seed-test2", title="Test Seed 2", status=SeedStatus.EXPLORING),
-        Seed(id="seed-test3", title="Test Seed 3", status=SeedStatus.DEFERRED),
-        Seed(id="seed-test1.1", title="Child Seed", status=SeedStatus.CAPTURED),
-    ]
-    for seed in seeds:
-        db.create_seed(seed)
-
-    db.close()
+    store = Store(initialized_env / SEEDS_DIR)
+    for seed_id, title, status in [
+        ("seed-test1", "Test Seed 1", SeedStatus.CAPTURED),
+        ("seed-test2", "Test Seed 2", SeedStatus.EXPLORING),
+        ("seed-test3", "Test Seed 3", SeedStatus.DEFERRED),
+        ("seed-test1.1", "Child Seed", SeedStatus.CAPTURED),
+    ]:
+        store.create(new_record(seed_id, title, status=status))
     yield initialized_env
 
 
 class TestInitCommand:
     """Tests for 'seeds init' command."""
 
-    def test_init_points_at_import_when_db_missing_but_jsonl_present(
-        self, cli_runner, env_with_seeds
+    def _unconverted(self, tmpdir):
+        """A .seeds/ holding only the pre-0.7 JSONL: an unconverted project."""
+        seeds_dir = Path(tmpdir) / SEEDS_DIR
+        seeds_dir.mkdir(parents=True, exist_ok=True)
+        (seeds_dir / "seeds.jsonl").write_text(
+            json.dumps(
+                {
+                    "format_version": 2,
+                    "id": "seeds-a1",
+                    "title": "From the old store",
+                    "content": "",
+                    "status": "captured",
+                    "seed_type": "idea",
+                    "tags": [],
+                    "created_at": "2026-01-01T00:00:00+00:00",
+                    "updated_at": "2026-01-01T00:00:00+00:00",
+                    "resolved_at": None,
+                    "resolution": "",
+                    "relationships": [],
+                }
+            )
+            + "\n"
+        )
+        return seeds_dir
+
+    def test_init_points_at_convert_when_only_the_legacy_jsonl_is_present(
+        self, cli_runner
     ):
-        """The fresh-clone state: tracked JSONL, gitignored DB absent.
+        """The unconverted-repo state: tracked JSONL, no seed files.
 
-        Regression: init reported "already initialized" over a directory with
-        no database, while every other command sent the user to init -- a
-        closed loop with no exit, and the exact state of every fresh clone
-        (bead seeds-1j3).
+        This is bead seeds-1j3's closed loop in its new shape. init used to
+        report "already initialized" over a .seeds/ it could not actually use,
+        while every other command sent the user to init. The recovery that
+        works here is `seeds convert`, and both ends have to name it.
         """
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        (Path.cwd() / SEEDS_DIR / "seeds.db").unlink()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                self._unconverted(tmpdir)
 
-        result = cli_runner.invoke(main, ["init"])
-        assert result.exit_code == 0
-        assert "already initialized" not in result.output
-        assert "seeds import" in result.output
+                result = cli_runner.invoke(main, ["init"])
 
-    def test_commands_point_at_import_when_db_missing_but_jsonl_present(
-        self, cli_runner, env_with_seeds
+                assert result.exit_code == 0
+                assert "already initialized" not in result.output
+                assert "seeds convert" in result.output
+            finally:
+                os.chdir(original_cwd)
+
+    def test_commands_point_at_convert_when_only_the_legacy_jsonl_is_present(
+        self, cli_runner
     ):
         """Other commands name the recovery that actually works."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        (Path.cwd() / SEEDS_DIR / "seeds.db").unlink()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                self._unconverted(tmpdir)
 
-        result = cli_runner.invoke(main, ["list"])
-        assert result.exit_code == 1
-        assert "seeds import" in result.output
-        assert "seeds init" not in result.output
+                result = cli_runner.invoke(main, ["list"])
 
-    def test_import_actually_recovers_that_state(self, cli_runner, env_with_seeds):
+                assert result.exit_code == 1
+                assert "seeds convert" in result.output
+                assert "seeds init" not in result.output
+            finally:
+                os.chdir(original_cwd)
+
+    def test_convert_actually_recovers_that_state(self, cli_runner):
         """The advice has to work, so exercise it rather than trusting it."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        (Path.cwd() / SEEDS_DIR / "seeds.db").unlink()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                self._unconverted(tmpdir)
 
-        assert cli_runner.invoke(main, ["import"]).exit_code == 0
-        assert cli_runner.invoke(main, ["list"]).exit_code == 0
+                assert cli_runner.invoke(main, ["convert"]).exit_code == 0
+                list_result = cli_runner.invoke(main, ["list"])
+                assert list_result.exit_code == 0
+                assert "seeds-a1" in list_result.output
+            finally:
+                os.chdir(original_cwd)
 
     def test_uninitialized_project_still_says_init(self, cli_runner):
         """No .seeds at all is the case where 'seeds init' IS the answer."""
@@ -192,9 +265,8 @@ class TestInitCommand:
                 result = cli_runner.invoke(main, ["init"])
                 assert result.exit_code == 0
                 assert "Project prefix: my-cool-project" in result.output
-                db = Database()
-                assert db.get_prefix() == "my-cool-project"
-                db.close()
+                store = _store()
+                assert store.get_prefix() == "my-cool-project"
             finally:
                 os.chdir(original_cwd)
 
@@ -207,9 +279,8 @@ class TestInitCommand:
                 result = cli_runner.invoke(main, ["init", "--prefix", "myproj"])
                 assert result.exit_code == 0
                 assert "Project prefix: myproj" in result.output
-                db = Database()
-                assert db.get_prefix() == "myproj"
-                db.close()
+                store = _store()
+                assert store.get_prefix() == "myproj"
             finally:
                 os.chdir(original_cwd)
 
@@ -240,21 +311,19 @@ class TestRenamePrefixCommand:
 
     def test_rename_prefix_rewrites_ids(self, cli_runner, initialized_env):
         """rename-prefix rewrites all seed IDs and updates config."""
-        db = Database()
-        db.create_seed(Seed(id="seeds-1", title="first"))
-        db.create_seed(Seed(id="seeds-2", title="second"))
-        db.close()
+        store = _store()
+        store.create(_record(id="seeds-1", title="first"))
+        store.create(_record(id="seeds-2", title="second"))
 
         result = cli_runner.invoke(main, ["rename-prefix", "myproj"])
         assert result.exit_code == 0
         assert "Renamed 2 IDs" in result.output
         assert "seeds-1 → myproj-1" in result.output
 
-        db = Database()
-        assert db.get_prefix() == "myproj"
-        assert db.get_seed("myproj-1") is not None
-        assert db.get_seed("seeds-1") is None
-        db.close()
+        store = _store()
+        assert store.get_prefix() == "myproj"
+        assert store.get("myproj-1") is not None
+        assert store.get("seeds-1") is None
 
     def test_rename_prefix_sanitizes(self, cli_runner, initialized_env):
         """rename-prefix sanitizes input before applying."""
@@ -264,9 +333,8 @@ class TestRenamePrefixCommand:
         assert result.exit_code == 0
         assert "sanitized prefix to 'my-project'" in result.output
 
-        db = Database()
-        assert db.get_prefix() == "my-project"
-        db.close()
+        store = _store()
+        assert store.get_prefix() == "my-project"
 
     def test_rename_prefix_rejects_invalid(self, cli_runner, initialized_env):
         """rename-prefix exits non-zero on irrecoverable input."""
@@ -288,10 +356,9 @@ class TestRenamePrefixCommand:
 
     def test_rename_prefix_rewrites_children(self, cli_runner, initialized_env):
         """rename-prefix rewrites child IDs and updates parent references."""
-        db = Database()
-        db.create_seed(Seed(id="seeds-1", title="parent"))
-        db.create_seed(Seed(id="seeds-1.1", title="child"))
-        db.close()
+        store = _store()
+        store.create(_record(id="seeds-1", title="parent"))
+        store.create(_record(id="seeds-1.1", title="child"))
 
         result = cli_runner.invoke(main, ["rename-prefix", "demo"])
         assert result.exit_code == 0
@@ -303,27 +370,32 @@ class TestRenamePrefixCommand:
         assert result.exit_code == 0
         assert "child" in result.output.lower()
 
-    def test_rename_prefix_reexports_jsonl(self, cli_runner, initialized_env):
-        """rename-prefix re-exports JSONL with the new IDs."""
-        db = Database()
-        db.create_seed(Seed(id="seeds-1", title="alpha"))
-        db.create_seed(Seed(id="seeds-2", title="beta"))
-        db.close()
+    def test_rename_prefix_renames_the_files_themselves(
+        self, cli_runner, initialized_env
+    ):
+        """The filename IS the id (docs/storage-format.md §1.1).
+
+        This replaces a check that the JSONL was re-exported with the new ids.
+        There is no export to re-run now, and the equivalent -- the only place
+        the new id can land -- is the file's own name. A rename that rewrote
+        frontmatter and left the old filenames would leave every `seeds show`
+        computing a path that is not there.
+        """
+        store = _store()
+        store.create(_record(id="seeds-1", title="alpha"))
+        store.create(_record(id="seeds-2", title="beta"))
 
         result = cli_runner.invoke(main, ["rename-prefix", "demo"])
         assert result.exit_code == 0
 
-        jsonl_path = initialized_env / SEEDS_DIR / "seeds.jsonl"
-        text = jsonl_path.read_text()
-        assert '"id": "demo-1"' in text
-        assert '"id": "demo-2"' in text
-        assert '"id": "seeds-1"' not in text
+        names = sorted(p.name for p in _store().files_dir.glob("*.md"))
+        assert names == ["demo-1.md", "demo-2.md"]
+        assert _store().get("demo-1").id == "demo-1"
 
     def test_rename_prefix_rewrites_body_refs(self, cli_runner, initialized_env):
         """rename-prefix rewrites ID refs inside seed content by default."""
-        db = Database()
-        db.create_seed(Seed(id="seeds-1", title="target"))
-        db.close()
+        store = _store()
+        store.create(_record(id="seeds-1", title="target"))
         create_result = cli_runner.invoke(
             main, ["create", "--title", "hub", "--content", "see seeds-1"]
         )
@@ -343,9 +415,8 @@ class TestRenamePrefixCommand:
 
     def test_rename_prefix_no_rewrite_bodies(self, cli_runner, initialized_env):
         """--no-rewrite-bodies leaves seed content alone."""
-        db = Database()
-        db.create_seed(Seed(id="seeds-1", title="target"))
-        db.close()
+        store = _store()
+        store.create(_record(id="seeds-1", title="target"))
         create_result = cli_runner.invoke(
             main, ["create", "--title", "hub", "--content", "see seeds-1"]
         )
@@ -367,9 +438,8 @@ class TestRenamePrefixCommand:
 
     def test_rename_prefix_dry_run(self, cli_runner, initialized_env):
         """--dry-run reports what would change without writing."""
-        db = Database()
-        db.create_seed(Seed(id="seeds-1", title="target"))
-        db.close()
+        store = _store()
+        store.create(_record(id="seeds-1", title="target"))
         create_result = cli_runner.invoke(
             main, ["create", "--title", "hub", "--content", "see seeds-1"]
         )
@@ -388,11 +458,10 @@ class TestRenamePrefixCommand:
         assert "Run without --dry-run" in result.output
 
         # Nothing was actually written.
-        db = Database()
-        assert db.get_prefix() == "seeds"
-        assert db.get_seed("seeds-1") is not None
-        assert db.get_seed("demo-1") is None
-        db.close()
+        store = _store()
+        assert store.get_prefix() == "seeds"
+        assert store.get("seeds-1") is not None
+        assert store.get("demo-1") is None
 
     def test_rename_prefix_then_show_covers_both_id_shapes(
         self, cli_runner, initialized_env
@@ -405,12 +474,11 @@ class TestRenamePrefixCommand:
         while 'seeds-k3n7' was not, so whether the suite passed depended on
         which hash next_id() happened to emit.
         """
-        db = Database()
-        db.create_seed(Seed(id="seeds-112", title="grandfathered sequential"))
-        db.create_seed(Seed(id="seeds-060", title="all-digit base36 hash"))
-        db.create_seed(Seed(id="seeds-k3n7", title="alphanumeric base36 hash"))
-        db.create_seed(Seed(id="seeds-k3n7.1", title="child of a hash ID"))
-        db.close()
+        store = _store()
+        store.create(_record(id="seeds-112", title="grandfathered sequential"))
+        store.create(_record(id="seeds-060", title="all-digit base36 hash"))
+        store.create(_record(id="seeds-k3n7", title="alphanumeric base36 hash"))
+        store.create(_record(id="seeds-k3n7.1", title="child of a hash ID"))
 
         result = cli_runner.invoke(main, ["rename-prefix", "demo"])
         assert result.exit_code == 0
@@ -435,17 +503,16 @@ class TestRenamePrefixCommand:
         Renaming a hash ID without rewriting references to it would strand
         every mention of it in another seed's text.
         """
-        db = Database()
-        db.create_seed(Seed(id="seeds-112", title="sequential target"))
-        db.create_seed(Seed(id="seeds-k3n7", title="hash target"))
-        db.create_seed(
-            Seed(
+        store = _store()
+        store.create(_record(id="seeds-112", title="sequential target"))
+        store.create(_record(id="seeds-k3n7", title="hash target"))
+        store.create(
+            _record(
                 id="seeds-abc1",
                 title="hub",
                 content="see seeds-112 and seeds-k3n7 (seeds-related work)",
             )
         )
-        db.close()
 
         result = cli_runner.invoke(main, ["rename-prefix", "demo"])
         assert result.exit_code == 0
@@ -469,12 +536,11 @@ class TestJotCommand:
         assert "My quick thought" in result.output
 
         # Verify seed was created
-        db = Database()
-        seeds = db.list_seeds()
+        store = _store()
+        seeds = store.list_seeds()
         assert len(seeds) == 1
         assert seeds[0].title == "My quick thought"
         assert seeds[0].status == SeedStatus.CAPTURED
-        db.close()
 
     def test_jot_requires_init(self, cli_runner):
         """Verify jot fails if not initialized."""
@@ -485,43 +551,6 @@ class TestJotCommand:
                 result = cli_runner.invoke(main, ["jot", "Test"])
                 assert result.exit_code != 0
                 assert "not initialized" in result.output
-            finally:
-                os.chdir(original_cwd)
-
-
-class TestGetDbBootstrap:
-    """Tests for Context.get_db's bootstrap seam (fresh-clone import path)."""
-
-    def test_get_db_exits_when_uninitialized_by_default(self):
-        """Default get_db() still exits 'run seeds init' when the DB is absent."""
-        from seeds.cli import Context
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            original_cwd = os.getcwd()
-            os.chdir(tmpdir)
-            try:
-                ctx = Context()
-                with pytest.raises(SystemExit):
-                    ctx.get_db()
-            finally:
-                os.chdir(original_cwd)
-
-    def test_get_db_bootstrap_bypasses_init_guard(self):
-        """get_db(bootstrap=True) returns an (uninitialized) DB without exiting.
-
-        This is the seam an import caller uses to bootstrap from JSONL itself;
-        the actual `seeds import` command that calls it lands in a later bead.
-        """
-        from seeds.cli import Context
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            original_cwd = os.getcwd()
-            os.chdir(tmpdir)
-            try:
-                ctx = Context()
-                db = ctx.get_db(bootstrap=True)
-                assert db is not None
-                assert db.is_initialized() is False  # not created yet
             finally:
                 os.chdir(original_cwd)
 
@@ -552,12 +581,11 @@ class TestCreateCommand:
         )
         assert result.exit_code == 0
 
-        db = Database()
-        seeds = db.list_seeds()
+        store = _store()
+        seeds = store.list_seeds()
         assert len(seeds) == 1
         assert seeds[0].seed_type == SeedType.DECISION
         assert seeds[0].tags == ["important", "urgent"]
-        db.close()
 
     def test_create_with_parent(self, cli_runner, env_with_seeds):
         """Verify create with parent creates child seed."""
@@ -641,93 +669,6 @@ class TestListCommand:
             assert sid in result.output
 
 
-class TestSuggestCommand:
-    """Tests for 'seeds suggest' command (natural-language dedup query)."""
-
-    def test_suggest_returns_match(self, cli_runner, initialized_env):
-        create_result = cli_runner.invoke(
-            main,
-            ["create", "-t", "Venn diagram for compare lens", "--type", "idea"],
-        )
-        seed_id = _extract_created_id(create_result.output)
-        result = cli_runner.invoke(main, ["suggest", "venn diagram"])
-        assert result.exit_code == 0
-        assert seed_id in result.output
-        assert "Venn diagram" in result.output
-
-    def test_suggest_no_match_message(self, cli_runner, initialized_env):
-        cli_runner.invoke(main, ["create", "-t", "Totally unrelated topic"])
-        result = cli_runner.invoke(main, ["suggest", "venn diagram"])
-        assert result.exit_code == 0
-        assert "No seeds matched" in result.output
-
-    def test_suggest_json_mode(self, cli_runner, initialized_env):
-        create_result = cli_runner.invoke(
-            main, ["create", "-t", "Venn diagram", "--tags", "venn,compare"]
-        )
-        seed_id = _extract_created_id(create_result.output)
-        result = cli_runner.invoke(main, ["suggest", "venn diagram", "--json"])
-        assert result.exit_code == 0
-        import json as _json
-
-        payload = _json.loads(result.output)
-        assert isinstance(payload, list)
-        assert payload[0]["id"] == seed_id
-        assert payload[0]["title"] == "Venn diagram"
-        assert "compare" in payload[0]["tags"]
-        assert isinstance(payload[0]["score"], (int, float))
-
-    def test_suggest_json_is_compact(self, cli_runner, initialized_env):
-        """--json emits compact JSON: no indentation, no separator padding.
-
-        This output is piped into agents, so whitespace is tokens the model
-        pays for. Guards against a regression to `indent=2` (seeds-d773).
-        """
-        cli_runner.invoke(main, ["create", "-t", "Venn diagram", "--tags", "venn"])
-        result = cli_runner.invoke(main, ["suggest", "venn diagram", "--json"])
-        assert result.exit_code == 0
-
-        body = result.output.rstrip("\n")
-        # One line: no indentation and no pretty-print line breaks.
-        assert "\n" not in body
-        # json.dumps keeps ", " / ": " padding unless separators is set.
-        assert ", " not in body
-        assert '": ' not in body
-        # Still real JSON with the same shape.
-        import json as _json
-
-        payload = _json.loads(body)
-        assert isinstance(payload, list)
-        assert payload[0]["title"] == "Venn diagram"
-
-    def test_suggest_limit_caps_results(self, cli_runner, initialized_env):
-        for i in range(5):
-            cli_runner.invoke(main, ["create", "-t", f"Venn diagram {i}"])
-        result = cli_runner.invoke(main, ["suggest", "venn diagram", "--limit", "2"])
-        assert result.exit_code == 0
-        # Count seed lines (lines starting with a status icon)
-        ids_in_output = sum(
-            1 for line in result.output.splitlines() if "seeds-" in line
-        )
-        assert ids_in_output == 2
-
-    def test_suggest_includes_resolved_by_default(self, cli_runner, initialized_env):
-        create_result = cli_runner.invoke(main, ["create", "-t", "Venn diagram"])
-        seed_id = _extract_created_id(create_result.output)
-        cli_runner.invoke(main, ["resolve", seed_id, "-r", "Done"])
-        result = cli_runner.invoke(main, ["suggest", "venn diagram"])
-        assert result.exit_code == 0
-        assert seed_id in result.output
-
-    def test_suggest_open_only_excludes_terminal(self, cli_runner, initialized_env):
-        create_result = cli_runner.invoke(main, ["create", "-t", "Venn diagram"])
-        seed_id = _extract_created_id(create_result.output)
-        cli_runner.invoke(main, ["resolve", seed_id, "-r", "Done"])
-        result = cli_runner.invoke(main, ["suggest", "venn diagram", "--open-only"])
-        assert result.exit_code == 0
-        assert "No seeds matched" in result.output
-
-
 class TestRecentCommand:
     """Tests for 'seeds recent' alias."""
 
@@ -800,10 +741,9 @@ class TestStatusCommands:
         assert result.exit_code == 0
         assert "Now exploring" in result.output
 
-        db = Database()
-        seed = db.get_seed("seed-test1")
+        store = _store()
+        seed = store.get("seed-test1")
         assert seed.status == SeedStatus.EXPLORING
-        db.close()
 
     def test_defer_changes_status(self, cli_runner, env_with_seeds):
         """Verify defer changes status to deferred."""
@@ -811,10 +751,9 @@ class TestStatusCommands:
         assert result.exit_code == 0
         assert "Deferred" in result.output
 
-        db = Database()
-        seed = db.get_seed("seed-test1")
+        store = _store()
+        seed = store.get("seed-test1")
         assert seed.status == SeedStatus.DEFERRED
-        db.close()
 
     def test_resolve_changes_status(self, cli_runner, env_with_seeds):
         """Verify resolve changes status to resolved."""
@@ -822,12 +761,11 @@ class TestStatusCommands:
         assert result.exit_code == 0
         assert "Resolved" in result.output
 
-        db = Database()
-        seed = db.get_seed("seed-test2")
+        store = _store()
+        seed = store.get("seed-test2")
         assert seed.status == SeedStatus.RESOLVED
         assert seed.resolved_at is not None
         assert seed.resolution == ""
-        db.close()
 
     def test_resolve_with_resolution(self, cli_runner, env_with_seeds):
         """Verify resolve captures resolution text."""
@@ -839,11 +777,10 @@ class TestStatusCommands:
         assert "Resolved" in result.output
         assert "Shipped in PR #42" in result.output
 
-        db = Database()
-        seed = db.get_seed("seed-test2")
+        store = _store()
+        seed = store.get("seed-test2")
         assert seed.status == SeedStatus.RESOLVED
         assert seed.resolution == "Shipped in PR #42"
-        db.close()
 
     def test_abandon_changes_status(self, cli_runner, env_with_seeds):
         """Verify abandon changes status to abandoned."""
@@ -851,10 +788,9 @@ class TestStatusCommands:
         assert result.exit_code == 0
         assert "Abandoned" in result.output
 
-        db = Database()
-        seed = db.get_seed("seed-test2")
+        store = _store()
+        seed = store.get("seed-test2")
         assert seed.status == SeedStatus.ABANDONED
-        db.close()
 
     def test_abandon_with_reason(self, cli_runner, env_with_seeds):
         """Verify abandon captures reason in resolution field."""
@@ -865,10 +801,9 @@ class TestStatusCommands:
         assert result.exit_code == 0
         assert "Not feasible" in result.output
 
-        db = Database()
-        seed = db.get_seed("seed-test2")
+        store = _store()
+        seed = store.get("seed-test2")
         assert seed.resolution == "Not feasible"
-        db.close()
 
 
 class TestTrellisCommand:
@@ -946,10 +881,9 @@ class TestTrellisCommand:
             ["trellis", "seed-test2", "--to", str(target), "--as", "A principle"],
         )
         assert result.exit_code == 0
-        db = Database()
-        seed = db.get_seed("seed-test2")
+        store = _store()
+        seed = store.get("seed-test2")
         assert str(target) in seed.resolution
-        db.close()
 
     def test_trellis_tag_idempotent(self, cli_runner, env_with_seeds):
         """Tags the seed 'trellis', without duplicating on repeat."""
@@ -958,10 +892,9 @@ class TestTrellisCommand:
         assert cli_runner.invoke(main, args).exit_code == 0
         # Run it a second time — the tag must not be duplicated.
         assert cli_runner.invoke(main, args).exit_code == 0
-        db = Database()
-        seed = db.get_seed("seed-test2")
+        store = _store()
+        seed = store.get("seed-test2")
         assert seed.tags.count("trellis") == 1
-        db.close()
 
     def test_trellis_resolves_by_default(self, cli_runner, env_with_seeds):
         """Making a trellis resolves the seed by default."""
@@ -971,11 +904,10 @@ class TestTrellisCommand:
             ["trellis", "seed-test2", "--to", str(target), "--as", "A principle"],
         )
         assert result.exit_code == 0
-        db = Database()
-        seed = db.get_seed("seed-test2")
+        store = _store()
+        seed = store.get("seed-test2")
         assert seed.status == SeedStatus.RESOLVED
         assert seed.resolved_at is not None
-        db.close()
 
     def test_trellis_no_resolve_keeps_status(self, cli_runner, env_with_seeds):
         """With --no-resolve the status is unchanged and the seed stays queryable."""
@@ -993,10 +925,9 @@ class TestTrellisCommand:
             ],
         )
         assert result.exit_code == 0
-        db = Database()
-        seed = db.get_seed("seed-test2")
+        store = _store()
+        seed = store.get("seed-test2")
         assert seed.status == SeedStatus.EXPLORING
-        db.close()
         # A non-terminal trellis seed is surfaced by the tag filter.
         listed = cli_runner.invoke(main, ["list", "--tag", "trellis"])
         assert listed.exit_code == 0
@@ -1016,29 +947,26 @@ class TestTrellisCommand:
 class TestRetypeCommand:
     """Tests for 'seeds retype' (bulk type remap, bead seeds-scq)."""
 
-    def _seed(self, db, seed_id, seed_type):
-        db.create_seed(Seed(id=seed_id, title=f"Seed {seed_id}", seed_type=seed_type))
+    def _seed(self, store, seed_id, seed_type):
+        store.create(_record(id=seed_id, title=f"Seed {seed_id}", seed_type=seed_type))
 
     def test_retype_changes_every_matching_seed(self, cli_runner, env_with_seeds):
-        db = Database()
-        self._seed(db, "seed-a", "ideea")
-        self._seed(db, "seed-b", "ideea")
-        self._seed(db, "seed-c", "idea")
-        db.close()
+        store = _store()
+        self._seed(store, "seed-a", "ideea")
+        self._seed(store, "seed-b", "ideea")
+        self._seed(store, "seed-c", "idea")
 
         result = cli_runner.invoke(main, ["retype", "--from", "ideea", "--to", "idea"])
         assert result.exit_code == 0
         assert "seed-a" in result.output and "seed-b" in result.output
 
-        db = Database()
-        assert db.get_seed("seed-a").seed_type == "idea"
-        assert db.get_seed("seed-b").seed_type == "idea"
-        db.close()
+        store = _store()
+        assert store.get("seed-a").seed_type == "idea"
+        assert store.get("seed-b").seed_type == "idea"
 
     def test_dry_run_writes_nothing(self, cli_runner, env_with_seeds):
-        db = Database()
-        self._seed(db, "seed-a", "ideea")
-        db.close()
+        store = _store()
+        self._seed(store, "seed-a", "ideea")
 
         result = cli_runner.invoke(
             main, ["retype", "--from", "ideea", "--to", "idea", "--dry-run"]
@@ -1046,19 +974,25 @@ class TestRetypeCommand:
         assert result.exit_code == 0
         assert "DRY RUN" in result.output
 
-        db = Database()
-        assert db.get_seed("seed-a").seed_type == "ideea"
-        db.close()
+        store = _store()
+        assert store.get("seed-a").seed_type == "ideea"
 
-    def test_backup_written_on_apply(self, cli_runner, env_with_seeds):
-        db = Database()
-        self._seed(db, "seed-a", "ideea")
-        backup = db.path.with_suffix(".db.bak")
-        db.close()
-        assert not backup.exists()
+    def test_no_sidecar_backup_is_written(self, cli_runner, env_with_seeds):
+        """The backup step went with the database it copied.
 
-        cli_runner.invoke(main, ["retype", "--from", "ideea", "--to", "idea"])
-        assert backup.exists()
+        `retype` used to `cp` the gitignored .db beside itself before a bulk
+        edit. The seed files are tracked, so `git diff` shows what changed and
+        `git checkout` undoes it -- a strictly better backup than a sidecar
+        nobody would have found. Nothing untracked is left behind.
+        """
+        store = _store()
+        self._seed(store, "seed-a", "ideea")
+
+        result = cli_runner.invoke(main, ["retype", "--from", "ideea", "--to", "idea"])
+
+        assert result.exit_code == 0
+        assert "Backed up" not in result.output
+        assert list((env_with_seeds / SEEDS_DIR).glob("*.bak")) == []
 
     def test_no_match_touches_nothing(self, cli_runner, env_with_seeds):
         result = cli_runner.invoke(
@@ -1074,18 +1008,16 @@ class TestRetypeCommand:
 
     def test_arbitrary_types_accepted_both_sides(self, cli_runner, env_with_seeds):
         """The vocabulary is open, so neither --from nor --to is constrained."""
-        db = Database()
-        self._seed(db, "seed-a", "context")
-        db.close()
+        store = _store()
+        self._seed(store, "seed-a", "context")
 
         result = cli_runner.invoke(
             main, ["retype", "--from", "context", "--to", "background"]
         )
         assert result.exit_code == 0
 
-        db = Database()
-        assert db.get_seed("seed-a").seed_type == "background"
-        db.close()
+        store = _store()
+        assert store.get("seed-a").seed_type == "background"
 
 
 class TestUpdateCommand:
@@ -1100,10 +1032,9 @@ class TestUpdateCommand:
         assert result.exit_code == 0
         assert "Updated" in result.output
 
-        db = Database()
-        seed = db.get_seed("seed-test1")
+        store = _store()
+        seed = store.get("seed-test1")
         assert seed.title == "New Title"
-        db.close()
 
     def test_update_type(self, cli_runner, env_with_seeds):
         """Verify update can change a seed's type.
@@ -1118,9 +1049,8 @@ class TestUpdateCommand:
         )
         assert result.exit_code == 0
 
-        db = Database()
-        assert db.get_seed("seed-test1").seed_type == "decision"
-        db.close()
+        store = _store()
+        assert store.get("seed-test1").seed_type == "decision"
 
     def test_update_type_accepts_arbitrary_value(self, cli_runner, env_with_seeds):
         """The vocabulary is open here too, matching `seeds create`."""
@@ -1130,9 +1060,8 @@ class TestUpdateCommand:
         )
         assert result.exit_code == 0
 
-        db = Database()
-        assert db.get_seed("seed-test1").seed_type == "context"
-        db.close()
+        store = _store()
+        assert store.get("seed-test1").seed_type == "context"
 
     def test_update_type_composes_with_other_fields(self, cli_runner, env_with_seeds):
         """--type is an ordinary field edit, usable alongside the rest."""
@@ -1142,11 +1071,10 @@ class TestUpdateCommand:
         )
         assert result.exit_code == 0
 
-        db = Database()
-        seed = db.get_seed("seed-test1")
+        store = _store()
+        seed = store.get("seed-test1")
         assert seed.seed_type == "concern"
         assert seed.title == "Renamed"
-        db.close()
 
     def test_update_append_content(self, cli_runner, env_with_seeds):
         """Verify update --append adds to content."""
@@ -1156,10 +1084,9 @@ class TestUpdateCommand:
         )
         assert result.exit_code == 0
 
-        db = Database()
-        seed = db.get_seed("seed-test1")
-        assert "Additional thoughts" in seed.content
-        db.close()
+        store = _store()
+        seed = store.get("seed-test1")
+        assert "Additional thoughts" in seed.body
 
     def test_update_no_changes(self, cli_runner, env_with_seeds):
         """Verify update without changes shows message."""
@@ -1184,11 +1111,13 @@ class TestUpdateContentGuard:
         return _extract_created_id(result.output)
 
     def _content_of(self, seed_id):
-        db = Database()
-        try:
-            return db.get_seed(seed_id).content
-        finally:
-            db.close()
+        """The seed's body, minus the file's own terminating newline.
+
+        A seed file ends with exactly one newline and the reader hands the body
+        back verbatim, so ``body`` always carries it. That newline is the
+        file's, not the deliberation's, and no assertion below is about it.
+        """
+        return _store().get(seed_id).body.rstrip("\n")
 
     def test_virgin_seed_content_replaced_silently(self, cli_runner, initialized_env):
         """A seed never edited since creation accepts -c with no complaint."""
@@ -1300,9 +1229,8 @@ class TestUpdateContentGuard:
         result = cli_runner.invoke(main, ["update", seed_id, "--title", "Renamed"])
         assert result.exit_code == 0, result.output
 
-        db = Database()
-        assert db.get_seed(seed_id).title == "Renamed"
-        db.close()
+        store = _store()
+        assert store.get(seed_id).title == "Renamed"
 
     def test_tags_have_no_guard(self, cli_runner, initialized_env):
         """--tags replacement stays unguarded: tags are working state."""
@@ -1312,9 +1240,8 @@ class TestUpdateContentGuard:
         result = cli_runner.invoke(main, ["update", seed_id, "--tags", "a,b"])
         assert result.exit_code == 0, result.output
 
-        db = Database()
-        assert db.get_seed(seed_id).tags == ["a", "b"]
-        db.close()
+        store = _store()
+        assert store.get(seed_id).tags == ["a", "b"]
 
 
 class TestUpdateContentInput:
@@ -1333,11 +1260,13 @@ class TestUpdateContentInput:
         return _extract_created_id(result.output)
 
     def _content_of(self, seed_id):
-        db = Database()
-        try:
-            return db.get_seed(seed_id).content
-        finally:
-            db.close()
+        """The seed's body, minus the file's own terminating newline.
+
+        A seed file ends with exactly one newline and the reader hands the body
+        back verbatim, so ``body`` always carries it. That newline is the
+        file's, not the deliberation's, and no assertion below is about it.
+        """
+        return _store().get(seed_id).body.rstrip("\n")
 
     def test_content_file_replaces_the_body(self, cli_runner, initialized_env):
         seed_id = self._create(cli_runner)
@@ -1490,11 +1419,8 @@ class TestUpdateTagEdits:
         return _extract_created_id(result.output)
 
     def _tags_of(self, seed_id):
-        db = Database()
-        try:
-            return db.get_seed(seed_id).tags
-        finally:
-            db.close()
+        store = _store()
+        return store.get(seed_id).tags
 
     def test_add_tag_keeps_every_existing_tag(self, cli_runner, initialized_env):
         """--add-tag appends without disturbing what was already there."""
@@ -1573,9 +1499,8 @@ class TestUpdateTagEdits:
         nobody actually changed.
         """
         seed_id = self._create(cli_runner)
-        db = Database()
-        before = db.get_seed(seed_id).updated_at
-        db.close()
+        store = _store()
+        before = store.get(seed_id).updated_at
 
         assert (
             cli_runner.invoke(
@@ -1584,9 +1509,8 @@ class TestUpdateTagEdits:
             == 0
         )
 
-        db = Database()
-        assert db.get_seed(seed_id).updated_at == before
-        db.close()
+        store = _store()
+        assert store.get(seed_id).updated_at == before
 
     def test_add_and_remove_compose_in_one_invocation(
         self, cli_runner, initialized_env
@@ -1896,10 +1820,10 @@ class TestBeadRefValidation:
         original_cwd = os.getcwd()
         os.chdir(elsewhere)
         try:
-            with patch("seeds.db.SEEDS_DIR", str(project / ".seeds")):
-                db = Database()
-                db.init(prefix="seeds")
-                db.close()
+            with patch("seeds.store.SEEDS_DIR", str(project / ".seeds")):
+                store = Store(project / ".seeds")
+                store.files_dir.mkdir(parents=True, exist_ok=True)
+                store.set_prefix("seeds")
                 good = cli_runner.invoke(
                     main, ["create", "-t", "Test", "-c", "see seeds-230"]
                 )
@@ -1986,9 +1910,8 @@ class TestBase36RefValidation:
         assert is_hash_suffix(suffix), self.HASH_ID
         assert not suffix.isdigit(), self.HASH_ID
 
-        db = Database()
-        db.create_seed(Seed(id=self.HASH_ID, title="First seed"))
-        db.close()
+        store = _store()
+        store.create(_record(id=self.HASH_ID, title="First seed"))
 
         result = cli_runner.invoke(
             main, ["create", "-t", "Second", "-c", f"follow-up to {self.HASH_ID}"]
@@ -2034,12 +1957,11 @@ class TestQuestionCommands:
         assert "What is the answer?" in result.output
         assert "Attached to: seed-test1" in result.output
 
-        db = Database()
-        question_seeds = db.get_questions_for_seed("seed-test1")
+        store = _store()
+        question_seeds = store.questions_for("seed-test1")
         assert len(question_seeds) == 1
         assert question_seeds[0].title == "What is the answer?"
         assert question_seeds[0].seed_type == SeedType.QUESTION
-        db.close()
 
     def test_ask_invalid_seed(self, cli_runner, initialized_env):
         """Verify ask fails with invalid seed."""
@@ -2065,11 +1987,10 @@ class TestQuestionCommands:
         assert result.exit_code == 0
         assert "42" in result.output
 
-        db = Database()
-        q_seed = db.get_seed(q_id)
-        assert q_seed.content == "42"
+        store = _store()
+        q_seed = store.get(q_id)
+        assert q_seed.body.rstrip("\n") == "42"
         assert q_seed.status == SeedStatus.RESOLVED
-        db.close()
 
     def test_questions_lists_open(self, cli_runner, env_with_seeds):
         """Verify questions shows open question-seeds."""
@@ -2174,11 +2095,13 @@ class TestAnswerContentGuard:
         return result.output.split(":")[0].split()[-1]
 
     def _content_of(self, seed_id):
-        db = Database()
-        try:
-            return db.get_seed(seed_id).content
-        finally:
-            db.close()
+        """The seed's body, minus the file's own terminating newline.
+
+        A seed file ends with exactly one newline and the reader hands the body
+        back verbatim, so ``body`` always carries it. That newline is the
+        file's, not the deliberation's, and no assertion below is about it.
+        """
+        return _store().get(seed_id).body.rstrip("\n")
 
     def test_first_answer_to_open_question_succeeds_unchanged(
         self, cli_runner, env_with_seeds
@@ -2191,11 +2114,10 @@ class TestAnswerContentGuard:
         assert result.stderr == ""
         assert self._content_of(q_id) == "42"
 
-        db = Database()
-        q_seed = db.get_seed(q_id)
+        store = _store()
+        q_seed = store.get(q_id)
         assert q_seed.status == SeedStatus.RESOLVED
         assert q_seed.resolved_at is not None
-        db.close()
 
     def test_bare_re_answer_is_refused_and_leaves_content_untouched(
         self, cli_runner, env_with_seeds
@@ -2250,18 +2172,16 @@ class TestAnswerContentGuard:
         """Design pick: every successful answer re-stamps resolved_at to now."""
         q_id = self._ask(cli_runner)
         cli_runner.invoke(main, ["answer", q_id, "the original answer"])
-        db = Database()
-        first_resolved_at = db.get_seed(q_id).resolved_at
-        db.close()
+        store = _store()
+        first_resolved_at = store.get(q_id).resolved_at
 
         result = cli_runner.invoke(
             main, ["answer", q_id, "a later revision", "--append"]
         )
         assert result.exit_code == 0, result.output
 
-        db = Database()
-        second_resolved_at = db.get_seed(q_id).resolved_at
-        db.close()
+        store = _store()
+        second_resolved_at = store.get(q_id).resolved_at
         assert second_resolved_at > first_resolved_at
 
     def test_answer_help_documents_both_flags(self, cli_runner):
@@ -2283,19 +2203,19 @@ class TestLinkCommand:
         assert result.exit_code == 0
         assert "Linked" in result.output
 
-        db = Database()
-        rels = db.get_relationships(
-            "seed-test1", rel_type=RelationType.RELATES_TO, direction="outbound"
-        )
-        assert len(rels) == 1
-        assert rels[0].target_id == "seed-test2"
-        # Reverse direction too
-        rels2 = db.get_relationships(
-            "seed-test2", rel_type=RelationType.RELATES_TO, direction="outbound"
-        )
-        assert len(rels2) == 1
-        assert rels2[0].target_id == "seed-test1"
-        db.close()
+        # relates-to is symmetric, so it is stored as itself in BOTH files
+        # (docs/storage-format.md §5.1/§5.2) -- there is no second table to
+        # ask, and a one-sided edge is a `seeds check` violation.
+        store = _store()
+        near = store.get("seed-test1").relationships
+        far = store.get("seed-test2").relationships
+        assert [(e.target_id, e.rel_type) for e in near] == [
+            ("seed-test2", RelationType.RELATES_TO)
+        ]
+        assert [(e.target_id, e.rel_type) for e in far] == [
+            ("seed-test1", RelationType.RELATES_TO)
+        ]
+        assert near[0].created_at == far[0].created_at
 
     def test_link_already_linked(self, cli_runner, env_with_seeds):
         """Verify link handles already linked seeds."""
@@ -2322,12 +2242,14 @@ class TestLinkCommand:
         assert result.exit_code == 0
         assert "questions" in result.output
 
-        db = Database()
-        rels = db.get_relationships(
-            "seed-test1", rel_type=RelationType.QUESTIONS, direction="outbound"
-        )
-        assert len(rels) == 1
-        db.close()
+        # `questions` is directional, so the far end stores its named inverse.
+        store = _store()
+        assert [
+            (e.target_id, e.rel_type) for e in store.get("seed-test1").relationships
+        ] == [("seed-test2", RelationType.QUESTIONS)]
+        assert [
+            (e.target_id, e.rel_type) for e in store.get("seed-test2").relationships
+        ] == [("seed-test1", RelationType.QUESTIONED_BY)]
 
 
 class TestReadyDeferredBlocked:
@@ -2366,765 +2288,6 @@ class TestTreeCommand:
         assert "seed-test1" in result.output
         assert "Children:" in result.output
         assert "seed-test1.1" in result.output
-
-
-class TestImportCommand:
-    """Tests for 'seeds import' command (rehydrate from JSONL)."""
-
-    def test_import_rehydrates_and_prints_counts(self, cli_runner, env_with_seeds):
-        """import rebuilds DB-absent seeds from JSONL and prints created counts."""
-        # Export the fixture's seeds, then wipe the DB to simulate a fresh clone.
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        db_path = env_with_seeds / SEEDS_DIR / "seeds.db"
-        db_path.unlink()
-
-        result = cli_runner.invoke(main, ["import"])
-        assert result.exit_code == 0
-        # Fixture has 4 seeds, all newly created on a fresh DB.
-        assert "Imported: 4 created, 0 updated, 0 skipped" in result.output
-
-        # The seeds are actually back in the DB.
-        list_result = cli_runner.invoke(main, ["list", "--all"])
-        assert "seed-test1" in list_result.output
-
-    def test_import_again_skips_unchanged(self, cli_runner, env_with_seeds):
-        """A second import of the same JSONL leaves fresh DB rows untouched."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        result = cli_runner.invoke(main, ["import"])
-        assert result.exit_code == 0
-        # DB rows are as-fresh-or-fresher than JSONL -> all skipped.
-        assert "Imported: 0 created, 0 updated, 4 skipped" in result.output
-
-    def test_import_reads_from_stdin(self, cli_runner, env_with_seeds):
-        """import - reads JSONL from stdin and rehydrates a wiped DB."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
-        jsonl_text = jsonl_path.read_text()
-
-        # Wipe the DB so the stdin records are genuinely created.
-        (env_with_seeds / SEEDS_DIR / "seeds.db").unlink()
-
-        result = cli_runner.invoke(main, ["import", "-"], input=jsonl_text)
-        assert result.exit_code == 0
-        assert "Imported: 4 created, 0 updated, 0 skipped" in result.output
-
-        list_result = cli_runner.invoke(main, ["list", "--all"])
-        assert "seed-test1" in list_result.output
-
-    def test_import_explicit_path(self, cli_runner, env_with_seeds):
-        """import accepts an explicit PATH argument."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
-        (env_with_seeds / SEEDS_DIR / "seeds.db").unlink()
-
-        result = cli_runner.invoke(main, ["import", str(jsonl_path)])
-        assert result.exit_code == 0
-        assert "Imported: 4 created" in result.output
-
-    def test_import_reports_refused_future_dated_record(
-        self, cli_runner, env_with_seeds
-    ):
-        """A future-dated record is refused and the output names the seed."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
-
-        forged = []
-        for line in jsonl_path.read_text().splitlines():
-            if not line.strip():
-                continue
-            record = json.loads(line)
-            if record["id"] == "seed-test2":
-                record["updated_at"] = "2030-01-01T00:00:00+00:00"
-                record["title"] = "POISONED TITLE"
-            forged.append(json.dumps(record))
-        jsonl_path.write_text("\n".join(forged) + "\n")
-
-        result = cli_runner.invoke(main, ["import"])
-
-        # Non-zero so a script driving `seeds import` notices the loss.
-        assert result.exit_code == 1
-        # The refusal is counted, named, and quotes the claimed timestamp.
-        assert "1 refused" in result.output
-        assert "seed-test2" in result.output
-        assert "2030-01-01T00:00:00+00:00" in result.output
-        # The other three records still imported (no mid-file abort).
-        assert "3 skipped" in result.output
-        # And the DB row was left alone.
-        show = cli_runner.invoke(main, ["show", "seed-test2"])
-        assert "POISONED TITLE" not in show.output
-
-    def test_import_survives_timezone_naive_timestamp(self, cli_runner, env_with_seeds):
-        """A naive updated_at does not abort the import; the summary still prints."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
-
-        forged = []
-        for line in jsonl_path.read_text().splitlines():
-            if not line.strip():
-                continue
-            record = json.loads(line)
-            if record["id"] == "seed-test2":
-                naive = datetime.fromisoformat(record["updated_at"]).replace(
-                    tzinfo=None
-                )
-                record["updated_at"] = naive.isoformat()
-            forged.append(json.dumps(record))
-        jsonl_path.write_text("\n".join(forged) + "\n")
-
-        result = cli_runner.invoke(main, ["import"])
-
-        assert result.exit_code == 0
-        assert result.exception is None
-        # All four records accounted for — nothing aborted partway.
-        assert "Imported: 0 created, 0 updated, 4 skipped" in result.output
-
-
-def _corrupt_one_record(jsonl_path, seed_id, **overrides):
-    """Rewrite one record in a JSONL file, returning the ids of the ones after it."""
-    lines = [ln for ln in jsonl_path.read_text().splitlines() if ln.strip()]
-    records = [json.loads(ln) for ln in lines]
-    index = next(i for i, r in enumerate(records) if r["id"] == seed_id)
-    records[index].update(overrides)
-    jsonl_path.write_text("\n".join(json.dumps(r) for r in records) + "\n")
-    return index + 1, [r["id"] for r in records[index + 1 :]]
-
-
-class TestBestEffortImport:
-    """Import is best-effort with a loud report (bead seeds-cvi, seed seeds-hao9).
-
-    The behaviour these replace was neither transactional nor best-effort: the
-    import raised where it stood, so records ABOVE the bad line committed and
-    records BELOW never imported -- silently, for five weeks (seed seeds-1x6b).
-    """
-
-    def _forge(self, cli_runner, env, **overrides):
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        jsonl_path = env / SEEDS_DIR / "seeds.jsonl"
-        record_number, after = _corrupt_one_record(
-            jsonl_path, "seed-test2", **overrides
-        )
-        (env / SEEDS_DIR / "seeds.db").unlink()
-        return jsonl_path, record_number, after
-
-    def test_records_after_the_bad_one_still_import(self, cli_runner, env_with_seeds):
-        """The exact seeds-1x6b failure: everything below the bad line lands."""
-        _, _, after = self._forge(
-            cli_runner, env_with_seeds, seed_type=None, title=None
-        )
-        assert after, "fixture must have records after the corrupted one"
-
-        result = cli_runner.invoke(main, ["import"])
-
-        listing = cli_runner.invoke(main, ["list", "--all"])
-        for seed_id in after:
-            assert seed_id in listing.output
-        assert "seed-test2" not in listing.output
-        assert result.exit_code == 1
-
-    def test_report_names_record_number_id_field_and_reason(
-        self, cli_runner, env_with_seeds
-    ):
-        """A refusal that does not say what is wrong is the defect being fixed."""
-        _, record_number, _ = self._forge(
-            cli_runner, env_with_seeds, status="in-progress"
-        )
-
-        result = cli_runner.invoke(main, ["import"])
-
-        assert "1 refused" in result.output
-        assert f"record {record_number} (seed-test2)" in result.output
-        assert "status" in result.output
-        assert "SeedStatus" in result.output
-
-    def test_exit_status_is_non_zero_so_a_script_notices(
-        self, cli_runner, env_with_seeds
-    ):
-        self._forge(cli_runner, env_with_seeds, status="in-progress")
-
-        assert cli_runner.invoke(main, ["import"]).exit_code == 1
-
-    def test_a_clean_import_still_exits_zero(self, cli_runner, env_with_seeds):
-        """Nothing refused, nothing to complain about."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        (env_with_seeds / SEEDS_DIR / "seeds.db").unlink()
-
-        result = cli_runner.invoke(main, ["import"])
-
-        assert result.exit_code == 0
-        assert "refused" not in result.output
-
-    def test_unparseable_line_does_not_stop_the_lines_below(
-        self, cli_runner, env_with_seeds
-    ):
-        """Conflict markers are the other shape of the same outage."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
-        lines = [ln for ln in jsonl_path.read_text().splitlines() if ln.strip()]
-        jsonl_path.write_text("\n".join([lines[0], "<<<<<<< HEAD", *lines[1:]]) + "\n")
-        (env_with_seeds / SEEDS_DIR / "seeds.db").unlink()
-
-        result = cli_runner.invoke(main, ["import"])
-
-        assert result.exit_code == 1
-        assert "record 2" in result.output
-        listing = cli_runner.invoke(main, ["list", "--all"])
-        for record in (json.loads(ln) for ln in lines):
-            assert record["id"] in listing.output
-
-    def test_sync_still_flushes_and_then_exits_non_zero(
-        self, cli_runner, env_with_seeds
-    ):
-        """A bad record must not also freeze the export half of the round trip."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
-        _corrupt_one_record(jsonl_path, "seed-test2", status="in-progress")
-
-        result = cli_runner.invoke(main, ["sync", "--allow-divergence"])
-
-        assert result.exit_code == 1
-        assert "1 refused" in result.output
-        # The flush happened anyway, which is what repairs the file.
-        assert "Exported" in result.output
-        assert "in-progress" not in jsonl_path.read_text()
-
-    def test_doctor_does_not_report_clean_when_a_record_is_refused(
-        self, cli_runner, env_with_seeds
-    ):
-        """doctor must not certify a file whose records the import will drop."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
-        _corrupt_one_record(jsonl_path, "seed-test2", status="in-progress")
-
-        result = cli_runner.invoke(main, ["doctor"])
-
-        assert result.exit_code == 1
-        assert "1 record(s) the import will refuse" in result.output
-        assert "seed-test2" in result.output
-
-    def test_doctor_passes_on_a_clean_file(self, cli_runner, env_with_seeds):
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        result = cli_runner.invoke(main, ["doctor"])
-
-        assert "All records readable" in result.output
-
-
-class TestSyncCommand:
-    """Tests for 'seeds sync' command."""
-
-    def test_sync_exports_jsonl(self, cli_runner, env_with_seeds):
-        """Verify sync exports to JSONL."""
-        result = cli_runner.invoke(main, ["sync", "--flush-only"])
-        assert result.exit_code == 0
-        assert "Exported" in result.output
-        assert "seeds.jsonl" in result.output
-
-        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
-        assert jsonl_path.exists()
-
-    def test_sync_round_trips_import_then_export(self, cli_runner, env_with_seeds):
-        """Default sync prints both an import summary and an export summary."""
-        # Seed the JSONL so the import half has something to report.
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        result = cli_runner.invoke(main, ["sync"])
-        assert result.exit_code == 0
-        assert "Imported:" in result.output
-        assert "Exported" in result.output
-
-    def test_sync_import_does_not_clobber_db_only_seed(
-        self, cli_runner, env_with_seeds
-    ):
-        """sync imports JSONL records but never deletes seeds only in the DB."""
-        # Snapshot the fixture seeds into JSONL.
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        # Add a seed that exists ONLY in the DB (absent from the JSONL).
-        db = Database()
-        db.create_seed(Seed(id="seed-dbonly", title="DB-only seed"))
-        db.close()
-
-        result = cli_runner.invoke(main, ["sync"])
-        assert result.exit_code == 0
-
-        # The DB-only seed survives the round-trip (import must not delete it)
-        # and the subsequent export now includes it.
-        list_result = cli_runner.invoke(main, ["list", "--all"])
-        assert "seed-dbonly" in list_result.output
-
-        jsonl_text = (env_with_seeds / SEEDS_DIR / "seeds.jsonl").read_text()
-        assert "seed-dbonly" in jsonl_text
-
-    def test_sync_preserves_multiple_db_only_seeds(self, cli_runner, env_with_seeds):
-        """A round-trip sync preserves every DB-only seed, not just one.
-
-        Generalizes the single-seed case: several seeds present only in the DB
-        (absent from the JSONL the import half reads) all survive the import and
-        all reappear in the re-exported JSONL.
-        """
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        db = Database()
-        db.create_seed(Seed(id="seed-only1", title="DB only 1"))
-        db.create_seed(Seed(id="seed-only2", title="DB only 2"))
-        db.create_seed(Seed(id="seed-only3", title="DB only 3"))
-        db.close()
-
-        result = cli_runner.invoke(main, ["sync"])
-        assert result.exit_code == 0
-
-        list_result = cli_runner.invoke(main, ["list", "--all"])
-        for sid in ("seed-only1", "seed-only2", "seed-only3"):
-            assert sid in list_result.output
-
-        jsonl_text = (env_with_seeds / SEEDS_DIR / "seeds.jsonl").read_text()
-        for sid in ("seed-only1", "seed-only2", "seed-only3"):
-            assert sid in jsonl_text
-
-    def test_sync_flush_only_is_export_only(self, cli_runner, env_with_seeds):
-        """--flush-only exports without importing (no import summary line)."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        result = cli_runner.invoke(main, ["sync", "--flush-only"])
-        assert result.exit_code == 0
-        assert "Exported" in result.output
-        assert "Imported:" not in result.output
-
-
-def _divert_on_disk(jsonl_path, seed_id, content, updated_at=None):
-    """Rewrite one record's body (and optionally its timestamp) in place.
-
-    Stands in for the ways divergent content really arrives: a human resolving
-    a JSONL merge conflict in favour of the other machine, a hand edit, or a
-    peer's export landing via git pull.
-    """
-    records = [json.loads(line) for line in jsonl_path.read_text().splitlines() if line]
-    for record in records:
-        if record["id"] == seed_id:
-            record["content"] = content
-            if updated_at is not None:
-                record["updated_at"] = updated_at
-    jsonl_path.write_text(
-        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
-    )
-
-
-class TestSyncRefusesDivergence:
-    """sync must not overwrite JSONL content the database never accounted for.
-
-    The reproduction these guard: machine B appends and pushes; machine A
-    appends later without pulling; A pulls, hits a JSONL conflict, and a human
-    resolves it in favour of B; A runs `seeds sync`. The import correctly skips
-    B's line (A's DB row is newer), and the export used to overwrite the file
-    with A's version — destroying B's deliberation on disk without it ever
-    having reached any database.
-    """
-
-    def _diverge(self, cli_runner, env, updated_at=None):
-        """Put a body on disk that the DB has never seen; return (path, sha)."""
-        db = Database()
-        db.create_seed(Seed(id="seed-div", title="Contested", content="DESKTOP body"))
-        db.close()
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        jsonl_path = env / SEEDS_DIR / "seeds.jsonl"
-        _divert_on_disk(jsonl_path, "seed-div", "LAPTOP body", updated_at)
-        return jsonl_path, jsonl_path.read_bytes()
-
-    def test_sync_refuses_and_leaves_the_file_byte_identical(
-        self, cli_runner, env_with_seeds
-    ):
-        jsonl_path, before = self._diverge(cli_runner, env_with_seeds)
-
-        result = cli_runner.invoke(main, ["sync"])
-
-        assert result.exit_code == 1
-        assert jsonl_path.read_bytes() == before
-        assert "seed-div" in result.output
-        assert "refusing to overwrite" in result.output
-        assert "LAPTOP body" in result.output
-
-    def test_refusal_says_how_to_proceed(self, cli_runner, env_with_seeds):
-        """An unactionable refusal is just a different way to lose the content."""
-        self._diverge(cli_runner, env_with_seeds)
-
-        result = cli_runner.invoke(main, ["sync"])
-
-        assert "seeds update <id> --replace --content-file <file>" in result.output
-        assert "seeds sync --allow-divergence" in result.output
-        assert "byte-for-byte unchanged" in result.output
-
-    def test_refusal_never_asks_for_a_whole_body_through_argv(
-        self, cli_runner, env_with_seeds
-    ):
-        """seeds-m06: the rebuild is the operator's; the paste was gratuitous.
-
-        The remediation used to print a `-c '<on-disk text><newer text>'`
-        template, which asks for the entire merged body as one shell word --
-        for the agent that actually runs this, the whole seed read into context
-        and re-emitted verbatim, with a truncation or a mangled quote
-        corrupting deliberation silently. It must name the file/stdin route
-        instead.
-        """
-        self._diverge(cli_runner, env_with_seeds)
-
-        result = cli_runner.invoke(main, ["sync"])
-
-        assert "-c '<on-disk text>" not in result.output
-        assert "--replace -c" not in result.output
-        assert "--content-file" in result.output
-        assert "--content -" in result.output
-
-    def test_the_remediation_actually_clears_the_guard(
-        self, cli_runner, env_with_seeds
-    ):
-        """seeds-pfe: the printed advice must be able to satisfy its own guard.
-
-        The refusal used to tell the operator to append the on-disk text,
-        which can never satisfy a guard that requires the database's content
-        to START WITH the disk's -- appending puts the disk text LAST, so
-        following the advice exactly reproduced the identical refusal. This
-        reproduces the divergence, confirms the CLI prints the current
-        remediation form, follows it literally with the real bodies
-        substituted in for its placeholders, and asserts the guard then
-        passes. If the guidance and the guard ever drift apart again, this
-        fails.
-        """
-        disk_content = "LAPTOP body"
-        db_content = "DESKTOP body"
-        jsonl_path, before = self._diverge(cli_runner, env_with_seeds)
-
-        refusal = cli_runner.invoke(main, ["sync"])
-        assert refusal.exit_code == 1
-        remediation = "seeds update <id> --replace --content-file <file>"
-        assert remediation in refusal.output
-
-        # Follow that printed form literally: rebuild the body the way the
-        # message describes -- on-disk text first, then what the DB added --
-        # put it in a file, and hand <file> to the command it prints.
-        body_file = env_with_seeds / "rebuilt.md"
-        body_file.write_text(disk_content + db_content)
-        rebuilt = cli_runner.invoke(
-            main,
-            ["update", "seed-div", "--replace", "--content-file", str(body_file)],
-        )
-        assert rebuilt.exit_code == 0, rebuilt.output
-
-        followup = cli_runner.invoke(main, ["sync"])
-        assert followup.exit_code == 0
-        assert jsonl_path.read_bytes() != before
-        assert disk_content + db_content in jsonl_path.read_text()
-
-    def test_flush_only_is_covered_by_the_same_check(self, cli_runner, env_with_seeds):
-        """Skipping the import does not make the overwrite less destructive."""
-        jsonl_path, before = self._diverge(cli_runner, env_with_seeds)
-
-        result = cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        assert result.exit_code == 1
-        assert jsonl_path.read_bytes() == before
-        assert "seed-div" in result.output
-
-    def test_refusal_fires_when_the_on_disk_record_is_older(
-        self, cli_runner, env_with_seeds
-    ):
-        """Detection is by content; the file's updated_at plays no part."""
-        jsonl_path, before = self._diverge(
-            cli_runner, env_with_seeds, updated_at="2020-01-01T00:00:00+00:00"
-        )
-
-        result = cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        assert result.exit_code == 1
-        assert jsonl_path.read_bytes() == before
-
-    def test_refusal_fires_when_the_on_disk_record_is_newer(
-        self, cli_runner, env_with_seeds
-    ):
-        """Same divergence with the timestamp ordering inverted; same refusal.
-
-        Under `--flush-only` no import runs, so the fresher on-disk record is
-        never absorbed and overwriting it would still destroy it. (Under a full
-        `sync` the import absorbs it first, which is why that path proceeds:
-        nothing is lost once the database holds the content.)
-        """
-        newer = (datetime.now(UTC) + timedelta(minutes=1)).isoformat()
-        jsonl_path, before = self._diverge(cli_runner, env_with_seeds, updated_at=newer)
-
-        result = cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        assert result.exit_code == 1
-        assert jsonl_path.read_bytes() == before
-
-    def test_full_sync_absorbs_a_newer_record_instead_of_refusing(
-        self, cli_runner, env_with_seeds
-    ):
-        """The import is the resolution when it can be: absorb, then export."""
-        newer = (datetime.now(UTC) + timedelta(minutes=1)).isoformat()
-        jsonl_path, _ = self._diverge(cli_runner, env_with_seeds, updated_at=newer)
-
-        result = cli_runner.invoke(main, ["sync"])
-
-        assert result.exit_code == 0
-        assert "LAPTOP body" in jsonl_path.read_text()
-
-    def test_peer_seed_absent_from_the_db_is_not_deleted(
-        self, cli_runner, env_with_seeds
-    ):
-        """A peer's brand new seed arrives via git pull; a flush must not eat it."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
-        peer = json.loads(jsonl_path.read_text().splitlines()[0])
-        peer["id"] = "seed-peer"
-        peer["content"] = "PEER: arrived via git pull"
-        jsonl_path.write_text(
-            jsonl_path.read_text() + json.dumps(peer, ensure_ascii=False) + "\n"
-        )
-        before = jsonl_path.read_bytes()
-
-        result = cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        assert result.exit_code == 1
-        assert jsonl_path.read_bytes() == before
-        assert "seed-peer" in result.output
-        assert "seeds import" in result.output
-
-    def test_allow_divergence_permits_the_overwrite(self, cli_runner, env_with_seeds):
-        """The escape hatch is explicit, and using it does overwrite."""
-        jsonl_path, before = self._diverge(cli_runner, env_with_seeds)
-
-        result = cli_runner.invoke(main, ["sync", "--allow-divergence"])
-
-        assert result.exit_code == 0
-        assert jsonl_path.read_bytes() != before
-        assert "DESKTOP body" in jsonl_path.read_text()
-        assert "LAPTOP body" not in jsonl_path.read_text()
-
-    def test_allow_divergence_is_documented_in_help(self, cli_runner):
-        result = cli_runner.invoke(main, ["sync", "--help"])
-        assert result.exit_code == 0
-        assert "--allow-divergence" in result.output
-
-    def test_normal_append_cycle_is_silent(self, cli_runner, env_with_seeds):
-        """The everyday case: create, sync, append, sync. No warning, no prompt."""
-        create = cli_runner.invoke(main, ["create", "-t", "Normal", "-c", "original"])
-        seed_id = _extract_created_id(create.output)
-
-        first = cli_runner.invoke(main, ["sync"])
-        assert first.exit_code == 0
-
-        cli_runner.invoke(main, ["update", seed_id, "-a", "appended later"])
-        second = cli_runner.invoke(main, ["sync"])
-
-        assert second.exit_code == 0
-        assert "refusing" not in second.output
-        assert "diverg" not in second.output.lower()
-
-        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
-        record = next(
-            json.loads(line)
-            for line in jsonl_path.read_text().splitlines()
-            if json.loads(line)["id"] == seed_id
-        )
-        assert record["content"] == "original\n\nappended later"
-
-    def test_repeated_flush_only_is_a_noop(self, cli_runner, env_with_seeds):
-        """--flush-only is used constantly; it must not become noisy."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
-        first = jsonl_path.read_bytes()
-
-        for _ in range(3):
-            result = cli_runner.invoke(main, ["sync", "--flush-only"])
-            assert result.exit_code == 0
-        assert jsonl_path.read_bytes() == first
-
-    def test_unresolved_conflict_markers_refuse_rather_than_crash(
-        self, cli_runner, env_with_seeds
-    ):
-        """A file git left mid-conflict is the purest 'DB never saw this'."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
-        jsonl_path.write_text("<<<<<<< HEAD\n" + jsonl_path.read_text())
-        before = jsonl_path.read_bytes()
-
-        result = cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        assert result.exit_code == 1
-        assert result.exception is None or isinstance(result.exception, SystemExit)
-        assert jsonl_path.read_bytes() == before
-        assert "not valid JSON" in result.output
-
-
-class TestSyncGuardsMixedStage:
-    """seeds-ww8: sync refuses to fold pending seed-db changes into someone
-    else's commit.
-
-    The reproduction: a pre-commit hook runs `seeds sync --flush-only`, which
-    rewrites .seeds/seeds.jsonl from current DB state; pre-commit then
-    re-stages whatever changed. If code for an unrelated commit is already
-    staged, the rewritten seeds.jsonl gets swept into that same commit
-    regardless of topic (surfaced in code_set_catalog commit 49c466f).
-    """
-
-    def test_contamination_on_a_fresh_repo_with_no_head_yet_refuses(
-        self, cli_runner, env_with_seeds
-    ):
-        """An initial commit (no HEAD) is not a special case for the guard.
-
-        `git diff --cached` diffs an unborn branch against the empty tree, so
-        detection has to work identically here. This is also literally the
-        first sync in the repo, so seeds.jsonl does not exist on disk yet --
-        covering that edge of export_would_change at the same time.
-        """
-        _git_init(env_with_seeds)
-        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
-        (env_with_seeds / "feature.txt").write_text("unrelated feature work\n")
-        _git(env_with_seeds, "add", "feature.txt")
-
-        result = cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        assert result.exit_code == 1
-        assert not jsonl_path.exists()
-        assert "seeds: refusing to flush" in result.output
-        assert "feature.txt" in result.output
-        assert "--allow-mixed-stage" in result.output
-
-    def test_contamination_after_an_existing_commit_refuses(
-        self, cli_runner, env_with_seeds
-    ):
-        """The steady-state case: seeds.jsonl already has history behind it."""
-        _git_init(env_with_seeds)
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        _git(env_with_seeds, "add", ".seeds/seeds.jsonl")
-        _git(env_with_seeds, "commit", "-q", "-m", "chore(seeds): initial export")
-        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
-        before = jsonl_path.read_bytes()
-
-        db = Database()
-        db.create_seed(Seed(id="seed-new", title="Not yet flushed"))
-        db.close()
-        (env_with_seeds / "feature.txt").write_text("unrelated feature work\n")
-        _git(env_with_seeds, "add", "feature.txt")
-
-        result = cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        assert result.exit_code == 1
-        assert jsonl_path.read_bytes() == before
-        assert "seeds: refusing to flush" in result.output
-        assert "feature.txt" in result.output
-
-    def test_full_sync_without_flush_only_is_also_guarded(
-        self, cli_runner, env_with_seeds
-    ):
-        """Skipping the import does not make the write any less contaminating."""
-        _git_init(env_with_seeds)
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        _git(env_with_seeds, "add", ".seeds/seeds.jsonl")
-        _git(env_with_seeds, "commit", "-q", "-m", "chore(seeds): initial export")
-        jsonl_path = env_with_seeds / SEEDS_DIR / "seeds.jsonl"
-        before = jsonl_path.read_bytes()
-
-        db = Database()
-        db.create_seed(Seed(id="seed-new", title="Not yet flushed"))
-        db.close()
-        (env_with_seeds / "feature.txt").write_text("unrelated feature work\n")
-        _git(env_with_seeds, "add", "feature.txt")
-
-        result = cli_runner.invoke(main, ["sync"])
-
-        assert result.exit_code == 1
-        assert jsonl_path.read_bytes() == before
-
-    def test_seed_only_stage_flows_normally(self, cli_runner, env_with_seeds):
-        """Nothing staged outside .seeds/: no friction despite a pending delta."""
-        _git_init(env_with_seeds)
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        _git(env_with_seeds, "add", ".seeds/seeds.jsonl")
-
-        db = Database()
-        db.create_seed(Seed(id="seed-new", title="Not yet flushed"))
-        db.close()
-
-        result = cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        assert result.exit_code == 0
-        assert "Exported" in result.output
-        jsonl_text = (env_with_seeds / SEEDS_DIR / "seeds.jsonl").read_text()
-        assert "seed-new" in jsonl_text
-
-    def test_no_op_sync_flows_normally_regardless_of_stage(
-        self, cli_runner, env_with_seeds
-    ):
-        """No pending db delta: harmless next to any staged code."""
-        _git_init(env_with_seeds)
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        (env_with_seeds / "feature.txt").write_text("unrelated feature work\n")
-        _git(env_with_seeds, "add", "feature.txt")
-
-        result = cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        assert result.exit_code == 0
-        assert "Exported" in result.output
-
-    def test_no_git_repo_flows_normally(self, cli_runner, env_with_seeds):
-        """No git working tree at all: the guard has no commit context to read."""
-        result = cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        assert result.exit_code == 0
-        assert "Exported" in result.output
-
-    def test_refusal_uses_the_exact_approved_wording(self, cli_runner, env_with_seeds):
-        """Pins the two lines Ryan approved verbatim (2026-08-26 design ruling).
-
-        Pre-commit output is noisy -- the ruling's whole argument against
-        warn-and-proceed is that warnings get missed there. If this wording
-        ever drifts, this is the test that has to fail.
-        """
-        _git_init(env_with_seeds)
-        (env_with_seeds / "feature.txt").write_text("unrelated feature work\n")
-        _git(env_with_seeds, "add", "feature.txt")
-
-        result = cli_runner.invoke(main, ["sync", "--flush-only"])
-
-        lines = result.output.splitlines()
-        assert lines[0] == (
-            "seeds: refusing to flush -- the export would modify "
-            ".seeds/seeds.jsonl but staged code is unrelated."
-        )
-        assert lines[1] == (
-            "Resolve with EITHER `git commit` the code first then re-run, OR "
-            "`git stash --keep-index` and create a dedicated `chore(seeds): "
-            "...` commit."
-        )
-
-    def test_allow_mixed_stage_overrides_the_refusal(self, cli_runner, env_with_seeds):
-        """The escape hatch is explicit, and using it does flush."""
-        _git_init(env_with_seeds)
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        _git(env_with_seeds, "add", ".seeds/seeds.jsonl")
-        _git(env_with_seeds, "commit", "-q", "-m", "chore(seeds): initial export")
-
-        db = Database()
-        db.create_seed(Seed(id="seed-new", title="Not yet flushed"))
-        db.close()
-        (env_with_seeds / "feature.txt").write_text("unrelated feature work\n")
-        _git(env_with_seeds, "add", "feature.txt")
-
-        result = cli_runner.invoke(
-            main, ["sync", "--flush-only", "--allow-mixed-stage"]
-        )
-
-        assert result.exit_code == 0
-        assert "Exported" in result.output
-        jsonl_text = (env_with_seeds / SEEDS_DIR / "seeds.jsonl").read_text()
-        assert "seed-new" in jsonl_text
-
-    def test_allow_mixed_stage_is_documented_in_help(self, cli_runner):
-        result = cli_runner.invoke(main, ["sync", "--help"])
-        assert result.exit_code == 0
-        assert "--allow-mixed-stage" in result.output
 
 
 class TestPrimeCommand:
@@ -3221,10 +2384,11 @@ class TestShowDetailFormatting:
 
     def test_show_with_tags(self, cli_runner, initialized_env):
         """Verify show displays tags."""
-        db = Database()
-        seed = Seed(id="seed-tagged", title="Tagged Seed", tags=["important", "urgent"])
-        db.create_seed(seed)
-        db.close()
+        store = _store()
+        seed = _record(
+            id="seed-tagged", title="Tagged Seed", tags=["important", "urgent"]
+        )
+        store.create(seed)
 
         result = cli_runner.invoke(main, ["show", "seed-tagged"])
         assert result.exit_code == 0
@@ -3233,12 +2397,11 @@ class TestShowDetailFormatting:
 
     def test_show_with_content(self, cli_runner, initialized_env):
         """Verify show displays content."""
-        db = Database()
-        seed = Seed(
+        store = _store()
+        seed = _record(
             id="seed-content", title="Content Seed", content="Detailed content here"
         )
-        db.create_seed(seed)
-        db.close()
+        store.create(seed)
 
         result = cli_runner.invoke(main, ["show", "seed-content"])
         assert result.exit_code == 0
@@ -3247,13 +2410,12 @@ class TestShowDetailFormatting:
 
     def test_show_with_related(self, cli_runner, initialized_env):
         """Verify show displays related seeds via relationships."""
-        db = Database()
-        seed1 = Seed(id="seed-r1", title="Seed 1")
-        seed2 = Seed(id="seed-r2", title="Seed 2")
-        db.create_seed(seed1)
-        db.create_seed(seed2)
-        db.create_relationship("seed-r1", "seed-r2", RelationType.RELATES_TO)
-        db.close()
+        store = _store()
+        seed1 = _record(id="seed-r1", title="Seed 1")
+        seed2 = _record(id="seed-r2", title="Seed 2")
+        store.create(seed1)
+        store.create(seed2)
+        store.link("seed-r1", "seed-r2", RelationType.RELATES_TO)
 
         result = cli_runner.invoke(main, ["show", "seed-r1"])
         assert result.exit_code == 0
@@ -3268,11 +2430,12 @@ class TestShowDetailFormatting:
 
     def test_show_with_questions_flag(self, cli_runner, env_with_seeds):
         """Verify show --questions displays question-seeds via relationships."""
-        db = Database()
-        q_seed = Seed(id="seeds-qshow", title="Show this?", seed_type=SeedType.QUESTION)
-        db.create_seed(q_seed)
-        db.create_relationship("seeds-qshow", "seed-test1", RelationType.QUESTIONS)
-        db.close()
+        store = _store()
+        q_seed = _record(
+            id="seeds-qshow", title="Show this?", seed_type=SeedType.QUESTION
+        )
+        store.create(q_seed)
+        store.link("seeds-qshow", "seed-test1", RelationType.QUESTIONS)
 
         result = cli_runner.invoke(main, ["show", "seed-test1", "--questions"])
         assert result.exit_code == 0
@@ -3282,17 +2445,16 @@ class TestShowDetailFormatting:
 
     def test_show_with_answered_question(self, cli_runner, env_with_seeds):
         """Verify show displays answered question-seeds with content."""
-        db = Database()
-        q_seed = Seed(
+        store = _store()
+        q_seed = _record(
             id="seeds-qanswered",
             title="Answered?",
             content="Yes it is",
             seed_type=SeedType.QUESTION,
             status=SeedStatus.RESOLVED,
         )
-        db.create_seed(q_seed)
-        db.create_relationship("seeds-qanswered", "seed-test1", RelationType.QUESTIONS)
-        db.close()
+        store.create(q_seed)
+        store.link("seeds-qanswered", "seed-test1", RelationType.QUESTIONS)
 
         result = cli_runner.invoke(main, ["show", "seed-test1", "--questions"])
         assert result.exit_code == 0
@@ -3343,10 +2505,9 @@ class TestUpdateContentAndTags:
         )
         assert result.exit_code == 0
 
-        db = Database()
-        seed = db.get_seed("seed-test1")
-        assert seed.content == "New content"
-        db.close()
+        store = _store()
+        seed = store.get("seed-test1")
+        assert seed.body.rstrip("\n") == "New content"
 
     def test_update_tags(self, cli_runner, env_with_seeds):
         """Verify update --tags replaces tags."""
@@ -3356,10 +2517,9 @@ class TestUpdateContentAndTags:
         )
         assert result.exit_code == 0
 
-        db = Database()
-        seed = db.get_seed("seed-test1")
+        store = _store()
+        seed = store.get("seed-test1")
         assert seed.tags == ["new", "tags"]
-        db.close()
 
     def test_update_clear_tags(self, cli_runner, env_with_seeds):
         """Verify update --tags '' clears tags."""
@@ -3369,10 +2529,9 @@ class TestUpdateContentAndTags:
         )
         assert result.exit_code == 0
 
-        db = Database()
-        seed = db.get_seed("seed-test1")
+        store = _store()
+        seed = store.get("seed-test1")
         assert seed.tags == []
-        db.close()
 
 
 class TestAnswerNotFound:
@@ -3396,14 +2555,13 @@ class TestQuestionsFiltering:
 
     def test_questions_filter_by_seed(self, cli_runner, env_with_seeds):
         """Verify questions --seed filters by seed."""
-        db = Database()
-        q1 = Seed(id="seeds-qs1", title="Q for seed1?", seed_type=SeedType.QUESTION)
-        q2 = Seed(id="seeds-qs2", title="Q for seed2?", seed_type=SeedType.QUESTION)
-        db.create_seed(q1)
-        db.create_seed(q2)
-        db.create_relationship("seeds-qs1", "seed-test1", RelationType.QUESTIONS)
-        db.create_relationship("seeds-qs2", "seed-test2", RelationType.QUESTIONS)
-        db.close()
+        store = _store()
+        q1 = _record(id="seeds-qs1", title="Q for seed1?", seed_type=SeedType.QUESTION)
+        q2 = _record(id="seeds-qs2", title="Q for seed2?", seed_type=SeedType.QUESTION)
+        store.create(q1)
+        store.create(q2)
+        store.link("seeds-qs1", "seed-test1", RelationType.QUESTIONS)
+        store.link("seeds-qs2", "seed-test2", RelationType.QUESTIONS)
 
         result = cli_runner.invoke(main, ["questions", "--seed", "seed-test1"])
         assert result.exit_code == 0
@@ -3445,11 +2603,10 @@ class TestTreeAdvanced:
 
     def test_tree_shows_grandchildren(self, cli_runner, initialized_env):
         """Verify tree shows grandchildren."""
-        db = Database()
-        db.create_seed(Seed(id="seed-p", title="Parent"))
-        db.create_seed(Seed(id="seed-p.1", title="Child"))
-        db.create_seed(Seed(id="seed-p.1.1", title="Grandchild"))
-        db.close()
+        store = _store()
+        store.create(_record(id="seed-p", title="Parent"))
+        store.create(_record(id="seed-p.1", title="Child"))
+        store.create(_record(id="seed-p.1.1", title="Grandchild"))
 
         result = cli_runner.invoke(main, ["tree", "seed-p"])
         assert result.exit_code == 0
@@ -3459,11 +2616,10 @@ class TestTreeAdvanced:
 
     def test_tree_shows_related(self, cli_runner, initialized_env):
         """Verify tree shows related seeds via relationships."""
-        db = Database()
-        db.create_seed(Seed(id="seed-x", title="Main"))
-        db.create_seed(Seed(id="seed-y", title="Related"))
-        db.create_relationship("seed-x", "seed-y", RelationType.RELATES_TO)
-        db.close()
+        store = _store()
+        store.create(_record(id="seed-x", title="Main"))
+        store.create(_record(id="seed-y", title="Related"))
+        store.link("seed-x", "seed-y", RelationType.RELATES_TO)
 
         result = cli_runner.invoke(main, ["tree", "seed-x"])
         assert result.exit_code == 0
@@ -3472,15 +2628,15 @@ class TestTreeAdvanced:
 
     def test_tree_shows_missing_related(self, cli_runner, initialized_env):
         """Verify tree handles missing related seeds gracefully."""
-        db = Database()
-        db.create_seed(Seed(id="seed-x", title="Main"))
-        db.create_seed(Seed(id="seed-gone", title="Will be deleted"))
-        db.create_relationship("seed-x", "seed-gone", RelationType.RELATES_TO)
-        # Delete the target but leave the relationship orphaned
-        conn = db._get_conn()
-        conn.execute("DELETE FROM seeds WHERE id = 'seed-gone'")
-        conn.commit()
-        db.close()
+        store = _store()
+        store.create(_record(id="seed-x", title="Main"))
+        store.create(_record(id="seed-gone", title="Will be deleted"))
+        store.link("seed-x", "seed-gone", RelationType.RELATES_TO)
+        # Delete the target's file but leave the edge in seed-x naming it. The
+        # foreign key SQLite used to enforce is a file-existence test now, so
+        # this is exactly the state `seeds check` reports and `tree` must
+        # survive.
+        store.path_for("seed-gone").unlink()
 
         result = cli_runner.invoke(main, ["tree", "seed-x"])
         assert result.exit_code == 0
@@ -3489,60 +2645,68 @@ class TestTreeAdvanced:
 
 
 class TestDoctorCommand:
-    """Tests for 'seeds doctor' command."""
+    """Tests for 'seeds doctor' command.
+
+    Every JSONL/DB comparison this class used to hold is gone with the second
+    store that made it possible: whether the two agreed, whether an import
+    would refuse a record, whether the file held a body the database had never
+    seen. There is one store now, so those checks could only ever pass, and a
+    check that cannot fail is the "green while broken" shape they were written
+    to prevent. What doctor still answers is below; the files themselves are
+    `seeds check`'s job, and doctor says so.
+    """
 
     def test_doctor_passes_on_healthy_install(self, cli_runner, env_with_seeds):
-        """Verify doctor passes on healthy installation."""
-        # First sync to create JSONL
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-
+        """Verify doctor passes on a healthy installation."""
         result = cli_runner.invoke(main, ["doctor"])
         assert result.exit_code == 0
-        assert "Database exists" in result.output
+        assert "Seed files at" in result.output
         assert "passed" in result.output
 
-    def test_doctor_fails_when_jsonl_holds_records_the_db_lacks(
-        self, cli_runner, env_with_seeds
-    ):
-        """The state that fooled the old mtime check for five weeks.
+    def test_doctor_reports_no_sync_state(self, cli_runner, env_with_seeds):
+        """The two-store section is gone, not silently passing.
 
-        A failed import leaves the JSONL holding records the DB never got --
-        i.e. JSONL newer than DB, which is exactly what the old check called
-        "up to date". doctor reported all clear throughout Mark Danese's
-        outage (seed seeds-1x6b, bead seeds-jlt).
+        Its replacement points at the command that actually verifies the
+        files, rather than reporting a comparison that no longer has two
+        things to compare.
         """
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        jsonl = Path.cwd() / SEEDS_DIR / "seeds.jsonl"
-        record = json.loads(jsonl.read_text().splitlines()[0])
-        record["id"] = "seed-ghost"
-        with open(jsonl, "a") as f:
-            f.write(json.dumps(record) + "\n")
-
-        result = cli_runner.invoke(main, ["doctor"])
-        assert result.exit_code == 1
-        assert "disagree" in result.output
-        assert "seed-ghost" in result.output
-
-    def test_doctor_fails_when_db_holds_seeds_the_jsonl_lacks(
-        self, cli_runner, env_with_seeds
-    ):
-        """The other direction reports too -- a count alone says nothing."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        db = Database()
-        db.create_seed(Seed(id="seed-unflushed", title="Never exported"))
-        db.close()
-
-        result = cli_runner.invoke(main, ["doctor"])
-        assert result.exit_code == 1
-        assert "seed-unflushed" in result.output
-
-    def test_doctor_passes_when_jsonl_and_db_agree(self, cli_runner, env_with_seeds):
-        """A synced project still exits 0."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-
         result = cli_runner.invoke(main, ["doctor"])
         assert result.exit_code == 0
-        assert "JSONL and DB agree" in result.output
+        assert "JSONL" not in result.output
+        assert "seeds check" in result.output
+
+    def test_doctor_fails_on_an_edge_naming_a_missing_seed(
+        self, cli_runner, env_with_seeds
+    ):
+        """The foreign key SQLite enforced is a file-existence test now.
+
+        Deleting a linked seed's file leaves the other end's edge pointing at
+        nothing. Nothing structural catches that any more, so doctor has to
+        ask -- and it must fail, not warn: an edge to a seed that is not there
+        cannot be rendered and cannot be right.
+        """
+        store = _store()
+        store.link("seed-test1", "seed-test2", RelationType.RELATES_TO)
+        store.path_for("seed-test2").unlink()
+
+        result = cli_runner.invoke(main, ["doctor"])
+
+        assert result.exit_code == 1
+        assert "seed-test1 -> seed-test2" in result.output
+
+    def test_doctor_fails_and_names_the_file_when_a_seed_will_not_read(
+        self, cli_runner, env_with_seeds
+    ):
+        """A strict read refuses the corpus on one bad file, so doctor must
+        say WHICH file rather than dying with a traceback."""
+        store = _store()
+        store.path_for("seed-test2").write_text("not a seed file\n")
+
+        result = cli_runner.invoke(main, ["doctor"])
+
+        assert result.exit_code == 1
+        assert "seed-test2.md" in result.output
+        assert "seeds check" in result.output
 
     def test_doctor_warns_on_nonstandard_types_without_failing(
         self, cli_runner, env_with_seeds
@@ -3552,79 +2716,32 @@ class TestDoctorCommand:
         With the vocabulary open (bead seeds-0lb) this is the only thing that
         surfaces a typo, so it is load-bearing rather than cosmetic.
         """
-        db = Database()
-        db.create_seed(Seed(id="seed-typo", title="Typo", seed_type="ideea"))
-        db.close()
-        cli_runner.invoke(main, ["sync", "--flush-only"])
+        store = _store()
+        store.create(_record(id="seed-typo", title="Typo", seed_type="ideea"))
 
         result = cli_runner.invoke(main, ["doctor"])
         assert result.exit_code == 0
         assert "ideea (1)" in result.output
         assert "seeds retype" in result.output
 
-    def test_doctor_fails_on_content_divergence(self, cli_runner, env_with_seeds):
-        """doctor must agree with sync, not approximate it.
-
-        Regression: doctor compared ID sets only, so a body edited in the file
-        left every ID matching and doctor passed -- while `seeds sync` refused
-        on every run, permanently. find_divergence, the check the export
-        itself refuses on, sat unused in the same module.
-        """
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        jsonl = Path.cwd() / SEEDS_DIR / "seeds.jsonl"
-        lines = jsonl.read_text().splitlines()
-        record = json.loads(lines[0])
-        record["content"] = (record.get("content") or "") + "\n\nEdited in the file."
-        lines[0] = json.dumps(record)
-        jsonl.write_text("\n".join(lines) + "\n")
-
-        result = cli_runner.invoke(main, ["doctor"])
-        assert result.exit_code == 1
-        assert "on-disk body" in result.output
-        assert record["id"] in result.output
-
-    def test_doctor_agrees_with_sync_on_the_same_state(
-        self, cli_runner, env_with_seeds
-    ):
-        """The property that matters: doctor green iff sync succeeds."""
-        cli_runner.invoke(main, ["sync", "--flush-only"])
-        jsonl = Path.cwd() / SEEDS_DIR / "seeds.jsonl"
-        lines = jsonl.read_text().splitlines()
-        record = json.loads(lines[0])
-        record["content"] = (record.get("content") or "") + "\n\nEdited in the file."
-        lines[0] = json.dumps(record)
-        jsonl.write_text("\n".join(lines) + "\n")
-
-        sync_result = cli_runner.invoke(main, ["sync"])
-        doctor_result = cli_runner.invoke(main, ["doctor"])
-        assert sync_result.exit_code == 1
-        assert doctor_result.exit_code == 1
-
-    def test_doctor_warns_no_jsonl(self, cli_runner, env_with_seeds):
-        """Verify doctor warns when JSONL file doesn't exist."""
-        result = cli_runner.invoke(main, ["doctor"])
-        assert result.exit_code == 0
-        assert "No JSONL file" in result.output or "JSONL" in result.output
-
     def test_doctor_shows_warnings_count(self, cli_runner, initialized_env):
         """Verify doctor shows warning count when there are issues."""
         result = cli_runner.invoke(main, ["doctor"])
         assert result.exit_code == 0
-        # No open seeds = warning, no JSONL = warning
+        # No open seeds = warning
         assert "warning" in result.output
 
     def test_doctor_shows_open_questions(self, cli_runner, env_with_seeds):
         """Verify doctor reports open question-seeds."""
-        db = Database()
-        q_seed = Seed(
-            id="seeds-qdoc", title="Doctor question?", seed_type=SeedType.QUESTION
+        store = _store()
+        store.create(
+            _record(
+                id="seeds-qdoc",
+                title="Doctor question?",
+                seed_type=SeedType.QUESTION,
+            )
         )
-        db.create_seed(q_seed)
-        db.create_relationship("seeds-qdoc", "seed-test1", RelationType.QUESTIONS)
-        db.close()
-
-        # Create JSONL to avoid stale warning noise
-        cli_runner.invoke(main, ["sync", "--flush-only"])
+        store.link("seeds-qdoc", "seed-test1", RelationType.QUESTIONS)
 
         result = cli_runner.invoke(main, ["doctor"])
         assert result.exit_code == 0
@@ -3645,9 +2762,9 @@ class TestDoctorCommand:
             original_cwd = os.getcwd()
             os.chdir(project)
             try:
-                db = Database()
-                db.init(prefix="seeds")  # explicit default
-                db.close()
+                store = _store()
+                store.files_dir.mkdir(parents=True, exist_ok=True)
+                store.set_prefix("seeds")  # explicit default
 
                 result = cli_runner.invoke(main, ["doctor"])
                 assert result.exit_code == 0
@@ -3657,14 +2774,17 @@ class TestDoctorCommand:
                 os.chdir(original_cwd)
 
     def test_doctor_warns_when_prefix_unconfigured(self, cli_runner):
-        """Doctor warns when no prefix is stored in config (legacy DB)."""
+        """Doctor warns when config.yaml records no prefix.
+
+        A store can reach this state -- a converted repo whose legacy database
+        never had one, or a hand-made .seeds/seeds/ -- and the fallback is
+        silent, so doctor is what surfaces it.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             original_cwd = os.getcwd()
             os.chdir(tmpdir)
             try:
-                db = Database()
-                db.init()  # no prefix
-                db.close()
+                _store().files_dir.mkdir(parents=True, exist_ok=True)
 
                 result = cli_runner.invoke(main, ["doctor"])
                 assert result.exit_code == 0

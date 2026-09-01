@@ -41,10 +41,10 @@ from seeds.convert import (
     format_report,
     verify,
 )
-from seeds.db import Database
 from seeds.models import RelationType, Seed, SeedStatus
 from seeds.seedfile import read_seed_file, seed_files_dir
 from tests.githelpers import git, git_init
+from tests.legacyhelpers import LegacyWriter, build_legacy_db
 
 REPO_JSONL = Path(__file__).resolve().parent.parent / ".seeds" / "seeds.jsonl"
 
@@ -57,6 +57,29 @@ def _iso(offset_days: int = 0) -> str:
 
 def _stamp(offset_days: int = 0) -> datetime:
     return T0 + timedelta(days=offset_days)
+
+
+def _seed_from_jsonl(data: dict) -> Seed:
+    """One frozen-JSONL record as a legacy ``Seed``, for the fixture above."""
+
+    def when(value):
+        if value is None:
+            return None
+        stamp = datetime.fromisoformat(value)
+        return stamp if stamp.tzinfo else stamp.replace(tzinfo=UTC)
+
+    return Seed(
+        id=data["id"],
+        title=data["title"],
+        content=data.get("content", "") or "",
+        status=SeedStatus(data["status"]),
+        seed_type=data.get("seed_type", "idea"),
+        tags=list(data.get("tags") or []),
+        created_at=when(data["created_at"]),
+        updated_at=when(data["updated_at"]),
+        resolved_at=when(data.get("resolved_at")),
+        resolution=data.get("resolution", "") or "",
+    )
 
 
 # --- Store builders ----------------------------------------------------------
@@ -103,14 +126,15 @@ def record(
     }
 
 
-def build_db(seeds_dir: Path, seeds: list[Seed]) -> Database:
-    """A SQLite store holding exactly ``seeds``, left open for the caller."""
+def build_db(seeds_dir: Path, seeds: list[Seed]) -> LegacyWriter:
+    """A legacy SQLite store holding exactly ``seeds``, open for the caller.
+
+    The write path lives in tests/legacyhelpers.py because ``seeds.legacy`` is
+    read-only: nothing shipped writes the retired store any more, so only a
+    fixture is allowed to.
+    """
     seeds_dir.mkdir(parents=True, exist_ok=True)
-    db = Database(path=seeds_dir / "seeds.db")
-    db.init(prefix="seeds")
-    for seed in seeds:
-        db.create_seed(seed)
-    return db
+    return build_legacy_db(seeds_dir, seeds)
 
 
 def seed(
@@ -994,20 +1018,21 @@ class TestRealCorpus:
         } == digests
 
     def test_converting_through_the_database_gives_the_same_bodies(self, real_corpus):
-        """DB + JSONL, where the database was rehydrated from that same file,
+        """DB + JSONL, where the database holds exactly that file's records,
         must land exactly what the file alone lands. It is the cheapest
         available check that the union step does not favour a store."""
-        from seeds.export import import_from_jsonl
-
         convert(real_corpus)
         file_only = {
             p.name: read_seed_file(p).body
             for p in seed_files_dir(real_corpus).glob("*.md")
         }
-        db = Database(path=real_corpus / "seeds.db")
-        db.init(prefix="seeds")
-        import_from_jsonl(db, real_corpus / "seeds.jsonl")
-        db.close()
+        writer = LegacyWriter(real_corpus / "seeds.db")
+        writer.set_prefix("seeds")
+        with open(real_corpus / "seeds.jsonl", encoding="utf-8") as stream:
+            for line in stream:
+                if line.strip():
+                    writer.create_seed(_seed_from_jsonl(json.loads(line)))
+        writer.close()
 
         report = convert(real_corpus)
 

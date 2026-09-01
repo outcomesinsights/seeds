@@ -7,9 +7,9 @@ different agents each wrote their own copy independently, so "we deduplicated
 it" is not a durable state -- nothing stops a third appearing in the next
 bead. This turns the convention into a checked invariant.
 
-The check has to distinguish INVOKING git from MENTIONING it: test_gitstage.py
-legitimately builds ``subprocess.CompletedProcess(args=["git"], ...)`` and
-compares ``args[:2] == ["git", "diff"]`` inside a patched ``subprocess.run``,
+The check has to distinguish INVOKING git from MENTIONING it: a test may
+legitimately build ``subprocess.CompletedProcess(args=["git"], ...)`` or
+compare ``args[:2] == ["git", "diff"]`` inside a patched ``subprocess.run``,
 and neither runs anything. So this walks the AST for real call nodes rather
 than grepping for the string, and the detector is itself exercised against
 hand-built samples below -- a detector that never fires is indistinguishable
@@ -105,7 +105,7 @@ class TestTheDetectorItself:
         assert git_invocations(source) == [3]
 
     def test_ignores_a_completed_process_literal(self):
-        """test_gitstage.py builds one of these; it starts nothing."""
+        """A test may build one of these; it starts nothing."""
         source = (
             "import subprocess\n"
             'subprocess.CompletedProcess(args=["git"], returncode=128)\n'

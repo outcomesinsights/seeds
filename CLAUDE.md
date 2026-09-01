@@ -32,8 +32,9 @@ These are safe to run regardless of context:
 
 - `seeds list` / `seeds show` / `seeds tree` - View data
 - `seeds ready` / `seeds questions` / `seeds deferred` / `seeds blocked` - Query status
+- `seeds search` / `seeds export --json` - Search and dump the corpus
+- `seeds check` / `seeds doctor` - Verify the store
 - `seeds --help` / `seeds --version` - Help and version
-- `seeds sync --flush-only` - Export only (no import)
 - `seeds prime` - Context for agents
 
 ### How to Test seeds Commands
@@ -68,7 +69,7 @@ uv run pytest
 - Framework: Click (CLI)
 - Key dependencies: click>=8.1.0, pytest (dev)
 - Package manager: uv
-- Data storage: SQLite + JSONL export
+- Data storage: one markdown file per seed, `.seeds/seeds/<id>.md` (see `docs/storage-format.md`)
 
 ## Purpose
 
@@ -77,9 +78,12 @@ Captures thoughts, ideas, and questions with minimal friction ("jot") and tracks
 ## Key Entry Points
 
 - `src/seeds/cli.py` - CLI commands via Click (entry point: `seeds`)
-- `src/seeds/db.py` - SQLite database layer
-- `src/seeds/models.py` - Data models (Seed, Question, enums)
-- `src/seeds/export.py` - JSONL import/export
+- `src/seeds/seedfile.py` - The ONE reader and writer of the seed-file format
+- `src/seeds/store.py` - Set operations over the tree (list, children, blocking, links, prefix, search)
+- `src/seeds/models.py` - Enums and text helpers (`Seed`/`Relationship` are legacy, conversion-path only)
+- `src/seeds/check.py` - `seeds check`: the format's rules, verified after the fact
+- `src/seeds/convert.py` + `src/seeds/legacy.py` - `seeds convert`, and the read-only pre-0.7 reader it needs
+- `src/seeds/jsonexport.py` - `seeds export --json`
 - `src/seeds/prime.py` - AI context output
 
 ## Commands
@@ -98,9 +102,11 @@ uv run seeds answer <q-id> "answer"  # Answer question
 uv run seeds update <id> --type <t>  # Change a seed's type (any string)
 uv run seeds update <id> --content-file <f>   # Replace a body from a file (or --content - for stdin)
 uv run seeds retype --from X --to Y  # Bulk-remap one type to another
-uv run seeds sync                    # Round trip: import JSONL, then export
-uv run seeds import                  # Rehydrate the DB from JSONL (fresh clone)
-uv run seeds doctor                  # Health check; exits non-zero on DB/JSONL divergence
+uv run seeds search "<regex>"        # ripgrep over the seed files
+uv run seeds check                   # Verify the files; exits non-zero on a violation
+uv run seeds doctor                  # Store and installation health
+uv run seeds export --json           # The whole corpus as JSONL on stdout
+uv run seeds convert                 # One-time: pre-0.7 SQLite + JSONL -> .seeds/seeds/
 uv run seeds prime                   # AI context output
 uv run pytest                        # Run tests
 ```
@@ -142,3 +148,4 @@ cleanup, not a step in a reinstall.
 - **Question**: First-class object attached to a seed with open/answered/deferred status
 - **Hierarchical IDs**: Children use `parent-id.N` format (e.g., `seed-a1b2.1`)
 - **Blocked**: A seed with unresolved children cannot be resolved
+- **Store**: `.seeds/seeds/<id>.md`, one file per seed, tracked by git. There is no database and nothing to sync — a command writes the file before it returns. `docs/storage-format.md` is normative.

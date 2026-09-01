@@ -78,8 +78,8 @@ class RelationType(Enum):
 def generate_id(prefix: str = "seed") -> str:
     """Generate a short hash-based ID like 'seed-a1b2c3d4'.
 
-    DEPRECATED: Use Database.next_id() for sequential IDs instead.
-    Kept for legacy migration code.
+    DEPRECATED: ``Store.next_id`` mints ids now. Kept for legacy migration
+    code.
     """
     data = f"{time.time_ns()}{os.urandom(8).hex()}"
     hash_val = hashlib.sha256(data.encode()).hexdigest()[:8]
@@ -239,163 +239,6 @@ def parse_since(value: str, now: datetime | None = None) -> datetime:
     return dt
 
 
-_SUGGEST_TOKEN_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9_-]*")
-
-# Common English stopwords stripped before building the FTS5 OR query.
-# Kept intentionally small — porter stemming handles morphology, this just
-# trims dead weight that pollutes BM25.
-_SUGGEST_STOPWORDS = frozenset(
-    {
-        "a",
-        "an",
-        "and",
-        "as",
-        "at",
-        "be",
-        "by",
-        "for",
-        "from",
-        "has",
-        "he",
-        "in",
-        "is",
-        "it",
-        "its",
-        "of",
-        "on",
-        "or",
-        "that",
-        "the",
-        "this",
-        "to",
-        "was",
-        "were",
-        "with",
-        "we",
-        "i",
-        "you",
-        "they",
-        "their",
-        "what",
-        "which",
-        "who",
-        "how",
-        "when",
-        "where",
-        "why",
-        "all",
-        "should",
-        "can",
-        "could",
-        "would",
-        "do",
-        "does",
-        "did",
-        "have",
-        "had",
-        "but",
-        "not",
-        "some",
-        "any",
-        "no",
-        "yes",
-        "if",
-        "than",
-        "then",
-        "so",
-        "such",
-        "into",
-        "out",
-        "up",
-        "down",
-        "over",
-        "under",
-        "about",
-        "between",
-        "through",
-        "during",
-        "after",
-        "before",
-    }
-)
-
-
-def tokenize_for_suggest(text: str) -> list[str]:
-    """Lowercase + strip stopwords for natural-language suggest input.
-
-    Keeps tokens of length 2+ that aren't stopwords. Preserves order and
-    keeps duplicates (FTS5 doesn't care, and duplicates are rare in user
-    input).
-    """
-    tokens = _SUGGEST_TOKEN_RE.findall(text.lower())
-    return [t for t in tokens if len(t) >= 2 and t not in _SUGGEST_STOPWORDS]
-
-
-# A bare FTS5 term that needs no quoting: word characters, an optional trailing
-# ``*`` for a prefix query. Anything else — a hyphen above all — is punctuation
-# FTS5 parses as syntax rather than text.
-_FTS_BARE_TERM_RE = re.compile(r"^\w+\*?$", re.UNICODE)
-
-# The operator vocabulary `seeds search --help` documents, plus the two that
-# come free with it. FTS5 only treats these as operators in UPPERCASE; a
-# lowercase "and" is an ordinary word and gets quoted like any other term.
-_FTS_OPERATORS = frozenset({"AND", "OR", "NOT", "NEAR"})
-
-# Splits a query into quoted phrases, parens/commas (NEAR's punctuation), and
-# runs of non-space. The phrase alternative comes first so a quoted string is
-# taken whole, and its unterminated form is captured rather than dropped.
-_FTS_TOKEN_RE = re.compile(r'"[^"]*"\*?|"[^"]*$|[(),]|[^\s(),]+')
-
-
-def sanitize_fts_query(query: str) -> str:
-    """Make a user's search string safe to hand to FTS5 ``MATCH``.
-
-    FTS5 parses punctuation as syntax, so an ordinary hyphenated search term
-    is a syntax error rather than a search: ``seeds-to-beads`` reads as a
-    column filter and raises ``no such column: to``. Since hyphens are how
-    this project names nearly everything — tags, skills, seed IDs — the raw
-    string cannot go to MATCH unaltered.
-
-    Terms that need it are wrapped in double quotes, which makes FTS5 read
-    them as a phrase. That is not a compromise: the tokenizer splits indexed
-    text on the same punctuation, so the phrase ``"seeds-to-beads"`` matches
-    exactly the text the user typed it to find.
-
-    The operator syntax `seeds search --help` advertises survives untouched —
-    quoted "phrases", ``prefix*``, and uppercase AND/OR/NOT (plus NEAR and its
-    parens). Any other FTS5 operator is treated as literal text, which is the
-    safe direction to be wrong in: a query that finds nothing beats a
-    traceback.
-
-    Returns the empty string when nothing searchable remains (a query of pure
-    punctuation), which the caller should read as 'no results' rather than
-    passing on to MATCH.
-    """
-    out: list[str] = []
-    for token in _FTS_TOKEN_RE.findall(query):
-        if token in {"(", ")", ","} or token in _FTS_OPERATORS:
-            out.append(token)
-            continue
-        if token.startswith('"'):
-            # Already a phrase. Close an unterminated one rather than letting
-            # FTS5 raise 'unterminated string' on it.
-            if not token.rstrip("*").endswith('"') or len(token.rstrip("*")) == 1:
-                token = token.rstrip("*") + '"'
-            out.append(token)
-            continue
-        if _FTS_BARE_TERM_RE.match(token):
-            out.append(token)
-            continue
-        prefix = "*" if token.endswith("*") else ""
-        body = token[:-1] if prefix else token
-        # Nothing but punctuation — FTS5 would reject the empty phrase it
-        # produces, and it can match nothing anyway.
-        if not any(ch.isalnum() or ch == "_" for ch in body):
-            continue
-        out.append('"' + body.replace('"', '""') + '"' + prefix)
-    return " ".join(out)
-
-
 # Suffixes that match the ID shape but are prose, never references.
 #
 # ``<prefix>-<word>`` is ordinary English — "a seeds-native workflow", "the
@@ -531,7 +374,18 @@ UNSET_TIMESTAMP = datetime.min.replace(tzinfo=UTC)
 
 @dataclass
 class Seed:
-    """A seed is an idea at any stage of development."""
+    """A seed as the PRE-0.7 store held it — legacy, conversion-path only.
+
+    The live record is :class:`seeds.seedfile.SeedRecord`, which is what a
+    ``.seeds/seeds/<id>.md`` file holds: it carries ``parent``, its own
+    relationship list and ``converted_at``, and names the body ``body``. This
+    class is the shape of a row in the retired SQLite table and of a line in
+    the frozen ``seeds.jsonl``, and it survives for exactly one reason —
+    ``seeds convert`` still has to read both of those for the repos that have
+    not converted yet (:mod:`seeds.legacy`).
+
+    Nothing on the live path may take a dependency on it.
+    """
 
     id: str
     title: str
@@ -569,26 +423,21 @@ class Seed:
     def has_been_edited(self) -> bool:
         """Whether this seed has been written to since it was created.
 
-        Every interactive write path bumps ``updated_at`` (see
-        ``Database.update_seed``), so an untouched seed still carries its
-        creation timestamp. Used to tell a seed that has accumulated
-        deliberation from one that only ever held its original capture.
+        The live equivalent is :func:`seeds.store.has_been_edited`; this one
+        answers the same question about a legacy record.
         """
         return self.updated_at != self.created_at
 
 
 @dataclass
-class ScoredSeed:
-    """A seed with a relevance score and matched-text snippet."""
-
-    seed: Seed
-    score: float
-    snippet: str = ""
-
-
-@dataclass
 class Relationship:
-    """A typed, directed relationship between two seeds."""
+    """A typed, directed relationship, as the PRE-0.7 store held it.
+
+    Legacy, like :class:`Seed`: a live edge is a
+    :class:`seeds.seedfile.SeedEdge` inside the seed's own file, written at
+    both ends (``docs/storage-format.md`` §5.1), with no separate table and so
+    no source/target row to name.
+    """
 
     source_id: str
     target_id: str

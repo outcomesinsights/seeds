@@ -1,0 +1,220 @@
+"""The pre-0.7 store, read-only, kept alive for exactly one caller.
+
+``.seeds/seeds.db`` and ``.seeds/seeds.jsonl`` stopped being the store when the
+seed-file tree replaced them (``docs/storage-format.md``). The persistence layer
+that wrote them is gone: no schema creation, no FTS, no writes of any kind.
+
+What survives here is the narrow reader ``seeds convert`` needs, and it survives
+because the converter is a **shipped verb for repos that have not converted
+yet** — 13 repos on titan plus an external user who converts on his own
+schedule. Deleting its ability to read a legacy SQLite store would make
+conversion impossible for exactly the people it exists for.
+
+So the contract of this module is deliberately narrow:
+
+- **Read-only, and enforced.** The connection is opened ``mode=ro`` through a
+  file URI, so a stray write raises rather than silently mutating a store the
+  new code no longer understands. There is no ``init``, no ``CREATE TABLE``,
+  and no migration.
+- **Only what the converter asks for.** Seeds, relationship rows, and the
+  ``config`` table's prefix. Not search, not blocking, not children — every one
+  of those questions is answered off the tree now, by :mod:`seeds.store`.
+- **Nothing else may import it.** A second caller would be a new dependency on
+  a retired store, which is the shape this whole change removed.
+
+:func:`db_extends_disk` and :func:`first_difference` come along for the same
+reason. They compare a database body with a JSONL body, which is a question only
+the two-store world can ask — and the converter is the last code that lives in
+it.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from datetime import datetime
+from pathlib import Path
+
+from seeds.models import (
+    DEFAULT_PREFIX,
+    Relationship,
+    RelationType,
+    Seed,
+    SeedStatus,
+    is_valid_prefix,
+    now_utc,
+)
+
+DB_FILE = "seeds.db"
+"""The legacy SQLite store's filename inside ``.seeds/``."""
+
+JSONL_FILE = "seeds.jsonl"
+"""The legacy JSONL export's filename inside ``.seeds/``.
+
+Frozen after conversion, never deleted: its git history is the only source for
+anything before a seed's ``converted_at`` (``docs/storage-format.md`` §11).
+"""
+
+PREFIX_CONFIG_KEY = "prefix"
+"""The ``config`` table key the project prefix lived under before §9."""
+
+
+def _str_to_datetime(value: str | None) -> datetime | None:
+    """An ISO timestamp string as a datetime, or ``None``."""
+    if value is None:
+        return None
+    return datetime.fromisoformat(value)
+
+
+class LegacyDatabase:
+    """A read-only window onto a pre-0.7 ``.seeds/seeds.db``.
+
+    Opened through a ``file:…?mode=ro`` URI, so SQLite itself refuses a write.
+    The file must already exist; ``mode=ro`` does not create one, and the
+    converter checks for it before constructing this.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+        self._conn: sqlite3.Connection | None = None
+
+    def _get_conn(self) -> sqlite3.Connection:
+        if self._conn is None:
+            conn = sqlite3.connect(f"file:{self.path.resolve()}?mode=ro", uri=True)
+            conn.row_factory = sqlite3.Row
+            self._conn = conn
+        return self._conn
+
+    def close(self) -> None:
+        """Close the connection, if one was opened."""
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
+
+    def _tables(self) -> set[str]:
+        return {
+            row[0]
+            for row in self._get_conn().execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+
+    def _row_to_seed(self, row: sqlite3.Row) -> Seed:
+        return Seed(
+            id=row["id"],
+            title=row["title"],
+            content=row["content"] or "",
+            status=SeedStatus(row["status"]),
+            seed_type=row["seed_type"],
+            tags=json.loads(row["tags"]) if row["tags"] else [],
+            created_at=_str_to_datetime(row["created_at"]) or now_utc(),
+            updated_at=_str_to_datetime(row["updated_at"]) or now_utc(),
+            resolved_at=_str_to_datetime(row["resolved_at"]),
+            resolution=row["resolution"] if "resolution" in row.keys() else "",  # noqa: SIM118
+        )
+
+    def list_seeds(self) -> list[Seed]:
+        """Every seed in the legacy store, terminal ones included.
+
+        No filters: the converter reads the whole store or none of it, and a
+        filtered migration is a silently short one.
+        """
+        conn = self._get_conn()
+        rows = conn.execute("SELECT * FROM seeds ORDER BY id").fetchall()
+        return [self._row_to_seed(row) for row in rows]
+
+    def get_relationships(self, seed_id: str) -> list[Relationship]:
+        """Every relationship row naming ``seed_id`` at either end."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            "SELECT * FROM relationships WHERE source_id = ? OR target_id = ? "
+            "ORDER BY created_at",
+            (seed_id, seed_id),
+        ).fetchall()
+        return [
+            Relationship(
+                source_id=row["source_id"],
+                target_id=row["target_id"],
+                rel_type=RelationType(row["rel_type"]),
+                created_at=_str_to_datetime(row["created_at"]) or now_utc(),
+            )
+            for row in rows
+        ]
+
+    def _get_config(self, key: str) -> str | None:
+        if "config" not in self._tables():
+            return None
+        row = (
+            self._get_conn()
+            .execute("SELECT value FROM config WHERE key = ?", (key,))
+            .fetchone()
+        )
+        if row is None:
+            return None
+        value: str = row["value"]
+        return value
+
+    def has_prefix_configured(self) -> bool:
+        """Whether the legacy ``config`` table carries an explicit prefix."""
+        return self._get_config(PREFIX_CONFIG_KEY) is not None
+
+    def get_prefix(self) -> str:
+        """The configured prefix, or :data:`DEFAULT_PREFIX` when unset.
+
+        The converter is the last moment this value can be read: §9 moved it to
+        a tracked ``.seeds/config.yaml``, and nothing after conversion opens
+        this file again.
+        """
+        value = self._get_config(PREFIX_CONFIG_KEY)
+        if value and is_valid_prefix(value):
+            return value
+        return DEFAULT_PREFIX
+
+
+def db_extends_disk(db_content: str, disk_content: str) -> bool:
+    """Does the database's content begin with the on-disk content?
+
+    Divergence is decided on CONTENT, never on ``updated_at``. Timestamps only
+    answer "which is newer", and they are the input already known to be
+    untrustworthy (clock skew, hand edits, merge resolutions). The question
+    that actually matters is "does the disk hold text the database has never
+    seen", which is a content question.
+
+    A flat "content differs -> diverged" would be unusable: the database is
+    normally *ahead* of the file. The test that separates "ahead" from
+    "diverged" leans on ``seeds update -a`` having been the normal editing verb
+    for a seed body:
+
+    - identical bodies -> nothing to lose.
+    - the database's body **starts with** the file's -> the database is the
+      file's version plus appends; taking it loses nothing.
+    - anything else -> the file holds text the database never had. A fork.
+
+    Validated against this project's own JSONL history: of 42 content-changing
+    edits across 67 commits, 41 were literal appends. The single exception was
+    an in-place rewrite that prepended a header to an existing body — precisely
+    the kind of edit an operator should be told about.
+
+    The stripped fallback exists because ``seeds update -a`` stripped the
+    *combined* body, so appending to a body with leading whitespace yields a
+    result that is not a literal prefix of it even though no text was lost.
+    Whitespace is not deliberation. It cannot mask real loss: any actual
+    character present on disk and absent from the database still fails.
+    """
+    if db_content.startswith(disk_content):
+        return True
+    return db_content.strip().startswith(disk_content.strip())
+
+
+def first_difference(db_content: str, disk_content: str) -> int:
+    """Index of the first character where the two bodies part ways.
+
+    ``strict=False`` is deliberate: the two bodies routinely differ in length
+    — one being a prefix of the other is the common, benign case — so zip must
+    stop at the shorter. The fallback below reports that shared length as the
+    divergence point.
+    """
+    for i, (a, b) in enumerate(zip(db_content, disk_content, strict=False)):
+        if a != b:
+            return i
+    return min(len(db_content), len(disk_content))
