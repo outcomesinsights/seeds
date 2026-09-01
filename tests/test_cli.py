@@ -20,6 +20,12 @@ from seeds.models import (
 )
 from seeds.seedfile import SeedRecord
 from seeds.store import SEEDS_DIR, Store, new_record
+from tests.beadshelpers import (
+    call_lines,
+    hide_bd,
+    install_fake_bd,
+    make_beads_workspace,
+)
 
 
 def _extract_created_id(output: str) -> str:
@@ -1836,6 +1842,131 @@ class TestBeadRefValidation:
         assert good.exit_code == 0, good.output
         assert decoy.exit_code != 0
         assert "seeds-99999" in decoy.output
+
+
+class TestLiveBeadRefValidation:
+    """A bead the throttled export has not caught up with is still real.
+
+    Bead seeds-4co.23: ``bd create`` writes to Dolt and the JSONL export runs
+    on an interval, so referencing a bead minted seconds ago was rejected as a
+    hallucinated seed ID -- and the only way through was
+    ``--allow-unknown-refs``, which switches the whole check off. seeds now
+    asks ``bd`` about anything the export did not vouch for.
+    """
+
+    def _bd_knows(self, *ids):
+        return json.dumps([{"id": bead_id, "title": "A real bead"} for bead_id in ids])
+
+    def _bd_knows_nothing(self):
+        return json.dumps({"error": "no issues found matching the provided IDs"})
+
+    def test_create_accepts_bead_missing_from_the_export(
+        self, cli_runner, initialized_env, tmp_path, monkeypatch
+    ):
+        """The regression: no export at all, and the bead was made seconds ago."""
+        make_beads_workspace(initialized_env / SEEDS_DIR)
+        assert not (initialized_env / ".beads" / "issues.jsonl").exists()
+        install_fake_bd(tmp_path, monkeypatch, stdout=self._bd_knows("seeds-230"))
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Test", "-c", "promoted from seeds-230"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "Created seed" in result.output
+
+    def test_update_accepts_bead_missing_from_the_export(
+        self, cli_runner, env_with_seeds, tmp_path, monkeypatch
+    ):
+        make_beads_workspace(env_with_seeds / SEEDS_DIR)
+        _write_beads_export(env_with_seeds, '{"_type":"issue","id":"seeds-1"}\n')
+        install_fake_bd(tmp_path, monkeypatch, stdout=self._bd_knows("seeds-230"))
+        result = cli_runner.invoke(
+            main, ["update", "seed-test1", "--append", "tracked as seeds-230"]
+        )
+        assert result.exit_code == 0, result.output
+
+    def test_hallucinated_id_is_still_rejected(
+        self, cli_runner, initialized_env, tmp_path, monkeypatch
+    ):
+        """The hole this check exists to plug stays plugged."""
+        make_beads_workspace(initialized_env / SEEDS_DIR)
+        install_fake_bd(
+            tmp_path, monkeypatch, stdout=self._bd_knows_nothing(), exit_code=1
+        )
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Test", "-c", "see seeds-99999"]
+        )
+        assert result.exit_code != 0
+        assert "seeds-99999" in result.output
+        assert "may be stale" not in result.output
+
+    def test_only_the_unknown_ids_reach_bd(
+        self, cli_runner, initialized_env, tmp_path, monkeypatch
+    ):
+        """The subprocess is off the happy path: refs the export vouches for
+        are never asked about, and a body with no unknown refs never calls bd.
+        """
+        make_beads_workspace(initialized_env / SEEDS_DIR)
+        _write_beads_export(initialized_env, '{"_type":"issue","id":"seeds-230"}\n')
+        log = install_fake_bd(tmp_path, monkeypatch, stdout=self._bd_knows("seeds-777"))
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Test", "-c", "seeds-230 and seeds-777"]
+        )
+        assert result.exit_code == 0, result.output
+        (line,) = call_lines(log)
+        _, args = line.split("\t", 1)
+        assert args.split() == ["show", "seeds-777", "--json"]
+
+    def test_no_bd_call_when_every_ref_is_known(
+        self, cli_runner, initialized_env, tmp_path, monkeypatch
+    ):
+        make_beads_workspace(initialized_env / SEEDS_DIR)
+        _write_beads_export(initialized_env, '{"_type":"issue","id":"seeds-230"}\n')
+        log = install_fake_bd(tmp_path, monkeypatch)
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Test", "-c", "promoted from seeds-230"]
+        )
+        assert result.exit_code == 0, result.output
+        assert call_lines(log) == []
+
+    def test_no_bd_call_without_a_beads_workspace(
+        self, cli_runner, initialized_env, tmp_path, monkeypatch
+    ):
+        """No beads in the project means no subprocess, ever."""
+        log = install_fake_bd(tmp_path, monkeypatch, stdout=self._bd_knows("seeds-999"))
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Test", "-c", "see seeds-99999"]
+        )
+        assert result.exit_code != 0
+        assert call_lines(log) == []
+        assert "may be stale" not in result.output
+
+    def test_reports_a_possibly_stale_bead_list_when_bd_is_missing(
+        self, cli_runner, initialized_env, tmp_path, monkeypatch
+    ):
+        """Beads in use but unreachable: say the list may be stale, do not
+        pretend the export was the last word.
+        """
+        make_beads_workspace(initialized_env / SEEDS_DIR)
+        hide_bd(monkeypatch, tmp_path)
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Test", "-c", "see seeds-99999"]
+        )
+        assert result.exit_code != 0
+        assert "seeds-99999" in result.output
+        assert "may be stale" in result.output
+        assert "issues.jsonl" in result.output
+
+    def test_allow_unknown_refs_still_skips_bd_entirely(
+        self, cli_runner, initialized_env, tmp_path, monkeypatch
+    ):
+        make_beads_workspace(initialized_env / SEEDS_DIR)
+        log = install_fake_bd(tmp_path, monkeypatch)
+        result = cli_runner.invoke(
+            main,
+            ["create", "-t", "Test", "-c", "see seeds-99999", "--allow-unknown-refs"],
+        )
+        assert result.exit_code == 0, result.output
+        assert call_lines(log) == []
 
 
 class TestBase36RefValidation:
