@@ -12,7 +12,13 @@ import click
 
 from seeds import __version__
 from seeds.beads import load_bead_ids
-from seeds.check import check_violations, format_findings
+from seeds.check import (
+    GitUnavailable,
+    check_against_git,
+    check_smells,
+    check_violations,
+    format_findings,
+)
 from seeds.convert import ConversionError, convert, format_report
 from seeds.db import SEEDS_DIR, Database, find_seeds_dir
 from seeds.export import (
@@ -2010,18 +2016,45 @@ def doctor(ctx: Context) -> None:
 
 
 @main.command("check")
-def check_cmd() -> None:
+@click.option(
+    "--smells",
+    is_flag=True,
+    help=(
+        "Also report smells: an empty body, a long body with many commits and "
+        "no supersede marker, a body byte-identical to another seed's. Never "
+        "affects the exit code."
+    ),
+)
+@click.option(
+    "--against-git",
+    "against_git",
+    is_flag=True,
+    help=(
+        "Also compare every field with its value at the previous commit and "
+        "fail on one field rewritten across a large fraction of the corpus."
+    ),
+)
+def check_cmd(smells: bool, against_git: bool) -> None:
     """Verify the seed files are plausible, not merely parseable.
 
-    The violations tier: every finding here is either a file the reader would
-    refuse or a value that parses perfectly and is not credible -- a title that
-    is a filesystem path, an edge written at one end only, a stamp ahead of the
-    clock. It exits non-zero, so it can gate a commit or a conversion.
+    The violations tier runs always: every finding there is either a file the
+    reader would refuse or a value that parses perfectly and is not credible --
+    a title that is a filesystem path, an edge written at one end only, a stamp
+    ahead of the clock. It exits non-zero, so it can gate a commit or a
+    conversion.
 
     Content plausibility is the job because format validity had nothing to say
     when a bulk sweep replaced 83 titles with a scratchpad path (seeds-wurl):
     every record parsed, both stores agreed, and every divergence check was
     correctly green for three days.
+
+    --against-git is the tier that catches that particular sweep, and it gates
+    too: a commit rewriting most of the corpus in one field has no cheap human
+    review, so it needs a decision rather than a glance.
+
+    --smells is the tier that does not gate. Nothing it prints is an error, and
+    nothing it prints reaches the exit code -- it reports the things worth
+    noticing that cannot carry being a gate.
     """
     seeds_dir = find_seeds_dir()
     if seeds_dir is None:
@@ -2029,15 +2062,47 @@ def check_cmd() -> None:
         sys.exit(1)
 
     findings = check_violations(seeds_dir)
-    if not findings:
+    if findings:
+        click.echo(format_findings(findings), nl=False)
+        click.echo()
+        click.echo(f"seeds check: {len(findings)} violation(s).")
+    else:
         count = len(list(seed_files_dir(seeds_dir).glob("*.md")))
         click.echo(f"seeds check: {count} files, no violations.")
-        return
+    failed = bool(findings)
 
-    click.echo(format_findings(findings), nl=False)
-    click.echo()
-    click.echo(f"seeds check: {len(findings)} violation(s).")
-    sys.exit(1)
+    if against_git:
+        # A comparison the operator explicitly asked for that could not run is
+        # the exact "green while broken" shape this tier exists to prevent, so
+        # no git means a loud failure rather than a quiet skip. An unborn HEAD
+        # is not that case: it is a real, empty before-state.
+        try:
+            comparison = check_against_git(seeds_dir)
+        except GitUnavailable as exc:
+            click.echo(f"Error: seeds check --against-git: {exc}", err=True)
+            sys.exit(1)
+        click.echo()
+        click.echo(
+            f"seeds check --against-git: {comparison.corpus} seed(s) at "
+            f"{comparison.before}, compared with {comparison.after}."
+        )
+        if comparison.findings:
+            click.echo(format_findings(comparison.findings), nl=False)
+            click.echo(f"seeds check: {len(comparison.findings)} mass rewrite(s).")
+            failed = True
+
+    if smells:
+        smell_findings = check_smells(seeds_dir)
+        click.echo()
+        if smell_findings:
+            click.echo(format_findings(smell_findings, marker="⚠"), nl=False)
+        click.echo(
+            f"seeds check --smells: {len(smell_findings)} smell(s) — reporting "
+            f"only, never a failure."
+        )
+
+    if failed:
+        sys.exit(1)
 
 
 @main.command("convert")
