@@ -32,7 +32,7 @@ These are safe to run regardless of context:
 
 - `seeds list` / `seeds show` / `seeds tree` - View data
 - `seeds ready` / `seeds questions` / `seeds deferred` / `seeds blocked` - Query status
-- `seeds search` / `seeds export --json` - Search and dump the corpus
+- `seeds search` / `seeds export --json` / `seeds history` - Search, dump, and read the git history of the corpus
 - `seeds check` / `seeds doctor` - Verify the store
 - `seeds --help` / `seeds --version` - Help and version
 - `seeds prime` - Context for agents
@@ -84,6 +84,7 @@ Captures thoughts, ideas, and questions with minimal friction ("jot") and tracks
 - `src/seeds/check.py` - `seeds check`: the format's rules, verified after the fact
 - `src/seeds/convert.py` + `src/seeds/legacy.py` - `seeds convert`, and the read-only pre-0.7 reader it needs
 - `src/seeds/jsonexport.py` - `seeds export --json`
+- `src/seeds/githistory.py` + `src/seeds/history.py` - git as a store: `seeds check --against-git`, and `seeds history`
 - `src/seeds/prime.py` - AI context output
 
 ## Commands
@@ -103,6 +104,7 @@ uv run seeds update <id> --type <t>  # Change a seed's type (any string)
 uv run seeds update <id> --content-file <f>   # Replace a body from a file (or --content - for stdin)
 uv run seeds retype --from X --to Y  # Bulk-remap one type to another
 uv run seeds search "<regex>"        # ripgrep over the seed files
+uv run seeds history <id>            # How a seed changed, commit by commit, across the conversion
 uv run seeds check                   # Verify the files; exits non-zero on a violation
 uv run seeds doctor                  # Store and installation health
 uv run seeds export --json           # The whole corpus as JSONL on stdout
