@@ -52,9 +52,18 @@
           pyproject = true;
           build-system = [ python3Packages.hatchling ];
 
-          # Sole runtime dependency per pyproject.toml (click>=8.1.8). Keep this
-          # list in step with [project.dependencies] — that is the whole point of
-          # the flake living beside pyproject.toml.
+          # Sole runtime dependency per pyproject.toml (click>=8.1.8). This list
+          # mirrors [project.dependencies] by hand, and `scripts/flake_deps_check.py`
+          # is what holds it there — a pre-push hook and `just flake-deps` compare
+          # the two by name and name the offender. Until seeds-8ro this comment
+          # asked the next editor to keep them in step, which is a request and not
+          # a gate: dropping flask from pyproject.toml left it declared here, and
+          # only `nix flake check` noticed, two minutes in.
+          #
+          # The gate reads this exact `dependencies = with python3Packages; [ … ];`
+          # form. Reshape it and the check refuses (exit 2) rather than silently
+          # reporting green on a list it can no longer find — teach the script the
+          # new shape.
           dependencies = with python3Packages; [
             click
           ];

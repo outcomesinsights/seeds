@@ -159,12 +159,21 @@ with `pre-commit run --verbose seeds-check`.
 
 The pre-push hook runs the full local CI equivalent — `uv lock --check`, mypy
 (strict), `ruff check`, `ruff format --check`, the full pytest suite on the local
-interpreter plus 3.11 and 3.12, and `nix flake check` (skipped cleanly when nix
-is absent). `uv lock --check` is declared out of order, above the commit-stage
+interpreter plus 3.11 and 3.12, `just flake-deps`, and `nix flake check`
+(skipped cleanly when nix is absent). `uv lock --check` is declared out of order, above the commit-stage
 hooks, because `uv sync` and `uv run` both re-lock and would make it pass
 unconditionally. So if it fires green, the GitHub Actions CI on push is the last
 line of defense rather than the first. See `.pre-commit-config.yaml`; if you add a step to
 `.github/workflows/ci.yml`, add it there too.
+
+`just flake-deps` is the one pre-push hook with no counterpart in `ci.yml`, and
+that is deliberate. `flake.nix` copies `[project.dependencies]` by hand, so
+adding or removing a runtime dependency means editing two files; the script
+compares the two lists by name and names whichever dependency only one of them
+knows about. CI already catches that mismatch — inside the nix job, about two
+minutes in — so this only moves the failure to the front. If you edit
+`[project.dependencies]`, edit `dependencies = with python3Packages; [ … ];` in
+`flake.nix` in the same commit, and run `just flake-deps` to confirm it.
 
 ## License
 

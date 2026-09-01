@@ -76,3 +76,23 @@ changelog-coverage RANGE="":
 # Usage: just changelog-section 0.7.0   (optional second arg overrides the range)
 changelog-section VERSION RANGE="":
     @uv run python scripts/changelog_coverage.py --section {{VERSION}} {{RANGE}}
+
+# Gate: prove flake.nix's runtime dependency list still mirrors pyproject.toml's
+# [project.dependencies]. Exits non-zero and NAMES the mismatched dependency.
+#
+# Same shape of question as changelog-coverage above — "does the derived
+# artifact still match its source?" — so it is a sibling script rather than its
+# own ceremony (bead seeds-8ro). Two artifacts derive from that dependency list,
+# uv.lock and flake.nix; `uv lock --check` gates the first and this gates the
+# second.
+#
+# Also runs in the pre-push stage, immediately ahead of `nix flake check`, which
+# is what used to catch this: dropping flask from pyproject.toml on 2026-08-31
+# left flake.nix naming it, and ruff, mypy, the full pytest suite and `uv lock
+# --check` were ALL green with the mismatch in place. The nix job found it two
+# minutes in. This does the same comparison in milliseconds.
+#
+# Pure stdlib, so it needs no venv — but run through uv here to match the other
+# recipes. The hook calls `python3` directly.
+flake-deps:
+    @uv run python scripts/flake_deps_check.py
