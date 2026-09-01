@@ -68,6 +68,14 @@ dev = [
 [tool.ruff]
 target-version = "py311"
 line-length = 88
+# The seed store is DATA, not source. ruff >=0.16 formats Python code blocks
+# inside markdown, and .seeds/seeds/*.md is 308 files of deliberation that
+# often quote code. Reformatting one would rewrite what somebody wrote, and it
+# would break the byte-canonicality `seeds convert` idempotence rests on --
+# a reformatted body no longer matches render_seed_file's output, so the next
+# conversion reports a spurious diff. Found the night the store was converted:
+# ruff's file count went 65 -> 385 and it asked to reformat seeds-154.md.
+extend-exclude = [".seeds/"]
 
 [tool.ruff.lint]
 select = [
