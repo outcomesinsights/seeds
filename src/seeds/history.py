@@ -17,10 +17,13 @@ seed file in a single commit, so a seed's own file history begins on conversion
 day and, read alone, would claim that a seed deliberated over seven months was
 born that morning -- orphaning the ~113 commits of real history on precisely the
 day the format is supposed to make history *better*. So the walk is: the seed
-file's own commits, and before them the commits of ``.seeds/seeds.jsonl``, whose
-history is load-bearing forever and must never be filtered out of the repository
-as cleanup (``docs/storage-format.md`` §11). ``converted_at`` -- stamped once, by
-the converter -- is what says where to switch.
+file's own commits, and before them the commits of ``.seeds/seeds.jsonl``. That
+**history** is load-bearing forever and must never be rewritten or filtered out
+of the repository (``docs/storage-format.md`` §11). The working *file* is not:
+it stops being written on conversion day, and ``seeds convert`` stages its
+deletion wherever git can restore it. That costs this walk nothing, because it
+reads ``git log`` and ``git show`` -- never the file on disk. ``converted_at``
+-- stamped once, by the converter -- is what says where to switch.
 
 The rejected alternative was replaying the JSONL history as synthetic per-file
 commits. That is ~113 fabricated commits appended to main in every repo that

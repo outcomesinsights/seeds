@@ -617,7 +617,13 @@ class TestNonDestructive:
         assert len(second.unchanged) == 4
 
     def test_a_second_run_leaves_git_diff_empty(self, temp_dir):
-        """Byte-idempotence, asserted the way the bead states it."""
+        """Byte-idempotence of the tree, asserted the way the bead states it.
+
+        Scoped to ``.seeds/seeds/`` because the second run is the first one in
+        which the JSONL is tracked and clean, so it is also the run that stages
+        the JSONL's deletion (seeds-4co.19). That removal is a real, intended
+        change to the index; what must not move is the tree.
+        """
         repo = temp_dir / "repo"
         seeds_dir = repo / ".seeds"
         seeds_dir.mkdir(parents=True)
@@ -632,8 +638,8 @@ class TestNonDestructive:
 
         convert(seeds_dir)
 
-        assert git(repo, "diff").stdout == ""
-        assert git(repo, "status", "--porcelain").stdout == ""
+        assert git(repo, "diff", "--", ".seeds/seeds").stdout == ""
+        assert git(repo, "status", "--porcelain", "--", ".seeds/seeds").stdout == ""
 
     def test_converted_at_is_stamped_once_and_never_re_read_from_the_clock(
         self, temp_dir

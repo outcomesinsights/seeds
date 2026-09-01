@@ -1808,11 +1808,20 @@ def convert_cmd(keep_fixtures: bool) -> None:
     -- two bodies where neither is a prefix of the other -- lands as a file
     carrying both, with git conflict markers, for ordinary merge tooling.
 
-    Non-destructive. The tree is written alongside the pre-0.7 seeds.db and
-    seeds.jsonl and neither is touched, so reverting the whole conversion is
-    `rm -rf .seeds/seeds/`. Re-running against an unchanged store rewrites
-    nothing. Keep seeds.jsonl in the repository afterwards: its git history is
-    the only source for anything before a seed's converted_at.
+    The tree is written alongside the pre-0.7 seeds.db and seeds.jsonl, and
+    neither is rewritten. Re-running against an unchanged store rewrites
+    nothing.
+
+    seeds.jsonl is then RETIRED: where git can restore it -- inside a work
+    tree, tracked, and with no uncommitted changes -- its deletion is staged,
+    so the removal lands in the same commit as the seed files. Failing any one
+    of those three, the file is left alone and this says which one failed. The
+    FILE is disposable; its git HISTORY must never be rewritten or filtered
+    out of the repository, because `seeds history` reads it for everything
+    before a seed's converted_at. seeds.db is never deleted, for the opposite
+    reason: .seeds/.gitignore excludes *.db, so git holds no copy of it.
+
+    Every run prints the exact command that reverts the state it created.
 
     Exits non-zero while a fork is unresolved or `seeds check` reports a
     violation on the output: the data landed, but the store is not finished.
