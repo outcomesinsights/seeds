@@ -1,15 +1,19 @@
 ---
 id: seeds-74.2.4
 title: Harvest seeds is source-agnostic deliberation extraction
-status: captured
+status: resolved
 type: idea
 parent: seeds-74.2
 created_at: 2026-02-09T14:31:38.746545+00:00
-updated_at: 2026-03-12T20:07:06.759210+00:00
+updated_at: 2026-09-01T16:47:37.752028+00:00
+resolved_at: 2026-09-01T16:47:37.752020+00:00
 tags:
   - architecture
   - harvest
   - integration
+  - glean
+  - naming
+  - ratified
 relationships:
   - target_id: seeds-125
     rel_type: relates-to
@@ -80,3 +84,36 @@ The user identified that 'harvest' and 'gather' are overloaded — seeds is both
 - **Winnow**: separate wanted from unwanted (project-scoping step)
 
 'Glean' is the strongest candidate for the primary extraction command: `seeds glean <source>`. It implies methodical examination of existing material, not generation of new material. It also carries the connotation of 'picking up what others missed' — fitting for re-ingestion where later passes find seeds the first pass didn't.
+
+
+---
+
+## RESOLVED 2026-09-01. The pivot stays rejected; the vocabulary is what survived.
+
+Two separate things sit in this seed and they ended differently.
+
+**The source-agnostic pivot: rejected, and it stays rejected.** The user pushback recorded
+above ("Too hard a pivot. Overlaps with intent.build's positioning.") stands unchanged.
+Seeds is the structured database around the *deliberation process*, not a general
+extract-from-anything tool. `glean` reads Claude Code transcripts. It does not grow
+`--email`, `--slack` or `--stdin` sources on the strength of this seed.
+
+Note the one adjacent thing that DID ship on the transcript side: the `transcript-seeds`
+skill handles curated meeting-transcript extraction. That is a narrow, deliberate case with
+a human curation step in front of it — not the open-ended source-agnostic architecture
+proposed here.
+
+**The terminology refinement: adopted, and it is now the command name.** The Mar-2026
+observation that "harvest" and "gather" are overloaded — seeds being both the tool and the
+thing extracted — was correct, and `glean` beat the alternatives for the reasons given
+above: methodical examination of existing material rather than generation of new material,
+plus the connotation of picking up what earlier passes missed, which is precisely
+re-gleaning.
+
+Ratified 2026-09-01 (Ryan): the command is `seeds glean`, replacing `sweep` throughout.
+See seeds-74.2.1 for the design.
+
+`thresh` and `winnow` are deliberately NOT adopted. They name stages of a process, not
+operations a user invokes; promoting them to commands would be vocabulary for its own sake.
+They remain available as internal language if the implementation ever needs to distinguish
+the filtering step from the scoping one.

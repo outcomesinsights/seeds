@@ -1,15 +1,19 @@
 ---
 id: seeds-74.2.2
 title: "Hybrid approach: explicit callouts + end-of-session sweep"
-status: captured
+status: resolved
 type: decision
 parent: seeds-74.2
 created_at: 2026-02-06T22:14:28.430719+00:00
-updated_at: 2026-09-01T16:29:53.020820+00:00
+updated_at: 2026-09-01T16:47:37.459190+00:00
+resolved_at: 2026-09-01T16:47:37.459182+00:00
 tags:
   - workflow
   - sweep
   - design
+  - glean
+  - cutting
+  - resolved-2026-09-01
 relationships:
   - target_id: seeds-82
     rel_type: questioned-by
@@ -71,3 +75,42 @@ Like beads 'land the plane' triggers sync, seeds could have similar phrase that 
 
 ## Trigger phrase
 Open question: use 'land the plane' (consistency with beads) or seeds-specific phrase?
+
+
+---
+
+## RESOLVED 2026-09-01. The hybrid stands; both halves now have names.
+
+The hybrid ruling above was right and is unchanged. What it lacked was a concrete proactive
+half — it named `jot` and `ask`, which are too thin for the job. Both halves now exist:
+
+- **Explicit callout half -> `cutting`** (seeds-h5rq). A jot captures a topic's statement;
+  a cutting captures it with enough surrounding deliberation to resume cold. That richness
+  is what "stay on task while noting things to revisit later" actually requires — the cost
+  of a cold restart is why parked topics stayed parked.
+- **End-of-session half -> `glean`** (seeds-74.2.1, renamed from `sweep`).
+
+## CORRECTION: "Option A seems simpler" is superseded
+
+The Technical-approach section above concludes Option A (slash command analysing the
+conversation already in the model's context) over Option B (read the transcript). **That
+conclusion is wrong and is overridden by seeds-74.2.1**, whose own later "Context vs JSONL"
+section argues the opposite case correctly:
+
+Post-compaction context is summarized. It loses exact figures, verbatim user quotes, and
+things mentioned-but-not-acted-on — exactly the set glean exists to recover. Gleaning from
+context would systematically miss what it is for, and would appear to work in short
+sessions while failing silently in the long ones that need it most.
+
+The two seeds contradicted each other for roughly six months without either being resolved.
+That is itself an argument for draining clusters rather than letting them accumulate.
+
+The final shape is neither A nor B as written: a **skill** (judgment) over a **CLI verb**
+(transcript resolution, extraction, corpus diff), per seeds-152.5.
+
+## Trigger phrase
+
+The open question "'land the plane' or a seeds-specific phrase?" is dissolved. Skills are
+matched by description against user intent, so the trigger is the skill's `description`
+field rather than a magic phrase anyone has to memorize. Write it to match how the user
+actually asks ("what did we miss?", "glean this session", "anything not captured?").

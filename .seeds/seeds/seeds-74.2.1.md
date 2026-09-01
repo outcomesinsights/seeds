@@ -1,14 +1,18 @@
 ---
 id: seeds-74.2.1
-title: "Design: seeds sweep command"
-status: captured
+title: "Design: seeds glean (formerly 'sweep') — hybrid verb + skill, reads the transcript not the context"
+status: resolved
 type: decision
 parent: seeds-74.2
 created_at: 2026-02-06T22:03:49.501450+00:00
-updated_at: 2026-09-01T16:39:27.227816+00:00
+updated_at: 2026-09-01T16:47:37.316423+00:00
+resolved_at: 2026-09-01T16:47:37.316415+00:00
 tags:
   - feature
   - sweep
+  - glean
+  - ratified
+  - 2026-09-01
 relationships:
   - target_id: seeds-142
     rel_type: relates-to
@@ -105,3 +109,72 @@ Found 5 potential seeds:
 3. AI reads JSONL file (it's in ~/.claude/projects/...)
 4. Analyzes full conversation against seeds
 5. Surfaces gaps
+
+
+---
+
+## RESOLVED 2026-09-01 (Ryan). The command is `seeds glean`.
+
+### Naming: `sweep` -> `glean`
+
+Adopting the Mar-2026 terminology refinement recorded in seeds-74.2.4. `glean` is
+agricultural where `sweep` is janitorial, it sits consistently beside `jot`, `cutting` and
+`trellis`, and its literal sense — methodically picking through material others have
+already been over, gathering what was missed — is exactly what end-of-session gap-finding
+does. `thresh` and `winnow` stay unused; they described stages, not commands, and turning
+them into commands would be building vocabulary for its own sake.
+
+### Shape: hybrid skill + verb (from seeds-h5rq.3, per seeds-152.5)
+
+- **`seeds glean` (CLI verb, deterministic):** resolve the transcript, extract turns, diff
+  against the existing corpus, emit a compact candidate list. Gets pytest coverage.
+- **Skill (judgment):** decide which candidates are real, phrase them, present for review.
+
+This closes the "Slash command vs CLI" open question above: it is BOTH, layered, not a
+choice between them.
+
+### Read the transcript, never the model's context
+
+The "Context vs JSONL" section above is correct and OVERRIDES the Option A conclusion in
+seeds-74.2.2, which is stale. Post-compaction context loses exact figures, verbatim user
+quotes, and things mentioned-but-not-acted-on — the precise set glean exists to recover.
+Gleaning from summarized context would systematically miss what it is for.
+
+Reinforced by measurement (titan, 2026-09-01): one ordinary working session's transcript is
+502KB / 256 turns. That is both too large to hand a model raw and the reason extraction
+belongs in a tested verb rather than in the skill.
+
+### Open questions, closed
+
+- **"How to find 'current' session from CLI context?"** — `$CLAUDE_CODE_SESSION_ID` is in
+  the agent's environment and resolves directly to
+  `~/.claude/projects/<project-slug>/<session-id>.jsonl`. Verified on titan. No
+  most-recently-modified heuristics.
+- **"How to handle multi-hour conversations? Chunk or summarize?"** — dissolved rather than
+  answered. The verb filters to a candidate list first, so the model never sees the raw
+  transcript. Chunking inside the verb is an implementation detail, not a design fork.
+- **"Should sweep use current session's model or cheaper/faster one?"** — dropped. The
+  skill runs in whatever session invoked it; there is no separate model to choose.
+
+### `--auto`: kept as an opt-in flag (Ryan's ruling)
+
+Default remains suggest-and-review (y/n/edit per candidate). `--auto` stays available for
+bulk passes over historical conversations, where reviewing every candidate one at a time is
+impractical.
+
+Guardrail this ruling implies, and which the implementation must honour: seeds written by
+`--auto` need to be distinguishable after the fact — a tag at minimum — so an unattended
+bulk pass can be audited or reverted without hand-sorting it out of the corpus. The risk
+being managed is that `seeds ready` is only useful while it stays a curated signal, and the
+corpus is already 314 files.
+
+### Re-glean tracking (still live, carried into implementation)
+
+The "Re-sweep handling" notes above stand: track which conversations have been gleaned,
+skip them by default, and allow deliberate re-gleaning (`--force` / `--since=<date>`) for
+when there is a new lens to re-read old conversations through.
+
+### Markers as hints (Ryan's ruling, from seeds-74.2.3)
+
+Marker phrases are NOT required and must never be, but where they do appear the gleaner
+treats them as strong signals. Costs nothing; occasionally helps.
