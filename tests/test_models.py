@@ -203,16 +203,24 @@ class TestRelationType:
     """Tests for RelationType enum."""
 
     def test_all_types_exist(self):
-        """Verify all expected relationship types are defined."""
-        assert RelationType.RELATES_TO.value == "relates-to"
-        assert RelationType.QUESTIONS.value == "questions"
-        assert RelationType.ANSWERS.value == "answers"
+        """The closed set is three strings, and no more (storage-format §5.2)."""
+        assert [t.value for t in RelationType] == [
+            "relates-to",
+            "questions",
+            "questioned-by",
+        ]
 
     def test_type_from_value(self):
         """Verify types can be created from string values."""
         assert RelationType("relates-to") == RelationType.RELATES_TO
         assert RelationType("questions") == RelationType.QUESTIONS
-        assert RelationType("answers") == RelationType.ANSWERS
+        assert RelationType("questioned-by") == RelationType.QUESTIONED_BY
+
+    def test_answers_is_gone(self):
+        """'answers' was removed: the workflow never created an edge."""
+        assert not hasattr(RelationType, "ANSWERS")
+        with pytest.raises(ValueError):
+            RelationType("answers")
 
     def test_invalid_type_raises(self):
         """Verify invalid relationship type raises ValueError."""

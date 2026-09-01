@@ -49,11 +49,30 @@ class SeedType(StrEnum):
 
 
 class RelationType(Enum):
-    """Types of relationships between seeds."""
+    """The closed set of relationship types, and it is closed for a reason.
 
-    RELATES_TO = "relates-to"  # Bidirectional, undifferentiated
+    Every edge is stored at BOTH ends (docs/storage-format.md §5.1), which is
+    only unambiguous when the far end can name what it holds: a symmetric type
+    stores itself there, a directional type stores a named inverse. So a
+    directional type without an inverse cannot be represented on disk at all,
+    and adding one later means adding its inverse in the same change. The
+    pairing lives in ``seeds.seedfile.inverse_relation``.
+
+    ``QUESTIONED_BY`` is the storage-side inverse of ``QUESTIONS``. It is not
+    offered on ``seeds link --type``: a user picks the forward direction and
+    the writer lays down the far end.
+
+    ``ANSWERS`` was removed 2026-08-31. It was vestigial — ``seeds answer``
+    stores an answer as the question-seed's own content and re-stamps
+    ``resolved_at``, and never created an edge — so the corpus held zero of
+    them against 534 ``relates-to`` and 57 ``questions``. An edge-based
+    answering model was designed and then superseded by the content-field
+    approach before anyone used it; only the enum member was left behind.
+    """
+
+    RELATES_TO = "relates-to"  # Symmetric: stored as itself at both ends
     QUESTIONS = "questions"  # Directed: question-seed → seed it asks about
-    ANSWERS = "answers"  # Directed: answering-seed → question-seed
+    QUESTIONED_BY = "questioned-by"  # The stored inverse of QUESTIONS
 
 
 def generate_id(prefix: str = "seed") -> str:
