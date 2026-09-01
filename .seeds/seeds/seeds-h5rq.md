@@ -4,7 +4,7 @@ title: "seeds cutting: context-carrying capture, the vegetative sibling of jot"
 status: captured
 type: decision
 created_at: 2026-09-01T16:29:11.606858+00:00
-updated_at: 2026-09-01T16:29:53.019105+00:00
+updated_at: 2026-09-01T16:38:58.368937+00:00
 tags:
   - cutting
   - capture
@@ -23,6 +23,9 @@ relationships:
   - target_id: seeds-74.2.2
     rel_type: relates-to
     created_at: 2026-09-01T16:29:53.018536+00:00
+  - target_id: seeds-152.5
+    rel_type: relates-to
+    created_at: 2026-09-01T16:38:58.367240+00:00
 ---
 
 **Ruled 2026-09-01 (Ryan): the command is named `cutting`.**

@@ -5,7 +5,7 @@ status: captured
 type: decision
 parent: seeds-74.2
 created_at: 2026-02-06T22:03:49.501450+00:00
-updated_at: 2026-02-06T22:20:17.752494+00:00
+updated_at: 2026-09-01T16:39:27.227816+00:00
 tags:
   - feature
   - sweep
@@ -16,6 +16,9 @@ relationships:
   - target_id: seeds-x6m0
     rel_type: relates-to
     created_at: 2026-08-27T14:08:02.282402+00:00
+  - target_id: seeds-h5rq.3
+    rel_type: relates-to
+    created_at: 2026-09-01T16:39:27.226165+00:00
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
