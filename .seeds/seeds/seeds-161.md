@@ -4,12 +4,13 @@ title: "Concern: seeds captures the prescriptive journey well but under-captures
 status: deferred
 type: concern
 created_at: 2026-06-15T21:58:55.600505+00:00
-updated_at: 2026-08-31T20:02:42.108054+00:00
+updated_at: 2026-09-01T16:58:50.500502+00:00
 tags:
   - learning
   - lifecycle
   - capture-gap
   - resolution-audit
+  - winnow
 relationships:
   - target_id: seeds-158
     rel_type: relates-to
@@ -39,3 +40,8 @@ The honest nuance that softens the gap: a lot of the learning already happens *i
 This is the third cousin in the seeds self-audit family (see the umbrella seed), with the staleness-audit and retrospective-outcome seeds. They may collapse into one mechanism: a way for seeds to look back over its own resolved deliberation and ask what aged out, what contradicts what, what panned out, and what we learned.
 
 Status: deferred — note it alongside the other two; revisit on a free afternoon to see if a concrete shape sparks.
+
+
+
+---
+**2026-09-01: partially absorbed by `winnow` (seeds-158).** Ryan ruled the corpus-audit skill covers all five flavors of the self-audit family, this one included — so the *surfacing* half now has a home and a shape. What `winnow` can do here is bounded: neither outcome nor learning is detectable from the corpus alone, so both are surfaced as prompts for the user to answer, never asserted by the tool (see seeds-164). The broader concern in this seed — that seeds under-captures this material at resolution time, not just at audit time — is NOT addressed by winnow and stays live here. Cousin: the `resolve-seeds-from-beads` skill already carries learnings back at resolution time.

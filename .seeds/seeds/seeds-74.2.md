@@ -5,7 +5,7 @@ status: resolved
 type: exploration
 parent: seeds-74
 created_at: 2026-02-06T22:02:47.824545+00:00
-updated_at: 2026-09-01T16:47:55.062275+00:00
+updated_at: 2026-09-01T16:58:33.624993+00:00
 resolved_at: 2026-09-01T16:47:55.062265+00:00
 tags:
   - workflow
@@ -27,6 +27,9 @@ relationships:
   - target_id: seeds-h5rq
     rel_type: relates-to
     created_at: 2026-09-01T16:47:54.893918+00:00
+  - target_id: seeds-159
+    rel_type: relates-to
+    created_at: 2026-09-01T16:58:33.623178+00:00
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 

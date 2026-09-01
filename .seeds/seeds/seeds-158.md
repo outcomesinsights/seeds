@@ -1,10 +1,11 @@
 ---
 id: seeds-158
-title: Should seeds audit its own body of knowledge? A self-consistency / sanity-check family
-status: exploring
+title: "Resolved: seeds audits its own body of knowledge as `winnow` — all five flavors, edge-scoped detection"
+status: resolved
 type: question
 created_at: 2026-06-15T21:58:55.152165+00:00
-updated_at: 2026-08-31T20:02:41.750970+00:00
+updated_at: 2026-09-01T16:59:38.620538+00:00
+resolved_at: 2026-09-01T16:59:38.620530+00:00
 tags:
   - self-audit
   - consistency
@@ -12,6 +13,9 @@ tags:
   - resolution-audit
   - corpus
   - meta
+  - winnow
+  - ratified
+  - 2026-09-01
 relationships:
   - target_id: seeds-159
     rel_type: relates-to
@@ -48,3 +52,65 @@ Named flavors of the audit, in his words:
 Distinct from `doctor` (operational health) and seeds-50 (story-coherence of the live graph). This is consistency-and-freshness of the *resolved* knowledge body. The three cousin seeds relate to this umbrella.
 
 Status: exploring — actively deliberated; the specific mechanisms (the cousins) remain deferred until a shape sparks.
+
+
+---
+
+## RESOLVED 2026-09-01 (Ryan). The command is `winnow`, and it covers all five flavors.
+
+The umbrella question above — *formalize these as first-class tools, or leave them as things
+an agent does on request?* — is answered **formalize**, and the generic form of that answer
+was already settled independently in seeds-152.5: judgment becomes a skill, deterministic
+work becomes a tested CLI verb. So `winnow` is a skill over a verb, the same shape as
+`glean`.
+
+### Name
+
+`winnow` — separating what you keep from what you discard, out of material **already
+harvested**. That scoping is the whole point of the name and it is what distinguishes this
+from its sibling:
+
+- **`glean`** (seeds-74.2.1) works the *field*: source transcripts in, new seeds out.
+- **`winnow`** works the *barn*: the existing corpus in, attention out.
+
+Adopting the Mar-2026 vocabulary from seeds-74.2.4, which was correct and was initially
+mis-scoped as a stage of gleaning rather than an operation on the corpus. `thresh` remains
+unused.
+
+### Scope: all five flavors (Ryan's ruling)
+
+Staleness, contradiction, outcome, learning, and neglected deferrals — the full family named
+above, not a contradiction-only first cut. Ryan ruled this having heard the crying-wolf
+objection, so the objection is answered by design rather than by narrowing scope:
+
+1. **Hard and soft findings are reported separately.** Mechanical results (dates, graph
+   state) are facts; staleness and outcome are guesses. Mixing them lets one soft false
+   positive discredit the hard section.
+2. **Every finding cites its evidence** — the specific seed IDs and the specific conflicting
+   text. A finding that cannot cite is not reported.
+3. **The split follows the flavor, not the feature.** Neglected deferrals and
+   long-unresolved detection are pure graph-and-date facts and live in the verb, where
+   pytest can cover them. Contradiction, staleness, outcome and learning need judgment and
+   live in the skill — with the verb still scoping their candidate sets.
+4. **The detector gets tested like a detector**, per the standing rule that a stale-check
+   is itself code that can be silently wrong: hand-built fixtures with hand-computed
+   answers, and critically a fixture pair that merely *looks* like a contradiction (two
+   related seeds that agree) to prove the false-positive path.
+5. **"Nothing to report" is a good outcome** and must never be padded with marginal
+   findings to look productive.
+
+### Detection — the thing that blocked this since June
+
+seeds-164 is answered: **contradictions live inside clusters, not across the corpus.** The
+candidate set is the edge set, not the cross product — 692 edges rather than ~49,000 pairs,
+measured 2026-09-01. The unit of review is an *edge*, not a seed.
+
+Evidence, produced by hand the same day: draining seeds-74.2 surfaced a real six-month-old
+contradiction between seeds-74.2.1 and seeds-74.2.2 — two children of the same parent.
+
+### Relationship to `doctor` and `check`
+
+Now a clean three-way split, and worth stating so the boundaries hold:
+- `seeds check` — are the FILES valid? (format rules)
+- `seeds doctor` — is the STORE healthy? (operational: dangling edges, prefixes, counts)
+- `seeds winnow` — is the THINKING healthy? (semantic: contradiction, staleness, neglect)

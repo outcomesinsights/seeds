@@ -4,13 +4,14 @@ title: "Idea: retrospective outcome — did the resolved decision actually pan o
 status: deferred
 type: idea
 created_at: 2026-06-15T21:58:55.455330+00:00
-updated_at: 2026-08-31T20:02:41.994747+00:00
+updated_at: 2026-09-01T16:58:50.360199+00:00
 tags:
   - lifecycle
   - outcome
   - retrospective
   - feedback-loop
   - resolution-audit
+  - winnow
 relationships:
   - target_id: seeds-158
     rel_type: relates-to
@@ -31,3 +32,8 @@ seeds captures the resolution *at close* (seeds-134) and links experiments that 
 Open shape: a light "revisit" affordance on resolved seeds, and/or an optional `outcome` field distinct from `resolution` ("resolution = what we decided; outcome = how it actually turned out"). Keep it optional and agent-surfaced — @aguynamedryan never runs the CLI, so it cannot depend on him remembering to revisit. Partly overlaps seeds-115 (experiment outcomes *before* the decision); this is the *post*-resolution, in-production variant.
 
 Status: deferred (cousin cluster).
+
+
+
+---
+**2026-09-01: partially absorbed by `winnow` (seeds-158).** Ryan ruled the corpus-audit skill covers all five flavors of the self-audit family, this one included — so the *surfacing* half now has a home and a shape. What `winnow` can do here is bounded: neither outcome nor learning is detectable from the corpus alone, so both are surfaced as prompts for the user to answer, never asserted by the tool (see seeds-164). The broader concern in this seed — that seeds under-captures this material at resolution time, not just at audit time — is NOT addressed by winnow and stays live here. Cousin: the `resolve-seeds-from-beads` skill already carries learnings back at resolution time.
