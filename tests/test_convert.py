@@ -33,12 +33,16 @@ from seeds.check import check_violations
 from seeds.cli import main
 from seeds.convert import (
     FIXTURE_IDS,
+    SPLIT_AT_BLANK_LINE,
+    SPLIT_AT_FIRST_LINE,
+    SPLIT_AT_SENTENCE_END,
     Classification,
     ConversionError,
     classify,
     convert,
     fork_body,
     format_report,
+    split_legacy_title,
     verify,
 )
 from seeds.legacy import LegacyDatabase, LegacyRelationTypeError
@@ -778,6 +782,207 @@ class TestVestigialAnswersEdges:
         assert excinfo.value.rel_type == "nonsense"
         assert excinfo.value.source_id == "seeds-a1"
         assert excinfo.value.target_id == "seeds-b2"
+
+
+# --- Multi-line legacy titles ------------------------------------------------
+
+
+class TestSplitLegacyTitle:
+    """The rule itself, on hand-built titles with hand-written verdicts.
+
+    Ruled 2026-09-01, in precedence order: a blank line, else the first
+    sentence end, else the first line. Two of the three have never fired on
+    real data, which is exactly why they are pinned here rather than left to
+    agree with whatever the function currently does.
+    """
+
+    def test_a_one_line_title_is_left_alone(self):
+        assert split_legacy_title("A title", "body") == ("A title", "body", "", "")
+
+    def test_the_two_real_shapes_split_at_the_blank_line(self):
+        title, body, moved, rule = split_legacy_title(
+            "Is X or Y?\n\nTwo readings:\n(a) one\n(b) two", "Resolved: (a)."
+        )
+        assert title == "Is X or Y?"
+        assert rule == SPLIT_AT_BLANK_LINE
+        assert moved == "Two readings:\n(a) one\n(b) two"
+        assert body == "Two readings:\n(a) one\n(b) two\n\nResolved: (a)."
+
+    def test_no_blank_line_splits_at_the_first_sentence_end(self):
+        title, body, moved, rule = split_legacy_title(
+            "The question. And then the elaboration\nover two lines", ""
+        )
+        assert (title, rule) == ("The question.", SPLIT_AT_SENTENCE_END)
+        assert body == "And then the elaboration\nover two lines"
+        assert moved == body
+
+    def test_an_abbreviation_is_not_a_sentence_end(self):
+        """`e.g.` mid-sentence must not silently truncate somebody's title.
+
+        The corpus this rule exists for is dense with 'e.g.', 'vs.', 'Fig.'
+        and version strings; cutting at one would look like a working split
+        and be a truncation.
+        """
+        title, body, moved, rule = split_legacy_title(
+            "Use e.g. Foo as the example. Then the rest\nsecond line", ""
+        )
+        assert title == "Use e.g. Foo as the example."
+        assert rule == SPLIT_AT_SENTENCE_END
+        assert body == "Then the rest\nsecond line"
+        assert moved == body
+
+    @pytest.mark.parametrize(
+        "first_line",
+        [
+            "Label the version v2023.1 in the dropdown",  # a version number
+            "Compare A vs. B before deciding",  # an abbreviation
+            "no sentence punctuation here at all",
+            "Ends the line with a stop.",  # a stop AT the end is the line rule
+            "A question mark then lowercase? no capital follows",
+        ],
+    )
+    def test_nothing_that_is_not_a_sentence_end_cuts_the_first_line(self, first_line):
+        title, body, moved, rule = split_legacy_title(f"{first_line}\nsecond line", "")
+        assert title == first_line
+        assert rule == SPLIT_AT_FIRST_LINE
+        assert (body, moved) == ("second line", "second line")
+
+    def test_a_blank_line_below_line_two_cuts_by_the_rule_that_actually_fired(self):
+        """Rule 1 fires only where it yields a one-line title.
+
+        A first blank line further down would leave a title still spanning
+        lines, so the cut is made by rule 2 and reported as rule 2. The moved
+        text is the same either way; what must be true is that the operator is
+        told which rule touched their title.
+        """
+        title, body, moved, rule = split_legacy_title(
+            "First. Second\nthird\n\nfourth", ""
+        )
+        assert (title, rule) == ("First.", SPLIT_AT_SENTENCE_END)
+        assert body == "Second\nthird\n\nfourth"
+        assert moved == body
+
+    def test_leading_blank_lines_do_not_empty_the_title(self):
+        title, body, moved, rule = split_legacy_title("\n \nReal title\nmore", "")
+        assert (title, rule) == ("Real title", SPLIT_AT_FIRST_LINE)
+        assert (body, moved) == ("more", "more")
+
+    def test_a_title_that_is_only_blank_lines_stays_empty(self):
+        """Inventing a title is not this function's call.
+
+        `write_seed_file` refuses an empty one loudly a moment later, which is
+        the right place for that to be settled.
+        """
+        assert split_legacy_title("\n\n", "body") == ("", "body", "", "")
+
+    def test_trailing_blank_lines_alone_are_not_a_split(self):
+        assert split_legacy_title("A title\n\n", "body") == ("A title", "body", "", "")
+
+    def test_an_empty_body_takes_the_moved_text_alone(self):
+        title, body, moved, _ = split_legacy_title("Head\n\nTail", "")
+        assert (title, body, moved) == ("Head", "Tail", "Tail")
+
+
+class TestMultiLineLegacyTitleConversion:
+    """The last store `seeds convert` could not finish.
+
+    Two of `code_set_catalog`'s 435 seeds carried a whole multi-paragraph
+    thought in the title column, and §3 allows one non-empty line -- so the
+    writer refused and 435 seeds stayed unconverted over 2 records. Ruled
+    2026-09-01: split it, and NAME every seed split, because a content move
+    nobody is told about is the silent collapse this module refuses.
+    """
+
+    LONG = "The real question?\n\nElaboration line one.\nElaboration line two."
+
+    def test_a_multi_line_title_converts_and_loses_nothing(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        build_db(
+            seeds_dir, [seed("seeds-a1", title=self.LONG, content="Resolved: yes.")]
+        ).close()
+
+        report = convert(seeds_dir)
+
+        written = read_seed_file(seed_files_dir(seeds_dir) / "seeds-a1.md")
+        assert written.title == "The real question?"
+        assert written.body == (
+            "Elaboration line one.\nElaboration line two.\n\nResolved: yes.\n"
+        )
+        assert report.split_titles == {"seeds-a1": SPLIT_AT_BLANK_LINE}
+
+    def test_the_report_names_every_split_seed_and_the_rule_that_cut_it(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        build_db(
+            seeds_dir,
+            [
+                seed("seeds-a1", title=self.LONG),
+                seed("seeds-b2", title="One line only"),
+                seed("seeds-c3", title="No blank line here\nsecond line"),
+            ],
+        ).close()
+
+        text = format_report(convert(seeds_dir))
+
+        assert "split 2 multi-line legacy title(s)" in text
+        assert "seeds-a1  (at blank line)" in text
+        assert "seeds-c3  (at first line)" in text
+        assert "seeds-b2" not in text
+
+    def test_the_jsonl_alone_splits_it_too(self, temp_dir):
+        """A fresh clone has no `seeds.db` -- only the JSONL export of it.
+
+        The legacy JSONL is an export *of* the legacy SQLite, so it carries the
+        same over-long title. Handling it at one reader only turns the crash
+        into a refusal one message later, which is the mistake the vestigial
+        `answers` drop already made once.
+        """
+        seeds_dir = temp_dir / ".seeds"
+        write_jsonl(
+            seeds_dir, [record("seeds-a1", title=self.LONG, content="Resolved: yes.")]
+        )
+
+        report = convert(seeds_dir)
+
+        assert report.split_titles == {"seeds-a1": SPLIT_AT_BLANK_LINE}
+        written = read_seed_file(seed_files_dir(seeds_dir) / "seeds-a1.md")
+        assert written.title == "The real question?"
+        assert "Elaboration line two.\n\nResolved: yes." in written.body
+
+    def test_one_title_in_both_stores_is_reported_once(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        build_db(
+            seeds_dir, [seed("seeds-a1", title=self.LONG, content="Resolved: yes.")]
+        ).close()
+        write_jsonl(
+            seeds_dir, [record("seeds-a1", title=self.LONG, content="Resolved: yes.")]
+        )
+
+        report = convert(seeds_dir)
+
+        assert report.split_titles == {"seeds-a1": SPLIT_AT_BLANK_LINE}
+        assert report.counts == {Classification.DB_EXTENDS_DISK: 1}
+        assert "split 1 multi-line legacy title(s)" in format_report(report)
+
+    def test_a_store_with_no_multi_line_title_says_nothing(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        build_db(seeds_dir, [seed("seeds-a1")]).close()
+
+        report = convert(seeds_dir)
+
+        assert report.split_titles == {}
+        assert "multi-line legacy title" not in format_report(report)
+
+    def test_the_converted_tree_passes_its_own_check(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        build_db(
+            seeds_dir, [seed("seeds-a1", title=self.LONG, content="Resolved: yes.")]
+        ).close()
+
+        report = convert(seeds_dir)
+
+        assert report.check_findings == []
+        assert report.verified == 1
+        assert check_violations(seeds_dir) == []
 
 
 # --- Non-destructive, and idempotent -----------------------------------------

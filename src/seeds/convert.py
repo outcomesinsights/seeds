@@ -53,6 +53,7 @@ exactly such a code path.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
@@ -96,6 +97,7 @@ __all__ = [
     "classify",
     "convert",
     "fork_body",
+    "split_legacy_title",
     "union_records",
     "verify",
 ]
@@ -193,6 +195,16 @@ NORMALIZATIONS: tuple[Normalization, ...] = (
         "emitted relationship set is a superset of the sources'. Verified as a "
         "superset: every source half must be present, and every added half must "
         "be the inverse of one",
+    ),
+    Normalization(
+        "legacy-title-split",
+        "a legacy title spanning more than one line is really a title plus a "
+        "body, and §3 allows only one line. Both readers cut it before the "
+        "union sees it and prepend the remainder to the body, so verification "
+        "compares against the split form rather than forgiving a difference "
+        "later. Nothing is lost -- the moved text is asserted present in the "
+        "new body verbatim -- and every split seed is named in the report "
+        "alongside the rule that cut it",
     ),
     Normalization(
         "declared-drop",
@@ -300,6 +312,202 @@ def fork_body(db_body: str, jsonl_body: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+# --- The legacy title split --------------------------------------------------
+
+#: How a title was cut, in the wording the report prints. Named rather than
+#: counted because two of the three rules have never fired on real data: an
+#: operator whose repo triggers one deserves to see *which* rule touched their
+#: title, not just that something did.
+SPLIT_AT_BLANK_LINE = "at blank line"
+SPLIT_AT_SENTENCE_END = "at sentence end"
+SPLIT_AT_FIRST_LINE = "at first line"
+
+#: A sentence terminator, plus any closing punctuation riding on it, with
+#: whitespace after. ``v2023.1`` and ``3.4`` are excluded by the whitespace
+#: requirement alone -- there is no space after that dot.
+_SENTENCE_END = re.compile("[.?!][)\\]\"'\u201d\u2019]*(?=\\s)")
+
+#: What comes after the terminator for it to count: optional opening
+#: punctuation, then a capital. A lowercase continuation is mid-sentence.
+_SENTENCE_START = re.compile("\\s*[(\\[\"'\u201c\u2018]*[A-Z]")
+
+#: The token before a full stop that makes it an abbreviation rather than the
+#: end of a sentence. Every one of these appears in prose this corpus writes,
+#: and cutting a title at ``e.g.`` or ``Fig.`` would truncate it silently --
+#: which is the one outcome the split is not allowed to have. Compared
+#: casefolded, and a *single letter* before the stop is rejected on top of this
+#: list, which covers ``e.g.``, ``i.e.`` and ``U.S.`` without naming them.
+_ABBREVIATIONS = frozenset(
+    {
+        "e.g",
+        "i.e",
+        "vs",
+        "cf",
+        "etc",
+        "al",
+        "no",
+        "nos",
+        "fig",
+        "eq",
+        "approx",
+        "incl",
+        "resp",
+        "viz",
+        "ca",
+        "vol",
+        "ch",
+        "sec",
+        "pp",
+        "p",
+        "dr",
+        "mr",
+        "mrs",
+        "ms",
+        "prof",
+        "jr",
+        "sr",
+        "st",
+        "inc",
+        "co",
+        "ltd",
+    }
+)
+
+
+def _title_lines(title: str) -> list[str]:
+    """``title`` as lines, with blank lines trimmed off both ends."""
+    lines = title.split("\n")
+    start, end = 0, len(lines)
+    while start < end and not lines[start].strip():
+        start += 1
+    while end > start and not lines[end - 1].strip():
+        end -= 1
+    return lines[start:end]
+
+
+def _sentence_end(line: str) -> int | None:
+    """Where the first sentence ends inside ``line``, or ``None``.
+
+    Strictly *inside*: a stop at the end of the line is the same cut as
+    :data:`SPLIT_AT_FIRST_LINE` and is reported as that, so this returns only
+    the cases where the title is being divided mid-line -- the ones worth
+    flagging.
+    """
+    for match in _SENTENCE_END.finditer(line):
+        stop = match.end()
+        if not _SENTENCE_START.match(line, stop):
+            continue
+        before = re.search(r"[\w.]+$", line[: match.start() + 1])
+        token = before.group().rstrip(".").casefold() if before else ""
+        if token in _ABBREVIATIONS or (len(token) == 1 and token.isalpha()):
+            continue
+        if not line[:stop].strip():
+            continue
+        return stop
+    return None
+
+
+def split_legacy_title(title: str, body: str) -> tuple[str, str, str, str]:
+    """Split a legacy title that is really a title *plus* a body.
+
+    A pre-0.7 title was a plain SQLite column with nothing enforcing its shape,
+    so a few of them hold a whole multi-paragraph thought that someone pasted
+    into the wrong field. §3 requires one non-empty line and
+    :func:`~seeds.seedfile.write_seed_file` refuses anything else -- measured
+    2026-09-01, two of ``code_set_catalog``'s 435 seeds (649 and 1,442
+    characters, 7 and 10 lines) made that repo the last one ``seeds convert``
+    could not finish.
+
+    Ruled by @aguynamedryan on 2026-09-01, in precedence order:
+
+    1. **A blank line** -- the title ends there. In both real records line 1 is
+       a genuine question, line 2 is blank, and the rest is elaboration, so the
+       split follows the shape the data already has rather than inventing a
+       boundary.
+    2. **No blank line** -- the title ends at the first sentence end. A stop
+       that is really an abbreviation (``e.g.``, ``Fig.``, ``Dr.``) or a
+       version number (``v2023.1``) does not count; see :data:`_ABBREVIATIONS`
+       and :func:`_sentence_end`. Silently truncating somebody's title at
+       ``e.g.`` would be worse than not splitting there at all.
+    3. **Neither** -- the title ends at the end of its first line, which a
+       multi-line title always has. The floor exists because rule 2 needs one:
+       a title with no blank line and no sentence-ending punctuation still has
+       to convert rather than crash.
+
+    Refusing the repo was rejected -- it blocks 435 seeds over 2 records -- and
+    so was relaxing the one-line title rule, which would have ``seeds list``
+    print a 1,442-character title and empty the rule of meaning.
+
+    Rule 1 fires only where it yields a one-line title, which is to say where
+    the blank line is line 2. A first blank line further down leaves a title
+    still spanning lines, so the cut is made by rule 2 or rule 3 and reported
+    as the rule that actually made it. The moved text is identical either way;
+    what differs is only which rule the operator is told about, and they should
+    be told the true one.
+
+    Rules 2 and 3 have never fired on real data. That is the argument for
+    keeping them simple *and* for naming them in the report.
+
+    Returns ``(title, body, moved, rule)``. ``moved`` is the text taken out of
+    the title, and both it and ``rule`` are ``""`` when nothing was moved --
+    the caller reports on that, because a content move nobody is told about is
+    the silent collapse this whole module refuses to perform.
+    """
+    lines = _title_lines(title)
+    if not lines:
+        # An empty title stays empty. Inventing one is not this function's
+        # call, and `write_seed_file` refuses it loudly a moment later.
+        return "", body, "", ""
+    if len(lines) == 1:
+        return lines[0].rstrip(), body, "", ""
+
+    blank = next((i for i, line in enumerate(lines) if not line.strip()), None)
+    if blank == 1:
+        head, tail, rule = lines[0], "\n".join(lines[2:]), SPLIT_AT_BLANK_LINE
+    else:
+        rest = "\n".join(lines[1:])
+        stop = _sentence_end(lines[0])
+        if stop is None:
+            head, tail, rule = lines[0], rest, SPLIT_AT_FIRST_LINE
+        else:
+            head, tail, rule = (
+                lines[0][:stop],
+                f"{lines[0][stop:].strip()}\n{rest}",
+                SPLIT_AT_SENTENCE_END,
+            )
+
+    head = head.rstrip()
+    moved = tail.strip("\n")
+    if not moved:
+        return head, body, "", ""
+    rest_body = body.strip("\n")
+    new_body = f"{moved}\n\n{rest_body}" if rest_body else moved
+    # Nothing is lost: the text that left the title is in the body verbatim,
+    # and the body that was already there is still in it verbatim. Asserted
+    # rather than trusted -- this is the one step that moves content between
+    # two fields, and it runs before any verification can see it.
+    assert moved in new_body
+    assert not rest_body or rest_body in new_body
+    return head, new_body, moved, rule
+
+
+def _split_title(seed: Seed, splits: dict[str, str]) -> Seed:
+    """Apply :func:`split_legacy_title` to ``seed``, recording it if it fired.
+
+    Called from **both** readers. The legacy JSONL is an export *of* the legacy
+    SQLite, so both stores hold the same over-long title; handling it at one
+    reader only would turn the crash into a refusal one message later -- the
+    lesson the vestigial-``answers`` drop learned the hard way. ``splits`` is
+    keyed by id for that reason: one seed split in two stores is one split.
+    """
+    title, content, moved, rule = split_legacy_title(seed.title, seed.content)
+    if moved:
+        splits.setdefault(seed.id, rule)
+    seed.title = title
+    seed.content = content
+    return seed
+
+
 # --- Source records ----------------------------------------------------------
 
 
@@ -352,6 +560,7 @@ def _seed_to_utc(seed: Seed) -> Seed:
 
 def _load_db(
     db_path: Path,
+    splits: dict[str, str] | None = None,
 ) -> tuple[dict[str, _Side], list[_Half], dict[str, int], list[_VestigialKey]]:
     """Read every seed, every relationship half, the table counts and the drops.
 
@@ -367,6 +576,7 @@ def _load_db(
     if not db_path.exists():
         return {}, [], {}, []
 
+    splits = {} if splits is None else splits
     legacy = _legacy_table_counts(db_path)
 
     db = LegacyDatabase(db_path)
@@ -374,7 +584,9 @@ def _load_db(
         vestigial = db.vestigial_relationship_keys()
         sides: dict[str, _Side] = {}
         for seed in db.list_seeds():
-            sides[seed.id] = _Side(seed=_seed_to_utc(seed), origin="db")
+            sides[seed.id] = _Side(
+                seed=_split_title(_seed_to_utc(seed), splits), origin="db"
+            )
         halves: list[_Half] = []
         seen: set[tuple[str, str, str]] = set()
         for seed_id in sides:
@@ -448,6 +660,7 @@ def _legacy_table_counts(db_path: Path) -> dict[str, int]:
 
 def _load_jsonl(
     jsonl_path: Path,
+    splits: dict[str, str] | None = None,
 ) -> tuple[dict[str, _Side], list[_Half], list[_VestigialKey]]:
     """Read every record on disk, strictly.
 
@@ -459,6 +672,7 @@ def _load_jsonl(
     if not jsonl_path.exists():
         return {}, [], []
 
+    splits = {} if splits is None else splits
     sides: dict[str, _Side] = {}
     halves: list[_Half] = []
     vestigial: list[_VestigialKey] = []
@@ -505,7 +719,7 @@ def _load_jsonl(
                     "converter refuses to perform"
                 )
             raw_by_id[seed_id] = raw.strip()
-            seed = _seed_from_record(seed_id, data)
+            seed = _split_title(_seed_from_record(seed_id, data), splits)
             sides[seed_id] = _Side(seed=seed, origin="jsonl")
             halves.extend(
                 _halves_from_record(seed, data, jsonl_path, lineno, vestigial)
@@ -965,6 +1179,12 @@ class ConversionReport:
     #: whole tables: these are individual edges inside a table the converter
     #: otherwise reads in full.
     dropped_legacy_edges: dict[str, int] = field(default_factory=dict)
+    #: Legacy titles that spanned more than one line, mapped to the rule that
+    #: cut each one. Named per seed rather than counted: the split moves text
+    #: out of one field and into another, and two of its three rules have
+    #: never fired on real data, so an operator has to be able to see *which*
+    #: rule touched *which* of their titles.
+    split_titles: dict[str, str] = field(default_factory=dict)
     #: How many distinct ids the two source stores held between them, before
     #: any drop. Printed so "308 converted" can be checked against it by eye
     #: rather than taken on trust.
@@ -1024,6 +1244,16 @@ def format_report(report: ConversionReport) -> str:
         out.append(f"  dropped the legacy {table} table ({rows} row(s), untranslated)")
     for rel_type, rows in sorted(report.dropped_legacy_edges.items()):
         out.append(f"  dropped {rows} legacy {rel_type!r} edge(s), untranslated")
+    if report.split_titles:
+        out.append(
+            f"  split {len(report.split_titles)} multi-line legacy title(s); the "
+            f"first part is the title and the rest was prepended to the body:"
+        )
+        width = max(len(i) for i in report.split_titles)
+        out.extend(
+            f"    {seed_id.ljust(width)}  ({rule})"
+            for seed_id, rule in report.split_titles.items()
+        )
     if report.dropped_fixtures:
         out.append(
             f"  dropped {len(report.dropped_fixtures)} ruled test fixture(s): "
@@ -1476,8 +1706,9 @@ def convert(
             "is no pre-0.7 store to convert"
         )
 
-    db_sides, db_halves, legacy, db_vestigial = _load_db(db_path)
-    jsonl_sides, jsonl_halves, jsonl_vestigial = _load_jsonl(jsonl_path)
+    splits: dict[str, str] = {}
+    db_sides, db_halves, legacy, db_vestigial = _load_db(db_path, splits)
+    jsonl_sides, jsonl_halves, jsonl_vestigial = _load_jsonl(jsonl_path, splits)
 
     report = ConversionReport(
         seeds_dir=seeds_dir,
@@ -1486,6 +1717,7 @@ def convert(
         jsonl_present=jsonl_path.exists(),
         dropped_legacy_rows=legacy,
         dropped_legacy_edges=_tally_vestigial([*db_vestigial, *jsonl_vestigial]),
+        split_titles=dict(sorted(splits.items())),
     )
 
     drop_ids = _fixture_drops(db_sides, jsonl_sides, keep_fixtures, report)
