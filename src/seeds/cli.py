@@ -1785,7 +1785,8 @@ def doctor(ctx: Context) -> None:
     is_flag=True,
     help=(
         "Also compare every field with its value at the previous commit and "
-        "fail on one field rewritten across a large fraction of the corpus."
+        "fail on one field rewritten across a large fraction of the corpus, or "
+        "on any seed body that moved while its updated_at did not."
     ),
 )
 def check_cmd(smells: bool, against_git: bool) -> None:
@@ -1804,7 +1805,10 @@ def check_cmd(smells: bool, against_git: bool) -> None:
 
     --against-git is the tier that catches that particular sweep, and it gates
     too: a commit rewriting most of the corpus in one field has no cheap human
-    review, so it needs a decision rather than a glance.
+    review, so it needs a decision rather than a glance. It also catches the
+    single seed whose body moved while its updated_at did not -- the signature
+    of a formatter or linter reaching into the store, since every edit through
+    seeds bumps the stamp.
 
     --smells is the tier that does not gate. Nothing it prints is an error, and
     nothing it prints reaches the exit code -- it reports the things worth
@@ -1847,7 +1851,9 @@ def check_cmd(smells: bool, against_git: bool) -> None:
         )
         if comparison.findings:
             click.echo(format_findings(comparison.findings), nl=False)
-            click.echo(f"seeds check: {len(comparison.findings)} mass rewrite(s).")
+            click.echo(
+                f"seeds check: {len(comparison.findings)} finding(s) against git."
+            )
             failed = True
 
     if smells:

@@ -40,6 +40,7 @@ from seeds.check import (
 )
 from seeds.models import SeedStatus
 from seeds.seedfile import SeedRecord, read_seed_file, write_seed
+from seeds.store import Store
 from tests.githelpers import git, git_init
 
 NOW = datetime(2026, 8, 31, 12, 0, 0, tzinfo=UTC)
@@ -833,7 +834,7 @@ class TestAgainstGitCli:
         result = cli_runner.invoke(main, ["check", "--against-git"])
         assert result.exit_code == 1, result.output
         assert "mass-field-rewrite" in result.output
-        assert "1 mass rewrite(s)" in result.output
+        assert "1 finding(s) against git" in result.output
 
     def test_an_ordinary_edit_exits_zero_and_says_what_it_compared(
         self, tmp_path, cli_runner, monkeypatch
@@ -881,3 +882,263 @@ class TestAgainstGitCli:
         assert "no violations" in result.output
         assert "smell" not in result.output
         assert "against-git" not in result.output
+
+
+# --- A body rewritten in place -----------------------------------------------
+
+# The ruff shape, at the size it actually happened: a Python code block inside
+# a seed body, reformatted. Frontmatter untouched, layout still canonical --
+# only the prose moved, which is precisely what `non-canonical-bytes` cannot
+# see (it compares a file against a render of what the file NOW says).
+CODE_BLOCK = (
+    "The comparison the checker makes:\n"
+    "\n"
+    "```python\n"
+    "result = compare( before,after )\n"
+    "```\n"
+)
+CODE_BLOCK_REFORMATTED = (
+    "The comparison the checker makes:\n"
+    "\n"
+    "```python\n"
+    "result = compare(before, after)\n"
+    "```\n"
+)
+
+
+def rewrite_body(seeds_dir: Path, seed_id: str, body: str) -> None:
+    """Replace one seed's body, leaving every stamp exactly where it was.
+
+    What an outside formatter does: the file is rewritten in canonical bytes
+    and ``updated_at`` never moves, because nothing went through the CLI.
+    """
+    record = read_seed_file(seeds_dir / "seeds" / f"{seed_id}.md")
+    record.body = body
+    write_seed(seeds_dir, record)
+
+
+def edit_body(seeds_dir: Path, seed_id: str, body: str) -> None:
+    """What ``seeds update`` does: the body moves and the stamp moves with it."""
+    record = read_seed_file(seeds_dir / "seeds" / f"{seed_id}.md")
+    record.body = body
+    record.updated_at = NOW
+    write_seed(seeds_dir, record)
+
+
+class TestTheRuffShape:
+    """The case seeds-4co.16 measured as invisible, and this rule exists for."""
+
+    def test_a_reformatted_code_block_is_flagged(self, tmp_path):
+        seeds_dir = corpus(tmp_path, 20, body=CODE_BLOCK)
+        rewrite_body(seeds_dir, "seeds-0000", CODE_BLOCK_REFORMATTED)
+
+        findings = check_against_git(seeds_dir).findings
+        assert codes(findings) == ["body-rewritten-in-place"]
+        assert findings[0].seed_id == "seeds-0000"
+
+    def test_that_same_rewrite_is_invisible_to_the_canonical_bytes_smell(
+        self, tmp_path
+    ):
+        """The blind spot, asserted rather than assumed: the file is still
+        canonical, so the smells tier has nothing to say about it."""
+        seeds_dir = corpus(tmp_path, 20, body=CODE_BLOCK)
+        rewrite_body(seeds_dir, "seeds-0000", CODE_BLOCK_REFORMATTED)
+
+        assert "non-canonical-bytes" not in codes(check_smells(seeds_dir))
+        assert check_violations(seeds_dir, now=NOW) == []
+
+    def test_one_seed_is_enough_there_is_no_threshold(self, tmp_path):
+        """1 of 306 -- 0.3%, nowhere near the mass rule's 20%. One file
+        quietly reformatted is the whole incident."""
+        seeds_dir = corpus(tmp_path, 306, body=CODE_BLOCK)
+        rewrite_body(seeds_dir, "seeds-0100", CODE_BLOCK_REFORMATTED)
+
+        findings = check_against_git(seeds_dir).findings
+        assert codes(findings) == ["body-rewritten-in-place"]
+
+    def test_it_still_fires_after_the_rewrite_has_been_committed(self, tmp_path):
+        """seeds-wurl survived three days and three commits; a tool that only
+        ever read uncommitted work would have had nothing to say."""
+        seeds_dir = corpus(tmp_path, 20, body=CODE_BLOCK)
+        rewrite_body(seeds_dir, "seeds-0000", CODE_BLOCK_REFORMATTED)
+        git(tmp_path, "add", "-A")
+        git(tmp_path, "commit", "-q", "-m", "the formatter's commit")
+
+        comparison = check_against_git(seeds_dir)
+        assert (comparison.before, comparison.after) == ("HEAD~1", "HEAD")
+        assert codes(comparison.findings) == ["body-rewritten-in-place"]
+
+    def test_the_message_names_the_frozen_stamp_and_the_first_line(self, tmp_path):
+        seeds_dir = corpus(tmp_path, 20, body=CODE_BLOCK)
+        rewrite_body(seeds_dir, "seeds-0000", CODE_BLOCK_REFORMATTED)
+
+        finding = check_against_git(seeds_dir).findings[0]
+        assert UPDATED.isoformat() in finding.message
+        # Line 4 of the body, hand-counted: text, blank, fence, the code.
+        assert "first change at line 4" in finding.message
+        assert "compare( before,after )" in finding.message
+
+    def test_the_finding_points_at_the_seed_file_not_the_directory(self, tmp_path):
+        seeds_dir = corpus(tmp_path, 20, body=CODE_BLOCK)
+        rewrite_body(seeds_dir, "seeds-0000", CODE_BLOCK_REFORMATTED)
+
+        finding = check_against_git(seeds_dir).findings[0]
+        assert finding.path == Path(".seeds/seeds/seeds-0000.md")
+
+    def test_the_remediation_names_the_exclusion_and_the_restore(self, tmp_path):
+        seeds_dir = corpus(tmp_path, 20, body=CODE_BLOCK)
+        rewrite_body(seeds_dir, "seeds-0000", CODE_BLOCK_REFORMATTED)
+
+        remediation = check_against_git(seeds_dir).findings[0].remediation
+        assert "seeds-dv6r" in remediation
+        assert "git checkout HEAD -- .seeds/seeds/seeds-0000.md" in remediation
+
+    def test_it_gates_the_commit(self, tmp_path, cli_runner, monkeypatch):
+        seeds_dir = corpus(tmp_path, 20, body=CODE_BLOCK)
+        rewrite_body(seeds_dir, "seeds-0000", CODE_BLOCK_REFORMATTED)
+        monkeypatch.chdir(tmp_path)
+        from seeds.cli import main
+
+        result = cli_runner.invoke(main, ["check", "--against-git"])
+        assert result.exit_code == 1, result.output
+        assert "body-rewritten-in-place" in result.output
+        assert "1 finding(s) against git" in result.output
+
+
+class TestBodyRewriteFalsePositives:
+    """The stamp is the whole discriminator, so test it from both sides."""
+
+    def test_an_edit_that_bumped_updated_at_is_not_flagged(self, tmp_path):
+        """Every edit through the CLI does this. If it were flagged the rule
+        would fire on ordinary work and be bypassed within a day."""
+        seeds_dir = corpus(tmp_path, 20, body=CODE_BLOCK)
+        edit_body(seeds_dir, "seeds-0000", "Rewritten deliberately, and stamped.\n")
+
+        assert check_against_git(seeds_dir).findings == []
+
+    def test_a_wholesale_body_replacement_through_the_cli_is_still_silent(
+        self, tmp_path
+    ):
+        seeds_dir = corpus(tmp_path, 20, body=CODE_BLOCK)
+        for n in range(20):
+            edit_body(seeds_dir, f"seeds-{n:04d}", f"A new body for {n}.\n")
+
+        assert (
+            ids_for(check_against_git(seeds_dir).findings, "body-rewritten-in-place")
+            == []
+        )
+
+    def test_a_newly_created_seed_is_not_a_rewrite(self, tmp_path):
+        seeds_dir = corpus(tmp_path, 20, body=CODE_BLOCK)
+        write_seed(seeds_dir, record("seeds-9999", body=CODE_BLOCK_REFORMATTED))
+
+        assert check_against_git(seeds_dir).findings == []
+
+    def test_a_deleted_seed_is_not_a_rewrite(self, tmp_path):
+        seeds_dir = corpus(tmp_path, 20, body=CODE_BLOCK)
+        (seeds_dir / "seeds" / "seeds-0000.md").unlink()
+
+        assert (
+            ids_for(check_against_git(seeds_dir).findings, "body-rewritten-in-place")
+            == []
+        )
+
+    def test_a_frozen_stamp_with_an_unchanged_body_is_the_ordinary_case(self, tmp_path):
+        seeds_dir = corpus(tmp_path, 40, body=CODE_BLOCK)
+        assert check_against_git(seeds_dir).findings == []
+
+    def test_a_title_rewritten_with_a_frozen_stamp_is_not_this_rule(self, tmp_path):
+        """This rule is scoped to the body. The wurl shape is the mass rule's."""
+        seeds_dir = corpus(tmp_path, 20, body=CODE_BLOCK)
+        rewrite_titles(seeds_dir, 1, "Something else entirely")
+
+        assert check_against_git(seeds_dir).findings == []
+
+
+def mixed_prefix_corpus(tmp_path: Path) -> Path:
+    """A committed store where only some ids carry the prefix a rename moves.
+
+    `rename-prefix` renames every ``seeds-*`` id but rewrites id references in
+    EVERY record's body, so the ``alt-*`` seeds survive the rename with their
+    ids and their stamps intact and their bodies changed -- which is exactly
+    this rule's signature, and exactly what the exemption is for.
+    """
+    git_init(tmp_path)
+    body = "Follows from seeds-0001, and contradicts seeds-0002.\n"
+    records = [record(f"seeds-{n:04d}", body=body) for n in range(6)]
+    records += [record(f"alt-{n:04d}", body=body) for n in range(6)]
+    seeds_dir = store(tmp_path, *records)
+    Store(seeds_dir).set_prefix("seeds")
+    git(tmp_path, "add", "-A")
+    git(tmp_path, "commit", "-q", "-m", "a store with two prefixes in it")
+    return seeds_dir
+
+
+class TestTheRenamePrefixExemption:
+    """RULED (@aguynamedryan, 2026-09-01): only flag a body difference an id
+    rewrite cannot explain.
+
+    ``rename_prefix`` writes ``updated_at`` verbatim on purpose -- bumping it
+    corpus-wide would destroy the ``updated_at == created_at`` "never edited"
+    test -- so a sanctioned rename wears this rule's signature and must not
+    trip it.
+    """
+
+    def test_a_corpus_wide_rename_flags_nothing(self, tmp_path):
+        seeds_dir = corpus(tmp_path, 20, body="Follows from seeds-0001.\n")
+        Store(seeds_dir).rename_prefix("sprout")
+
+        findings = check_against_git(seeds_dir).findings
+        assert ids_for(findings, "body-rewritten-in-place") == []
+
+    def test_a_seed_that_survives_the_rename_is_not_flagged_for_its_new_refs(
+        self, tmp_path
+    ):
+        """The case the ruling was actually about: an id that stays put while
+        its body's references are rewritten under it."""
+        seeds_dir = mixed_prefix_corpus(tmp_path)
+        Store(seeds_dir).rename_prefix("sprout")
+
+        survivor = read_seed_file(seeds_dir / "seeds" / "alt-0000.md")
+        # The precondition, asserted rather than assumed: this seed really did
+        # have its body rewritten with its stamp left alone.
+        assert "sprout-0001" in survivor.body
+        assert survivor.updated_at == UPDATED
+
+        findings = check_against_git(seeds_dir).findings
+        assert ids_for(findings, "body-rewritten-in-place") == []
+
+    def test_a_reflow_riding_along_with_a_rename_is_still_caught(self, tmp_path):
+        """The exemption covers what prefix substitution reproduces exactly,
+        and nothing else -- a formatter's reflow in the same commit is not it."""
+        seeds_dir = mixed_prefix_corpus(tmp_path)
+        Store(seeds_dir).rename_prefix("sprout")
+        rewrite_body(
+            seeds_dir, "alt-0003", "Follows from sprout-0001, and nothing else.\n"
+        )
+
+        findings = check_against_git(seeds_dir).findings
+        assert ids_for(findings, "body-rewritten-in-place") == ["alt-0003"]
+
+    def test_a_prefix_shaped_edit_with_no_rename_in_the_diff_is_flagged(self, tmp_path):
+        """The exemption is computed from the ids that actually moved. Text
+        that merely *looks* like a rename buys nothing."""
+        seeds_dir = corpus(tmp_path, 20, body="Follows from seeds-0001.\n")
+        rewrite_body(seeds_dir, "seeds-0000", "Follows from sprout-0001.\n")
+
+        findings = check_against_git(seeds_dir).findings
+        assert ids_for(findings, "body-rewritten-in-place") == ["seeds-0000"]
+
+    def test_a_big_commit_that_is_not_a_rename_earns_no_exemption(self, tmp_path):
+        """The hole to avoid: an exemption that fires on "looks like a big
+        commit". Here half the store is deleted and replaced under a second
+        prefix that does not map onto it, so nothing is explained."""
+        seeds_dir = corpus(tmp_path, 20, body="Follows from seeds-0001.\n")
+        for n in range(10):
+            (seeds_dir / "seeds" / f"seeds-{n + 10:04d}.md").unlink()
+        for n in range(10):
+            write_seed(seeds_dir, record(f"alt-{n:04d}", body="Unrelated.\n"))
+        rewrite_body(seeds_dir, "seeds-0000", "Follows from sprout-0001.\n")
+
+        findings = check_against_git(seeds_dir).findings
+        assert "seeds-0000" in ids_for(findings, "body-rewritten-in-place")
