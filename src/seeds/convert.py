@@ -48,8 +48,13 @@ from pathlib import Path
 from typing import Literal
 
 from seeds.check import Finding, check_violations
-from seeds.db import DB_FILE, Database
-from seeds.export import JSONL_FILE, db_extends_disk, first_difference
+from seeds.legacy import (
+    DB_FILE,
+    JSONL_FILE,
+    LegacyDatabase,
+    db_extends_disk,
+    first_difference,
+)
 from seeds.models import RelationType, Seed, SeedStatus
 from seeds.seedfile import (
     FILE_SUFFIX,
@@ -321,15 +326,15 @@ def _load_db(db_path: Path) -> tuple[dict[str, _Side], list[_Half], dict[str, in
 
     legacy = _legacy_table_counts(db_path)
 
-    db = Database(path=db_path)
+    db = LegacyDatabase(db_path)
     try:
         sides: dict[str, _Side] = {}
-        for seed in db.list_seeds(include_terminal=True):
+        for seed in db.list_seeds():
             sides[seed.id] = _Side(seed=_seed_to_utc(seed), origin="db")
         halves: list[_Half] = []
         seen: set[tuple[str, str, str]] = set()
         for seed_id in sides:
-            for rel in db.get_relationships(seed_id, direction="both"):
+            for rel in db.get_relationships(seed_id):
                 key = (rel.source_id, rel.target_id, rel.rel_type.value)
                 if key in seen:
                     continue
@@ -351,9 +356,9 @@ def _legacy_table_counts(db_path: Path) -> dict[str, int]:
     """Row counts for the tables the converter drops without translating.
 
     A second, read-only door to the same SQLite file, and deliberately so:
-    ``Database`` has no API for ``questions`` because the current schema does
-    not declare it. Counting the rows is the whole interaction — nothing here
-    reads a column, because nothing translates one.
+    :class:`~seeds.legacy.LegacyDatabase` has no API for ``questions``, because
+    nothing translates that table. Counting the rows is the whole interaction —
+    nothing here reads a column.
     """
     counts: dict[str, int] = {}
     conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True)
@@ -1467,7 +1472,7 @@ def _write_config(seeds_dir: Path, db_path: Path, known: frozenset[str]) -> str 
         return None
     prefix: str | None = None
     if db_path.exists():
-        db = Database(path=db_path)
+        db = LegacyDatabase(db_path)
         try:
             if db.has_prefix_configured():
                 prefix = db.get_prefix()
