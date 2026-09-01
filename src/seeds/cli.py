@@ -1358,7 +1358,11 @@ def questions(ctx: Context, seed_id: str | None) -> None:
 # --- Relationship commands ---
 
 
-RELATIONSHIP_TYPES = [t.value for t in RelationType]
+# The types a user may pick. Not every ``RelationType`` member: ``questioned-by``
+# is the storage-side inverse of ``questions`` (docs/storage-format.md §5.2),
+# laid down at the far end by the writer, so offering it here would only let
+# someone create a reversed edge with no forward counterpart.
+RELATIONSHIP_TYPES = [RelationType.RELATES_TO.value, RelationType.QUESTIONS.value]
 
 
 @main.command()
