@@ -91,6 +91,15 @@ Mechanically:
   body is empty ends after that blank line's newline.
 - Everything after that blank line, verbatim, is the body.
 
+**Canonicality is a `check` question, not a parse question.** The reader
+normalizes leading and trailing blank lines, so a file can be readable and
+still not be the bytes `render_seed_file` would emit. That gap is reported by
+`seeds check --smells` as `non-canonical-bytes`, and it is a **smell, never a
+violation**: 282 of this repo's 314 pre-conversion records differed from
+canonical form by a trailing newline alone, so gating on it would have failed
+on a healthy corpus. Post-conversion the standing count is zero, which is what
+makes a single line of it worth reading — see §9.1.
+
 ## 3. Frontmatter fields
 
 | key | YAML type | required |
@@ -200,7 +209,9 @@ writing it. The converter normalizes naive values once, on the way in.
 Free text recording *why* a seed reached its terminal state. Omitted when
 empty. Only meaningful alongside a terminal `status`, but carrying one on a
 non-terminal seed is a smell rather than a violation — it is usually a seed
-someone reopened.
+someone reopened, and then the resolution is the previous conclusion and is
+worth keeping. `seeds check --smells` reports it as
+`resolution-on-non-terminal`.
 
 ### `tags` (block sequence of strings, optional)
 
@@ -470,6 +481,27 @@ than of any seed — 312 copies of one value would only drift. And it is **not**
 derived from seed filenames, tempting though that is: a repo with no seeds yet has
 no prefix to read, so `seeds init` would have nothing to record and the first
 `seeds jot` would not know what to name its file.
+
+### 9.1 The store is data, not source
+
+Every repo-wide formatter, linter and spell-checker in a project sees the store
+as a few hundred markdown files. **Each one must be configured to exclude
+`.seeds/`**, and `seeds check --smells` asserts it: `tool-config-includes-store`
+names any tool it finds configured here — ruff, prettier, markdownlint, cspell,
+codespell, EditorConfig — with nothing excluding the store.
+
+Measured, not hypothetical. Within minutes of this repo's own conversion,
+`ruff format --check` went red on `.seeds/seeds/seeds-154.md`: ruff ≥0.16
+formats Python code blocks inside markdown, seed bodies quote code, and ruff's
+file count went 65 → 385 the moment the converted tree landed. With `--fix`
+instead of `--check` it would have rewritten somebody's deliberation silently.
+
+Two layers, deliberately. This one covers the tools that can be named; the
+`non-canonical-bytes` smell of §2 is the positive assertion that covers the
+tool nobody predicted, because a rewritten file no longer matches the render of
+itself. Neither gates: the fix to both lives in another tool's config file, and
+a check that fails a commit over a file it does not own is a check people learn
+to bypass.
 
 ## 10. Why the checker matters to this document
 
