@@ -127,6 +127,12 @@ repos:
       # If you add a step to ci.yml, add it here too — the contract this
       # section exists to uphold is "if pre-push passes, CI passes," and it is
       # only worth anything while it stays literally true.
+      #
+      # That contract is one-directional, so one hook here has no ci.yml
+      # counterpart on purpose: flake-deps-check. CI already catches that
+      # mismatch inside the nix job; the hook only makes it fail in
+      # milliseconds instead of two minutes, and an extra local check never
+      # weakens "pre-push passing implies CI passing".
       - id: mypy-pre-push
         name: mypy (strict)
         entry: uv run mypy src/
@@ -168,6 +174,33 @@ repos:
       - id: pytest-matrix-pre-push
         name: pytest (3.11, 3.12)
         entry: bash -c 'for v in 3.11 3.12; do echo "--- python $v ---"; uv run --python "$v" --no-sync pytest -q || exit 1; done'
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        always_run: true
+
+      # The cheap half of the nix job below, run first so it fails in
+      # milliseconds instead of two minutes. flake.nix hand-mirrors
+      # pyproject.toml's [project.dependencies]; nothing kept them in step, and
+      # on 2026-08-31 dropping flask from pyproject.toml left flake.nix naming
+      # it while ruff, mypy, the full pytest suite and `uv lock --check` all
+      # reported green. `nix flake check --print-build-logs` was the only
+      # detector, ~2min cold. See bead seeds-8ro.
+      #
+      # This does NOT replace the nix job: a name comparison cannot see a floor
+      # nixpkgs-unstable cannot satisfy, or any other build failure. It moves
+      # the dependency-drift half of that signal to the front.
+      #
+      # Deliberately ahead of nix-pre-push and NOT inside it: that hook skips
+      # cleanly when nix is absent (this repo is public), and a contributor
+      # without nix must still be told when they have desynced the two files.
+      #
+      # `python3`, not `uv run` — the script is pure stdlib (tomllib + re), so
+      # this stays independent of the uv re-lock ordering hazard documented on
+      # uv-lock-check above. Same reasoning as git-config-sanity.
+      - id: flake-deps-check
+        name: flake.nix mirrors [project.dependencies]
+        entry: python3 scripts/flake_deps_check.py
         language: system
         stages: [pre-push]
         pass_filenames: false
