@@ -128,6 +128,30 @@ class LegacyWriter:
             created_at=created_at,
         )
 
+    def create_raw_relationship(
+        self,
+        source_id: str,
+        target_id: str,
+        rel_type: str,
+        created_at: datetime,
+    ) -> None:
+        """Insert one edge with a ``rel_type`` string the enum cannot express.
+
+        The typed :meth:`create_relationship` takes a
+        :class:`~seeds.models.RelationType`, so it cannot write the retired
+        ``answers`` rows real pre-0.7 stores turn out to hold, nor any other
+        value from a schema that never constrained this column. Both are things
+        the converter has to face, so the helper has to be able to write them.
+
+        One row, no mirroring: the legacy write path only doubled ``relates-to``.
+        """
+        self.conn.execute(
+            "INSERT OR IGNORE INTO relationships "
+            "(source_id, target_id, rel_type, created_at) VALUES (?, ?, ?, ?)",
+            (source_id, target_id, rel_type, _stamp(created_at)),
+        )
+        self.conn.commit()
+
     def close(self) -> None:
         self.conn.close()
 

@@ -155,6 +155,19 @@ ALLOWLIST: dict[str, str] = {
         "names, and 'parent' additionally must agree with the parent derived "
         "from the id."
     ),
+    "vestigial-answers-dropped": (
+        "docs/storage-format.md §5.2 retired the 'answers' relation as "
+        "vestigial: 'seeds answer' stores an answer as the question-seed's own "
+        "content and never made an edge, so the only route to one was a "
+        "hand-run 'seeds link --type answers'. Ruled 2026-09-01 "
+        "(@aguynamedryan): the converter DROPS those rows and reports the "
+        "count, rather than inventing a direction for them. 5 rows survive "
+        "across the unconverted repos (code_set_catalog 3, code_collector 1, "
+        "habituate 1) out of 2,384 edges. Allowlisted only for a LOST edge "
+        "whose rel_type the converter named in its own dropped-edge report; a "
+        "lost edge of any other type, and any 'answers' edge the report did "
+        "not account for, is a regression."
+    ),
     "jsonl-only-recovered": (
         "The conversion reads the UNION of SQLite and the tracked JSONL, so a "
         "record that existed only in the JSONL -- never imported into the DB -- "
@@ -423,6 +436,7 @@ def classify_export(
     *,
     dropped_fixtures: frozenset[str],
     recovered: frozenset[str],
+    dropped_edge_types: frozenset[str] = frozenset(),
 ) -> list[Finding]:
     """Field-by-field diff of the two corpora."""
     command = "export"
@@ -474,7 +488,11 @@ def classify_export(
             if key == "relationships":
                 findings.extend(
                     _classify_edges(
-                        ident, old.get(key) or [], new.get(key) or [], new_records
+                        ident,
+                        old.get(key) or [],
+                        new.get(key) or [],
+                        new_records,
+                        dropped_edge_types,
                     )
                 )
                 continue
@@ -517,16 +535,24 @@ def _classify_edges(
     old_edges: Iterable[Mapping[str, object]],
     new_edges: Iterable[Mapping[str, object]],
     new_records: Mapping[str, dict],
+    dropped_edge_types: frozenset[str],
 ) -> list[Finding]:
-    """An added edge is allowlisted only as a materialized 'questioned-by' half."""
+    """An added edge is allowlisted only as a materialized 'questioned-by' half.
+
+    A LOST edge is allowlisted only when the converter itself reported dropping
+    edges of that type -- so the ruled 'answers' drop reads as a declared
+    difference, and a lost edge the converter never mentioned stays a
+    regression.
+    """
     command = "export"
     findings: list[Finding] = []
     old_set = {_edge_key(e) for e in old_edges}
     new_set = {_edge_key(e) for e in new_edges}
 
     for target, rel_type in sorted(old_set - new_set, key=repr):
+        rule = "vestigial-answers-dropped" if rel_type in dropped_edge_types else None
         findings.append(
-            Finding(command, f"{ident}: edge {rel_type} -> {target} was lost", None)
+            Finding(command, f"{ident}: edge {rel_type} -> {target} was lost", rule)
         )
     for target, rel_type in sorted(new_set - old_set, key=repr):
         if rel_type == "questioned-by" and _has_edge(
@@ -764,6 +790,8 @@ class RepoResult:
     new_records: dict[str, dict] = field(default_factory=dict)
     source_jsonl_records: dict[str, dict] = field(default_factory=dict)
     dropped_fixtures: frozenset[str] = frozenset()
+    #: rel_type values the converter reported dropping as vestigial (§5.2).
+    dropped_edge_types: frozenset[str] = frozenset()
 
     @property
     def findings(self) -> list[Finding]:
@@ -826,10 +854,16 @@ def run_repo(
             f"be observed at all: {type(exc).__name__}: {exc}"
         ) from exc
     result.dropped_fixtures = frozenset(report.dropped_fixtures)
+    result.dropped_edge_types = frozenset(report.dropped_legacy_edges)
+    vestigial = ", ".join(
+        f"{count} vestigial {rel_type!r} edge(s) dropped"
+        for rel_type, count in sorted(report.dropped_legacy_edges.items())
+    )
     result.conversion = (
         f"{report.source_ids} source id(s) -> {report.total} converted, "
         f"{len(report.dropped_fixtures)} fixture(s) dropped, "
-        f"{len(report.forks)} fork(s), "
+        + (f"{vestigial}, " if vestigial else "")
+        + f"{len(report.forks)} fork(s), "
         f"check {'clean' if report.clean else 'NOT CLEAN'}"
     )
     if report.forks or report.check_findings:
@@ -881,6 +915,7 @@ def run_repo(
         result.new_records,
         dropped_fixtures=result.dropped_fixtures,
         recovered=recovered,
+        dropped_edge_types=result.dropped_edge_types,
     )
     result.comparisons.append(
         Comparison("export", vacuous=False, findings=export_findings)

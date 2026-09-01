@@ -66,7 +66,9 @@ from seeds.gitstage import plan_tracked_deletion, stage_tracked_deletion
 from seeds.legacy import (
     DB_FILE,
     JSONL_FILE,
+    VESTIGIAL_REL_TYPES,
     LegacyDatabase,
+    LegacyRelationTypeError,
     db_extends_disk,
     first_difference,
 )
@@ -128,6 +130,17 @@ FIXTURE_IDS = frozenset(
 #: row count is reported so a repo where that is *not* true is visible rather
 #: than silently emptied.
 LEGACY_TABLES = ("questions",)
+
+#: The closed-set rule, in the one wording both source stores report it with.
+#: Shared rather than written twice because the asymmetry it fixes was exactly
+#: that: the JSONL path explained itself and the SQLite path raised a bare
+#: ``ValueError``, so *which store held the bad row* decided whether the
+#: operator got a diagnostic or a stack trace.
+_CLOSED_SET_RULE = (
+    "is outside the closed set (relates-to, questions, questioned-by). "
+    "A directional type with no named inverse cannot be stored in this "
+    "format at all (§5.2)"
+)
 
 
 # --- The normalization allowlist ---------------------------------------------
@@ -300,6 +313,14 @@ class _Half:
     created_at: datetime
 
 
+#: One dropped vestigial edge, as ``(source_id, target_id, rel_type)``. Both
+#: legacy stores usually hold the same edge — the SQLite and the JSONL export
+#: of it — so the drops are unioned on this key and tallied once. The report
+#: says how many *edges* were dropped, not how many rows across how many files
+#: mentioned them.
+_VestigialKey = tuple[str, str, str]
+
+
 @dataclass
 class _Side:
     """One store's view of one seed: the scalars, the tags, and the body."""
@@ -329,27 +350,42 @@ def _seed_to_utc(seed: Seed) -> Seed:
     return seed
 
 
-def _load_db(db_path: Path) -> tuple[dict[str, _Side], list[_Half], dict[str, int]]:
-    """Read every seed, every relationship half, and the legacy table counts.
+def _load_db(
+    db_path: Path,
+) -> tuple[dict[str, _Side], list[_Half], dict[str, int], list[_VestigialKey]]:
+    """Read every seed, every relationship half, the table counts and the drops.
 
-    Returns ``({}, [], {})`` when there is no database at all — a repo that has
-    only ever had the JSONL (a fresh clone; ``.seeds/seeds.db`` is gitignored)
-    converts from the file alone.
+    The fourth value names the vestigial edges the reader skipped — see
+    :data:`~seeds.legacy.VESTIGIAL_REL_TYPES`. Reported for the same reason the
+    legacy ``questions`` table's row count is: a drop the operator is told
+    about is a decision, and a drop nobody mentions is data loss.
+
+    Returns ``({}, [], {}, [])`` when there is no database at all — a repo that
+    has only ever had the JSONL (a fresh clone; ``.seeds/seeds.db`` is
+    gitignored) converts from the file alone.
     """
     if not db_path.exists():
-        return {}, [], {}
+        return {}, [], {}, []
 
     legacy = _legacy_table_counts(db_path)
 
     db = LegacyDatabase(db_path)
     try:
+        vestigial = db.vestigial_relationship_keys()
         sides: dict[str, _Side] = {}
         for seed in db.list_seeds():
             sides[seed.id] = _Side(seed=_seed_to_utc(seed), origin="db")
         halves: list[_Half] = []
         seen: set[tuple[str, str, str]] = set()
         for seed_id in sides:
-            for rel in db.get_relationships(seed_id):
+            try:
+                rels = db.get_relationships(seed_id)
+            except LegacyRelationTypeError as exc:
+                raise ConversionError(
+                    f"{exc.path}: edge {exc.source_id} -> {exc.target_id}: "
+                    f"rel_type {exc.rel_type!r} " + _CLOSED_SET_RULE
+                ) from exc
+            for rel in rels:
                 key = (rel.source_id, rel.target_id, rel.rel_type.value)
                 if key in seen:
                     continue
@@ -362,9 +398,25 @@ def _load_db(db_path: Path) -> tuple[dict[str, _Side], list[_Half], dict[str, in
                         created_at=_to_utc(rel.created_at),
                     )
                 )
-        return sides, halves, legacy
+        return sides, halves, legacy, vestigial
     finally:
         db.close()
+
+
+def _tally_vestigial(keys: Iterable[_VestigialKey]) -> dict[str, int]:
+    """How many distinct vestigial edges were dropped, by ``rel_type``.
+
+    Deduplicated across the two source stores: the JSONL is an export of the
+    SQLite, so one dropped edge is normally two rows, and reporting "6" for
+    three edges would read as data the converter never had.
+
+    Absent types are absent from the mapping, so an empty dict means nothing
+    was dropped and the report says nothing.
+    """
+    counts: dict[str, int] = {}
+    for _, _, rel_type in sorted(set(keys)):
+        counts[rel_type] = counts.get(rel_type, 0) + 1
+    return counts
 
 
 def _legacy_table_counts(db_path: Path) -> dict[str, int]:
@@ -394,7 +446,9 @@ def _legacy_table_counts(db_path: Path) -> dict[str, int]:
     return counts
 
 
-def _load_jsonl(jsonl_path: Path) -> tuple[dict[str, _Side], list[_Half]]:
+def _load_jsonl(
+    jsonl_path: Path,
+) -> tuple[dict[str, _Side], list[_Half], list[_VestigialKey]]:
     """Read every record on disk, strictly.
 
     Strict because this is a migration: a line the converter cannot read is a
@@ -403,10 +457,11 @@ def _load_jsonl(jsonl_path: Path) -> tuple[dict[str, _Side], list[_Half]]:
     keeps working — there is no later run that picks it up.
     """
     if not jsonl_path.exists():
-        return {}, []
+        return {}, [], []
 
     sides: dict[str, _Side] = {}
     halves: list[_Half] = []
+    vestigial: list[_VestigialKey] = []
     raw_by_id: dict[str, str] = {}
     with open(jsonl_path, encoding="utf-8") as stream:
         for lineno, raw in enumerate(stream, start=1):
@@ -452,8 +507,10 @@ def _load_jsonl(jsonl_path: Path) -> tuple[dict[str, _Side], list[_Half]]:
             raw_by_id[seed_id] = raw.strip()
             seed = _seed_from_record(seed_id, data)
             sides[seed_id] = _Side(seed=seed, origin="jsonl")
-            halves.extend(_halves_from_record(seed, data, jsonl_path, lineno))
-    return sides, halves
+            halves.extend(
+                _halves_from_record(seed, data, jsonl_path, lineno, vestigial)
+            )
+    return sides, halves, vestigial
 
 
 def _seed_from_record(seed_id: str, data: dict[str, object]) -> Seed:
@@ -519,9 +576,19 @@ def _seed_from_record(seed_id: str, data: dict[str, object]) -> Seed:
 
 
 def _halves_from_record(
-    seed: Seed, data: dict[str, object], path: Path, lineno: int
+    seed: Seed,
+    data: dict[str, object],
+    path: Path,
+    lineno: int,
+    vestigial: list[_VestigialKey],
 ) -> list[_Half]:
-    """The outbound relationship halves one v2 record declares."""
+    """The outbound relationship halves one v2 record declares.
+
+    Vestigial halves are appended to ``vestigial`` and left out of the result.
+    The legacy JSONL is an export *of* the legacy SQLite, so it carries the same
+    retired ``answers`` rows; dropping them at only one of the two readers would
+    leave the same repos unconvertible for the same reason.
+    """
     seed_id = seed.id
     rels = data.get("relationships", [])
     if not isinstance(rels, list):
@@ -541,14 +608,15 @@ def _halves_from_record(
                 f"{path}: line {lineno} ({seed_id}): a relationship is missing "
                 "'target_id' or 'rel_type'"
             )
+        if rel_type_raw in VESTIGIAL_REL_TYPES:
+            vestigial.append((seed_id, target, rel_type_raw))
+            continue
         try:
             rel_type = RelationType(rel_type_raw)
         except ValueError as exc:
             raise ConversionError(
-                f"{path}: line {lineno} ({seed_id}): rel_type {rel_type_raw!r} is "
-                "outside the closed set (relates-to, questions, questioned-by). "
-                "A directional type with no named inverse cannot be stored in "
-                "this format at all (§5.2)"
+                f"{path}: line {lineno} ({seed_id}): rel_type {rel_type_raw!r} "
+                + _CLOSED_SET_RULE
             ) from exc
         stamp_raw = rel.get("created_at")
         if isinstance(stamp_raw, str) and stamp_raw:
@@ -892,6 +960,11 @@ class ConversionReport:
     dropped_fixtures: list[str] = field(default_factory=list)
     kept_fixtures: list[str] = field(default_factory=list)
     dropped_legacy_rows: dict[str, int] = field(default_factory=dict)
+    #: Vestigial relationship rows dropped rather than translated, by
+    #: ``rel_type``. Kept apart from :attr:`dropped_legacy_rows`, which counts
+    #: whole tables: these are individual edges inside a table the converter
+    #: otherwise reads in full.
+    dropped_legacy_edges: dict[str, int] = field(default_factory=dict)
     #: How many distinct ids the two source stores held between them, before
     #: any drop. Printed so "308 converted" can be checked against it by eye
     #: rather than taken on trust.
@@ -949,6 +1022,8 @@ def format_report(report: ConversionReport) -> str:
         out.append(f"  wrote prefix {report.prefix_written!r} to config.yaml")
     for table, rows in sorted(report.dropped_legacy_rows.items()):
         out.append(f"  dropped the legacy {table} table ({rows} row(s), untranslated)")
+    for rel_type, rows in sorted(report.dropped_legacy_edges.items()):
+        out.append(f"  dropped {rows} legacy {rel_type!r} edge(s), untranslated")
     if report.dropped_fixtures:
         out.append(
             f"  dropped {len(report.dropped_fixtures)} ruled test fixture(s): "
@@ -1401,8 +1476,8 @@ def convert(
             "is no pre-0.7 store to convert"
         )
 
-    db_sides, db_halves, legacy = _load_db(db_path)
-    jsonl_sides, jsonl_halves = _load_jsonl(jsonl_path)
+    db_sides, db_halves, legacy, db_vestigial = _load_db(db_path)
+    jsonl_sides, jsonl_halves, jsonl_vestigial = _load_jsonl(jsonl_path)
 
     report = ConversionReport(
         seeds_dir=seeds_dir,
@@ -1410,6 +1485,7 @@ def convert(
         db_present=db_path.exists(),
         jsonl_present=jsonl_path.exists(),
         dropped_legacy_rows=legacy,
+        dropped_legacy_edges=_tally_vestigial([*db_vestigial, *jsonl_vestigial]),
     )
 
     drop_ids = _fixture_drops(db_sides, jsonl_sides, keep_fixtures, report)

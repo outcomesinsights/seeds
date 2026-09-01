@@ -41,6 +41,7 @@ from seeds.convert import (
     format_report,
     verify,
 )
+from seeds.legacy import LegacyDatabase, LegacyRelationTypeError
 from seeds.models import RelationType, Seed, SeedStatus
 from seeds.seedfile import read_seed_file, seed_files_dir
 from tests.githelpers import git, git_init
@@ -577,6 +578,208 @@ class TestDrops:
         assert convert(seeds_dir).dropped_legacy_rows == {}
 
 
+class TestVestigialAnswersEdges:
+    """The retired ``answers`` rows three real repos still hold.
+
+    ``RelationType.ANSWERS`` was removed as a fossil, which was right — but
+    pre-0.7 SQLite stores kept the rows, and the reader built the enum member
+    eagerly, so ``seeds convert`` died with a bare ``ValueError`` on three of
+    the thirteen unconverted repos. Ruled 2026-09-01: drop them and report the
+    count, exactly as the legacy ``questions`` table is handled.
+
+    Both readers drop them, because the legacy JSONL is an export *of* the
+    legacy SQLite and carries the same rows — fixing only the SQLite path left
+    the same three repos unconvertible for the same reason, one message later.
+    """
+
+    def _store_with_answers(self, seeds_dir: Path, count: int = 1) -> None:
+        writer = build_db(
+            seeds_dir,
+            [seed("seeds-a1"), seed("seeds-b2"), seed("seeds-c3")],
+        )
+        writer.create_relationship(
+            "seeds-a1", "seeds-b2", RelationType.RELATES_TO, _stamp(1)
+        )
+        pairs = [("seeds-b2", "seeds-a1"), ("seeds-c3", "seeds-a1"), ("a", "b")]
+        for source, target in pairs[:count]:
+            writer.create_raw_relationship(source, target, "answers", _stamp(2))
+        writer.close()
+
+    def test_conversion_completes_and_reports_the_dropped_count(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        self._store_with_answers(seeds_dir, count=3)
+
+        report = convert(seeds_dir)
+
+        assert report.dropped_legacy_edges == {"answers": 3}
+        assert report.total == 3
+        assert "dropped 3 legacy 'answers' edge(s), untranslated" in format_report(
+            report
+        )
+
+    def test_the_dropped_edges_are_absent_from_the_tree(self, temp_dir):
+        """The one `relates-to` survives at both ends; no `answers` reaches disk."""
+        seeds_dir = temp_dir / ".seeds"
+        self._store_with_answers(seeds_dir, count=2)
+
+        convert(seeds_dir)
+
+        out = seed_files_dir(seeds_dir)
+        assert "answers" not in "".join(
+            p.read_text(encoding="utf-8") for p in out.glob("*.md")
+        )
+        a1 = read_seed_file(out / "seeds-a1.md")
+        b2 = read_seed_file(out / "seeds-b2.md")
+        assert [(e.target_id, e.rel_type.value) for e in a1.relationships] == [
+            ("seeds-b2", "relates-to")
+        ]
+        assert [(e.target_id, e.rel_type.value) for e in b2.relationships] == [
+            ("seeds-a1", "relates-to")
+        ]
+
+    def test_a_dropped_edge_naming_a_missing_seed_is_still_counted(self, temp_dir):
+        """Counted table-wide, not while reading.
+
+        `get_relationships` only visits rows naming a seed that exists, so an
+        `answers` row pointing at a deleted seed would go uncounted if the
+        count were accumulated there — and an under-reported drop is the whole
+        failure this count exists to prevent.
+        """
+        seeds_dir = temp_dir / ".seeds"
+        writer = build_db(seeds_dir, [seed("seeds-a1")])
+        writer.create_raw_relationship("seeds-gone", "seeds-x9", "answers", _stamp(1))
+        writer.close()
+
+        assert convert(seeds_dir).dropped_legacy_edges == {"answers": 1}
+
+    def test_a_store_with_no_answers_rows_reports_nothing(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        build_db(seeds_dir, [seed("seeds-a1")]).close()
+
+        report = convert(seeds_dir)
+
+        assert report.dropped_legacy_edges == {}
+        assert "untranslated" not in format_report(report)
+
+    def test_an_unrecognised_rel_type_names_itself_instead_of_crashing(self, temp_dir):
+        """The asymmetry this bead exists to close.
+
+        The JSONL path already explained an unreadable `rel_type`; the SQLite
+        path raised a bare `ValueError`, so *which store held the row* decided
+        whether the operator got a diagnostic or a stack trace. A future
+        unknown must not vanish into the `answers` bucket either.
+        """
+        seeds_dir = temp_dir / ".seeds"
+        writer = build_db(seeds_dir, [seed("seeds-a1"), seed("seeds-b2")])
+        writer.create_raw_relationship("seeds-a1", "seeds-b2", "supersedes", _stamp(1))
+        writer.close()
+
+        with pytest.raises(ConversionError) as excinfo:
+            convert(seeds_dir)
+
+        message = str(excinfo.value)
+        assert str(seeds_dir / "seeds.db") in message
+        assert "seeds-a1 -> seeds-b2" in message
+        assert "'supersedes'" in message
+        assert "closed set (relates-to, questions, questioned-by)" in message
+        assert "§5.2" in message
+
+    def test_the_jsonl_path_says_the_same_thing(self, temp_dir):
+        """Both stores report the rule in one wording, which is the fix."""
+        seeds_dir = temp_dir / ".seeds"
+        write_jsonl(
+            seeds_dir,
+            [
+                record(
+                    "seeds-a1",
+                    relationships=[{"target_id": "seeds-b2", "rel_type": "supersedes"}],
+                )
+            ],
+        )
+
+        with pytest.raises(ConversionError) as excinfo:
+            convert(seeds_dir)
+
+        assert "closed set (relates-to, questions, questioned-by)" in str(excinfo.value)
+        assert "§5.2" in str(excinfo.value)
+
+    def test_the_jsonl_alone_drops_and_counts_them_too(self, temp_dir):
+        """A fresh clone has no `seeds.db` — only the JSONL export of it."""
+        seeds_dir = temp_dir / ".seeds"
+        write_jsonl(
+            seeds_dir,
+            [
+                record(
+                    "seeds-a1",
+                    relationships=[
+                        {"target_id": "seeds-b2", "rel_type": "answers"},
+                        {"target_id": "seeds-b2", "rel_type": "relates-to"},
+                    ],
+                ),
+                record("seeds-b2"),
+            ],
+        )
+
+        report = convert(seeds_dir)
+
+        assert report.dropped_legacy_edges == {"answers": 1}
+        assert report.total == 2
+        out = seed_files_dir(seeds_dir)
+        assert [
+            (e.target_id, e.rel_type.value)
+            for e in read_seed_file(out / "seeds-a1.md").relationships
+        ] == [("seeds-b2", "relates-to")]
+
+    def test_one_edge_in_both_stores_is_counted_once(self, temp_dir):
+        """The JSONL is an export of the SQLite, so one edge is normally two
+        rows. Reporting "2" for one dropped edge would read as data the
+        converter never had."""
+        seeds_dir = temp_dir / ".seeds"
+        self._store_with_answers(seeds_dir, count=1)
+        write_jsonl(
+            seeds_dir,
+            [
+                record("seeds-a1"),
+                record(
+                    "seeds-b2",
+                    relationships=[{"target_id": "seeds-a1", "rel_type": "answers"}],
+                ),
+                record("seeds-c3"),
+            ],
+        )
+
+        assert convert(seeds_dir).dropped_legacy_edges == {"answers": 1}
+
+    def test_the_reader_skips_answers_and_raises_on_anything_else(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        writer = build_db(seeds_dir, [seed("seeds-a1"), seed("seeds-b2")])
+        writer.create_raw_relationship("seeds-a1", "seeds-b2", "answers", _stamp(1))
+        writer.close()
+
+        db = LegacyDatabase(seeds_dir / "seeds.db")
+        try:
+            assert db.get_relationships("seeds-a1") == []
+            assert db.vestigial_relationship_keys() == [
+                ("seeds-a1", "seeds-b2", "answers")
+            ]
+        finally:
+            db.close()
+
+        writer = LegacyWriter(seeds_dir / "seeds.db")
+        writer.create_raw_relationship("seeds-a1", "seeds-b2", "nonsense", _stamp(1))
+        writer.close()
+
+        db = LegacyDatabase(seeds_dir / "seeds.db")
+        try:
+            with pytest.raises(LegacyRelationTypeError) as excinfo:
+                db.get_relationships("seeds-a1")
+        finally:
+            db.close()
+        assert excinfo.value.rel_type == "nonsense"
+        assert excinfo.value.source_id == "seeds-a1"
+        assert excinfo.value.target_id == "seeds-b2"
+
+
 # --- Non-destructive, and idempotent -----------------------------------------
 
 
@@ -666,8 +869,8 @@ class TestVerificationCatchesLies:
     def _unions(self, seeds_dir: Path):
         from seeds.convert import _load_db, _load_jsonl, _resolve_edges, union_records
 
-        db_sides, db_halves, _ = _load_db(seeds_dir / "seeds.db")
-        jsonl_sides, jsonl_halves = _load_jsonl(seeds_dir / "seeds.jsonl")
+        db_sides, db_halves, _, _ = _load_db(seeds_dir / "seeds.db")
+        jsonl_sides, jsonl_halves, _ = _load_jsonl(seeds_dir / "seeds.jsonl")
         known = frozenset(set(db_sides) | set(jsonl_sides))
         edges, _ = _resolve_edges([*db_halves, *jsonl_halves], known)
         unions, _ = union_records(db_sides, jsonl_sides, edges)
@@ -754,8 +957,8 @@ class TestCompletenessOutranksCheck:
     def _unions(self, seeds_dir: Path):
         from seeds.convert import _load_db, _load_jsonl, _resolve_edges, union_records
 
-        db_sides, db_halves, _ = _load_db(seeds_dir / "seeds.db")
-        jsonl_sides, jsonl_halves = _load_jsonl(seeds_dir / "seeds.jsonl")
+        db_sides, db_halves, _, _ = _load_db(seeds_dir / "seeds.db")
+        jsonl_sides, jsonl_halves, _ = _load_jsonl(seeds_dir / "seeds.jsonl")
         known = frozenset(set(db_sides) | set(jsonl_sides))
         edges, _ = _resolve_edges([*db_halves, *jsonl_halves], known)
         unions, _ = union_records(db_sides, jsonl_sides, edges)
@@ -823,7 +1026,7 @@ class TestCompletenessOutranksCheck:
 
         from seeds.convert import _load_jsonl
 
-        jsonl_sides, _ = _load_jsonl(seeds_dir / "seeds.jsonl")
+        jsonl_sides, _, _ = _load_jsonl(seeds_dir / "seeds.jsonl")
         unions, db_sides, _ = self._unions(seeds_dir)
         kept = [u for u in unions if u.record.id != "seeds-71"]
         for union in kept:
