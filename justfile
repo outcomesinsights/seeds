@@ -96,3 +96,45 @@ changelog-section VERSION RANGE="":
 # recipes. The hook calls `python3` directly.
 flake-deps:
     @uv run python scripts/flake_deps_check.py
+
+# Differential harness: prove the 0.7 storage change costs nothing behaviourally
+# (bead seeds-4co.17). Names one or more repo roots; each store is COPIED, never
+# converted in place, so this is safe to point at a repo the operator has not
+# converted yet.
+#
+# It builds a real seeds 0.6 from the v0.6.0 tag with `git archive` (a worktree
+# would write into the shared .git of a repo this is only allowed to read),
+# drives both versions over the same command set, and reports every difference
+# that is not on the declared allowlist. Run `just differential-allowlist` for
+# the entries and the argument behind each one.
+#
+# The cross-repo half runs the retired `cat .seeds/seeds.jsonl` recipe and the
+# documented `seeds export --json | duckdb` one over the same repo set and diffs
+# the two answers -- that is what proves the replacement is equivalent for the
+# one workflow that spans repos. Give it two or more repos for that to mean
+# anything.
+#
+# Exit 0 clean, 1 with unexplained differences, 2 when it refuses to guess.
+# Every run tees a timestamped log into claude_stuff/ and prints the path.
+#
+# Usage: just differential ~/projects/outins/vocabulary_formats ~/projects/outins/epc
+differential *REPOS:
+    @uv run python scripts/differential_harness.py {{REPOS}}
+
+# The allowlist and the written justification for each entry.
+differential-allowlist:
+    @uv run python scripts/differential_harness.py --show-allowlist
+
+# Self-test the harness: inject a deliberate behavioural difference into the
+# converted copy and REQUIRE it to be reported. Each of these exits 0 only if
+# the difference was caught, so a harness that has gone blind fails here rather
+# than reporting a clean bill of health on a broken conversion.
+#
+# This is the control for the failure mode the bead names: an allowlist written
+# broadly enough to swallow a real regression. Point it at a small repo.
+#
+# Usage: just differential-selftest ~/projects/outins/vocabulary_formats
+differential-selftest REPO:
+    @uv run python scripts/differential_harness.py {{REPO}} --inject drop-seed --no-cross-repo
+    @uv run python scripts/differential_harness.py {{REPO}} --inject mutate-title --no-cross-repo
+    @uv run python scripts/differential_harness.py {{REPO}} --inject truncate-body --no-cross-repo
