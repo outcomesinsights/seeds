@@ -1,10 +1,12 @@
 ---
 id: seeds-183
 title: "seeds: do we need a single-location / cross-project way to query all seeds?"
-status: captured
+status: resolved
 type: question
 created_at: 2026-06-23T20:43:33.749099+00:00
-updated_at: 2026-08-26T04:01:27.496541+00:00
+updated_at: 2026-09-01T13:37:44.550988+00:00
+resolved_at: 2026-09-01T13:37:44.550977+00:00
+resolution: "Answered (@aguynamedryan, 2026-09-01): NO single-location store is needed, and no new code. Measured from 14 months of transcripts: 35 genuine cross-repo seeds queries across 18 sessions — under one a day, and 9 of those were us building seeds rather than using it. Of the ~26 real ones, roughly 88% came from habitat sessions (codesets 13, vocabulary 5) or transcript work in oimnibus (5), which confirms @aguynamedryan's own hunch that this is habitat/transcript-seeds behaviour rather than a general seeds need.\n\nWhat decided it was reading what those commands actually DO. Nearly all are full-text search — 'grep -ci adjudicat' across repos, 'grep -rlno mark-review-2026-08-2[0-9]', 'grep -oiE .{100}(immutab|invalidate and replace)' across habitat members, and 'which members have .seeds'. Structured querying was 2-3 calls out of 26. So the demand was never for a queryable single store; it was for grep across many repos.\n\nAnd the 0.7 markdown tree serves that BETTER than the JSONL did: 'rg -l term ~/projects/outins/*/.seeds/seeds/' puts the seed id in the file path and gives real context lines, where the JSONL returned a 120-character slice of an escaped single line. Conversion is an upgrade for this workflow, not a break.\n\nResolution: document the rg recipe (in seeds prime and the habitat CLAUDE.md) and add nothing. 'seeds export --json' stays for the structured minority — it is a stdout pipe, so it costs no second store and no sync — but it is NOT load-bearing for cross-repo work, and its docstring currently over-claims that '13 repos of cross-project query depend on it'. That correction is filed.\n\nEfficacy: the seed did its job by staying open. Had it been closed by assumption in June, the answer would have been 'yes, build a store' — which is what the JSONL already was, and what this whole overhaul removed."
 tags:
   - seeds-feature
   - cross-project
