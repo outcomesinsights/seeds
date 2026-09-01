@@ -86,6 +86,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from types import MappingProxyType
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LEGACY_TAG = "v0.6.0"
@@ -121,7 +122,24 @@ ALLOWLIST: dict[str, str] = {
         "newline the SQLite column did not carry (282 of 314 records in this "
         "repo differed by nothing else). Allowlisted only when the two strings "
         "are equal after stripping trailing newlines AND the new one ends in "
-        "one -- a body that differs anywhere else is a regression."
+        "one -- a body that differs anywhere else is a regression. In 'show' "
+        "the same rule reads the other way round, because 0.7 rstrips the body "
+        "before printing it while 0.6 printed the column verbatim: allowlisted "
+        "there only when the two outputs' headers are identical line for line "
+        "and their body blocks are equal after stripping blank lines off both "
+        "ends."
+    ),
+    "body-leading-newline": (
+        "docs/storage-format.md §2 says a body carries no leading and no "
+        "trailing blank lines, so a pre-0.7 body that began with a newline "
+        "loses it on conversion -- 5 of code_collector's 289 records did, e.g. "
+        "'\\nInventoried the SAS truncated-operator idiom...' -> 'Inventoried "
+        "the SAS truncated-operator idiom...'. Verified character by character "
+        "as the only difference before it was ruled a normalization rather "
+        "than a loss. Allowlisted only when the two strings are equal after "
+        "stripping blank lines off BOTH ends AND 0.6 is the side that had the "
+        "leading ones; a body differing anywhere else, or one where 0.7 grew "
+        "them, is a regression. Never a blanket ignore on 'body differs'."
     ),
     "search-order": (
         "Ranked search is gone: 'seeds suggest' no longer exists and 'seeds "
@@ -144,6 +162,22 @@ ALLOWLIST: dict[str, str] = {
         "for the same query is not degradation. Allowlisted only for ids found "
         "by 0.7 and not 0.6 -- the reverse direction is handled by "
         "search-stemming and is not blanket-allowlisted."
+    ),
+    "legacy-title-split": (
+        "A pre-0.7 title was an unconstrained SQLite column, and a few hold a "
+        "whole multi-paragraph thought somebody pasted into the wrong field. "
+        "docs/storage-format.md §3 allows one non-empty line, so converting "
+        "cuts the title and prepends the remainder to the body -- ruled "
+        "2026-09-01, and it is what makes code_set_catalog (2 such titles in "
+        "435 seeds) convertible at all. The harness does NOT take the "
+        "converter's word for where the cut fell: it re-derives it, and "
+        "allowlists a difference only when 0.7's title is a one-line prefix of "
+        "0.6's multi-line one AND the two fields hold the same words in the "
+        "same order across the pair, with the removed title text at the head "
+        "of 0.7's body. A title cut somewhere else, a word lost, or a word "
+        "reordered fails that and stays a regression. In the listing commands "
+        "the same rule covers the trailing title lines 0.6 printed under the "
+        "seed's line, and only those exact lines."
     ),
     "export-field-set": (
         "The exported record shape changed by exactly three fields, each with "
@@ -260,6 +294,93 @@ def trailing_newline_only(old: str, new: str) -> bool:
     return old.rstrip("\n") == new.rstrip("\n") and new.endswith("\n")
 
 
+def leading_newline_only(old: str, new: str) -> bool:
+    """True when 0.6 carried leading blank lines and nothing else differs.
+
+    Narrow on purpose (``body-leading-newline``): the two must be the same text
+    once blank lines are stripped from both ends, and 0.6 must be the side that
+    had the leading ones. A body that differs by a single character anywhere,
+    or one where 0.7 *grew* leading blank lines, comes back False and is
+    reported as a regression.
+    """
+    if old == new:
+        return False
+    if old.lstrip("\n") == old:
+        return False
+    if new.lstrip("\n") != new:
+        return False
+    return old.strip("\n") == new.strip("\n")
+
+
+@dataclass(frozen=True)
+class TitleSplit:
+    """One 0.6 title that 0.7 cut in two, as the harness re-derived it."""
+
+    seed_id: str
+    old_title: str
+    new_title: str
+    moved: str
+
+
+def title_split_only(
+    old_title: str, old_body: str, new_title: str, new_body: str
+) -> bool:
+    """True when 0.7 cut a multi-line 0.6 title and lost nothing doing it.
+
+    Re-derived rather than taken from the converter, which is the whole point:
+    a harness that asks ``seeds convert`` where it split would agree with a
+    converter that split in the wrong place. The assertions are the ruling
+    restated -- 0.7's title is a one-line *prefix* of 0.6's, and 0.7's body is
+    the rest of that title followed by 0.6's body, word for word and in order.
+    Words rather than lines, because the cut may fall mid-line; a lost,
+    inserted or reordered word fails.
+    """
+    if "\n" not in old_title.strip("\n"):
+        return False
+    if not new_title.strip() or "\n" in new_title.strip("\n"):
+        return False
+    if not old_title.strip().startswith(new_title.strip()):
+        return False
+    kept = new_title.split()
+    old_words = old_title.split()
+    if old_words[: len(kept)] != kept:
+        return False
+    moved = old_words[len(kept) :]
+    if not moved:
+        return False
+    new_words = new_body.split()
+    return new_words[: len(moved)] == moved and new_words[len(moved) :] == (
+        old_body.split()
+    )
+
+
+def title_splits(
+    old_records: Mapping[str, dict], new_records: Mapping[str, dict]
+) -> dict[str, TitleSplit]:
+    """Every id whose 0.6 title 0.7 cut, keyed by id. Only verified splits."""
+    out: dict[str, TitleSplit] = {}
+    for ident, old in old_records.items():
+        new = new_records.get(ident)
+        if new is None:
+            continue
+        old_title = str(old.get("title") or "")
+        new_title = str(new.get("title") or "")
+        if not title_split_only(
+            old_title,
+            str(old.get("content") or ""),
+            new_title,
+            str(new.get("content") or ""),
+        ):
+            continue
+        out[ident] = TitleSplit(
+            seed_id=ident,
+            old_title=old_title,
+            new_title=new_title,
+            moved=old_title.strip()[len(new_title.strip()) :],
+        )
+    return out
+
+
 def derived_parent(seed_id: str) -> str | None:
     """The parent a hierarchical id implies: ``a-b.1.2`` -> ``a-b.1``."""
     head, sep, _ = seed_id.rpartition(".")
@@ -289,6 +410,7 @@ def classify_lines(
     *,
     dropped_fixtures: frozenset[str],
     recovered: frozenset[str],
+    splits: Mapping[str, TitleSplit] = MappingProxyType({}),
 ) -> list[Finding]:
     """Diff two line-oriented command outputs, keyed on the seed id per line.
 
@@ -357,20 +479,41 @@ def classify_lines(
         )
 
     if old_plain != new_plain:
-        findings.append(
-            Finding(
-                command,
-                "non-seed output lines differ:\n"
-                + "\n".join(
-                    f"      0.6: {line}" for line in old_plain if line not in new_plain
-                )
-                + "\n"
-                + "\n".join(
-                    f"      0.7: {line}" for line in new_plain if line not in old_plain
-                ),
-                None,
-            )
+        extra_old = [line for line in old_plain if line not in new_plain]
+        extra_new = [line for line in new_plain if line not in old_plain]
+        moved = {
+            line.strip()
+            for split in splits.values()
+            for line in split.moved.splitlines()
+        }
+        # 0.6 printed a multi-line title as the seed's line plus its trailing
+        # lines, which have no id and land here. Allowlisted only when every
+        # 0.6-only line is one of those exact lines and 0.7 added none. At
+        # least one has to carry text: a difference that is only blank lines
+        # is not evidence of a title split and is not covered by this rule.
+        explained = any(line.strip() for line in extra_old) and all(
+            line.strip() in moved for line in extra_old
         )
+        if extra_old and not extra_new and explained:
+            findings.append(
+                Finding(
+                    command,
+                    f"{len(extra_old)} line(s) 0.6 printed under a seed are the "
+                    f"tail of a multi-line title, now in that seed's body",
+                    "legacy-title-split",
+                )
+            )
+        else:
+            findings.append(
+                Finding(
+                    command,
+                    "non-seed output lines differ:\n"
+                    + "\n".join(f"      0.6: {line}" for line in extra_old)
+                    + "\n"
+                    + "\n".join(f"      0.7: {line}" for line in extra_new),
+                    None,
+                )
+            )
     return findings
 
 
@@ -437,6 +580,7 @@ def classify_export(
     dropped_fixtures: frozenset[str],
     recovered: frozenset[str],
     dropped_edge_types: frozenset[str] = frozenset(),
+    splits: Mapping[str, TitleSplit] = MappingProxyType({}),
 ) -> list[Finding]:
     """Field-by-field diff of the two corpora."""
     command = "export"
@@ -485,6 +629,16 @@ def classify_export(
                 continue
             if old.get(key) == new.get(key):
                 continue
+            if key in ("title", "content") and ident in splits:
+                findings.append(
+                    Finding(
+                        command,
+                        f"{ident}: {key!r} differs because the multi-line 0.6 "
+                        f"title was cut and its tail moved into the body",
+                        "legacy-title-split",
+                    )
+                )
+                continue
             if key == "relationships":
                 findings.extend(
                     _classify_edges(
@@ -496,19 +650,25 @@ def classify_export(
                     )
                 )
                 continue
-            if (
-                isinstance(old.get(key), str)
-                and isinstance(new.get(key), str)
-                and trailing_newline_only(old[key], new[key])
-            ):
-                findings.append(
-                    Finding(
-                        command,
-                        f"{ident}: {key!r} gained a trailing newline",
-                        "body-trailing-newline",
+            if isinstance(old.get(key), str) and isinstance(new.get(key), str):
+                if trailing_newline_only(old[key], new[key]):
+                    findings.append(
+                        Finding(
+                            command,
+                            f"{ident}: {key!r} gained a trailing newline",
+                            "body-trailing-newline",
+                        )
                     )
-                )
-                continue
+                    continue
+                if leading_newline_only(old[key], new[key]):
+                    findings.append(
+                        Finding(
+                            command,
+                            f"{ident}: {key!r} lost its leading blank line(s)",
+                            "body-leading-newline",
+                        )
+                    )
+                    continue
             findings.append(
                 Finding(
                     command,
@@ -584,7 +744,83 @@ def _has_edge(record: Mapping[str, object] | None, target: str, rel_type: str) -
     )
 
 
-def classify_show(seed_id: str, old: str, new: str, new_full: str) -> list[Finding]:
+#: The line 'show' prints immediately before the body, in both versions.
+CONTENT_HEADING = "Content:"
+
+
+def split_show_body(text: str) -> tuple[str, str] | None:
+    """``show`` output as ``(header, body)``, cut at its ``Content:`` heading.
+
+    ``None`` when there is no heading, which is a seed with an empty body --
+    there is no body block to compare, so the caller must not pretend there is.
+    The FIRST such line is the heading: every header line 'show' emits is either
+    'id: title' or indented, so none of them can be this, while a body line
+    could be.
+    """
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        if line == CONTENT_HEADING:
+            return "\n".join(lines[: i + 1]), "\n".join(lines[i + 1 :])
+    return None
+
+
+def show_body_blank_lines(old: str, new: str) -> str | None:
+    """The allowlist rule for a 'show' pair differing only in body blank lines.
+
+    ``None`` when no rule applies, and it is deliberately hard to satisfy:
+    the two headers must be identical line for line, and the two body blocks
+    must be the same text once blank lines are stripped off BOTH ends. Only
+    then is the difference attributed -- to ``body-leading-newline`` when 0.6
+    is the side carrying leading blank lines, and to ``body-trailing-newline``
+    when the difference is confined to the trailing end (0.7 rstrips the body
+    before printing it; 0.6 printed the column verbatim).
+    """
+    old_parts = split_show_body(old)
+    new_parts = split_show_body(new)
+    if old_parts is None or new_parts is None:
+        return None
+    old_header, old_body = old_parts
+    new_header, new_body = new_parts
+    if old_header != new_header or old_body == new_body:
+        return None
+    if old_body.strip("\n") != new_body.strip("\n"):
+        return None
+    if old_body.lstrip("\n") != old_body and new_body.lstrip("\n") == new_body:
+        return "body-leading-newline"
+    if old_body.rstrip("\n") == new_body.rstrip("\n"):
+        return "body-trailing-newline"
+    return None
+
+
+def show_title_split(seed_id: str, split: TitleSplit, old: str, new: str) -> bool:
+    """True when the whole 'show' difference is the title cut, and nothing else.
+
+    Reconstructs 0.6's output from 0.7's rather than comparing loosely: put the
+    full multi-line title back on the header line and the header must match 0.6
+    exactly, then the two body blocks must satisfy :func:`title_split_only`.
+    Any other difference in the header or the body survives and is reported.
+    """
+    old_parts = split_show_body(old)
+    new_parts = split_show_body(new)
+    if old_parts is None or new_parts is None:
+        return False
+    restored = new_parts[0].replace(
+        f"{seed_id}: {split.new_title}", f"{seed_id}: {split.old_title}", 1
+    )
+    if restored != old_parts[0]:
+        return False
+    return title_split_only(
+        split.old_title, old_parts[1], split.new_title, new_parts[1]
+    )
+
+
+def classify_show(
+    seed_id: str,
+    old: str,
+    new: str,
+    new_full: str,
+    split: TitleSplit | None = None,
+) -> list[Finding]:
     """0.6 'show' against 0.7 'show', falling back to 0.7 'show --full'."""
     command = f"show {seed_id}"
     if old == new:
@@ -596,6 +832,24 @@ def classify_show(seed_id: str, old: str, new: str, new_full: str) -> list[Findi
                 "0.7 'show' re-renders superseded text; 'show --full' reproduces "
                 "the 0.6 output exactly",
                 "show-full-supersede",
+            )
+        ]
+    if split is not None and show_title_split(seed_id, split, old, new):
+        return [
+            Finding(
+                command,
+                "identical once the multi-line title is put back together: 0.7 "
+                "moved its tail into the body",
+                "legacy-title-split",
+            )
+        ]
+    rule = show_body_blank_lines(old, new)
+    if rule is not None:
+        return [
+            Finding(
+                command,
+                "identical apart from blank lines at the edges of the body block",
+                rule,
             )
         ]
     return [
@@ -909,6 +1163,7 @@ def run_repo(
         )
 
     recovered = frozenset(set(result.source_jsonl_records) - set(result.old_db_records))
+    splits = title_splits(result.old_db_records, result.new_records)
 
     export_findings = classify_export(
         result.old_db_records,
@@ -916,6 +1171,7 @@ def run_repo(
         dropped_fixtures=result.dropped_fixtures,
         recovered=recovered,
         dropped_edge_types=result.dropped_edge_types,
+        splits=splits,
     )
     result.comparisons.append(
         Comparison("export", vacuous=False, findings=export_findings)
@@ -960,6 +1216,7 @@ def run_repo(
                     n.stdout,
                     dropped_fixtures=result.dropped_fixtures,
                     recovered=recovered,
+                    splits=splits,
                 ),
             )
         )
@@ -982,6 +1239,7 @@ def run_repo(
             new_digest,
             dropped_fixtures=result.dropped_fixtures,
             recovered=recovered,
+            splits=splits,
         )
     )
     result.comparisons.append(
@@ -1003,7 +1261,13 @@ def run_repo(
         n_full = new("show", ident, "--full")
         show_nonempty = show_nonempty or bool(o_show.stdout.strip())
         show_findings.extend(
-            classify_show(ident, o_show.stdout, n_show.stdout, n_full.stdout)
+            classify_show(
+                ident,
+                o_show.stdout,
+                n_show.stdout,
+                n_full.stdout,
+                splits.get(ident),
+            )
         )
         if not n_full.stdout.strip():
             full_findings.append(
@@ -1025,6 +1289,7 @@ def run_repo(
                 n_tree.stdout,
                 dropped_fixtures=result.dropped_fixtures,
                 recovered=recovered,
+                splits=splits,
             )
         )
     result.comparisons.append(

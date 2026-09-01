@@ -90,6 +90,16 @@ Mechanically:
 - Exactly one blank line separates the closing `---` from the body. A file whose
   body is empty ends after that blank line's newline.
 - Everything after that blank line, verbatim, is the body.
+- **The body carries no leading and no trailing blank lines.** One blank line
+  separates the frontmatter from the body and the file ends in exactly one
+  newline, so a body of `"\n\ntext\n\n\n"` is stored as `"text\n"`. Both ends
+  are the same rule, and it is a *normalization*, not a loss: only blank lines
+  go, never text. Five of `code_collector`'s pre-0.7 bodies began with a
+  newline and converting them stripped it — verified character by character as
+  the only difference — and 282 of this repo's 314 lacked the trailing one.
+  Deliberation is words; a blank line above the first of them is an artifact of
+  how the text was pasted, and keeping it would mean two files with identical
+  content are not the same file.
 
 **Canonicality is a `check` question, not a parse question.** The reader
 normalizes leading and trailing blank lines, so a file can be readable and

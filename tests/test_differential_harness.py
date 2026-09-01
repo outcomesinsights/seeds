@@ -362,6 +362,222 @@ def test_show_losing_text_that_full_does_not_restore_is_a_regression():
     assert rules(dh.classify_show("p-a", "whole body", "trimmed", "trimmed")) == (None,)
 
 
+# --- Leading blank lines in a body --------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "expected"),
+    [
+        ("\nbody\n", "body\n", True),
+        ("\n\n\nbody", "body", True),
+        ("body", "body", False),  # identical is not a difference
+        ("body\n", "\nbody\n", False),  # 0.7 must not be the side that GAINED them
+        ("\nbody\n", "\nbody\n", False),  # both sides have them: nothing normalized
+        ("\nbody\n", "bodo\n", False),  # one character off is a regression
+        ("\nbody text\n", "bodytext\n", False),  # whitespace inside is not an edge
+        ("body\n\n", "body\n", False),  # trailing-only is the other rule
+    ],
+)
+def test_leading_newline_only(old, new, expected):
+    assert dh.leading_newline_only(old, new) is expected
+
+
+SHOW_HEAD = "p-a: Alpha\n  Status: captured\n  Type: idea\n\nContent:\n"
+
+
+def test_split_show_body_cuts_at_the_content_heading():
+    assert dh.split_show_body(SHOW_HEAD + "line one\nline two\n") == (
+        "p-a: Alpha\n  Status: captured\n  Type: idea\n\nContent:",
+        "line one\nline two\n",
+    )
+
+
+def test_split_show_body_is_none_when_there_is_no_body_block():
+    assert dh.split_show_body("p-a: Alpha\n  Status: captured\n") is None
+
+
+@pytest.mark.parametrize(
+    ("old_body", "new_body", "expected"),
+    [
+        ("\nbody\n", "body\n", "body-leading-newline"),
+        ("body\n\n", "body\n", "body-trailing-newline"),
+        ("\nbody\n\n", "body\n", "body-leading-newline"),
+        ("body\n", "body\n", None),  # identical
+        ("body one\n", "body two\n", None),  # different text
+        ("a\n\nb\n", "a\nb\n", None),  # a blank line INSIDE the body is content
+    ],
+)
+def test_show_body_blank_lines(old_body, new_body, expected):
+    assert (
+        dh.show_body_blank_lines(SHOW_HEAD + old_body, SHOW_HEAD + new_body) == expected
+    )
+
+
+def test_show_body_blank_lines_refuses_when_the_header_differs():
+    other = SHOW_HEAD.replace("captured", "resolved")
+    assert dh.show_body_blank_lines(SHOW_HEAD + "\nbody\n", other + "body\n") is None
+
+
+# --- The multi-line legacy title split ----------------------------------------
+
+OLD_TITLE = "The real question?\n\nElaboration one.\nElaboration two."
+NEW_TITLE = "The real question?"
+MOVED = "Elaboration one.\nElaboration two."
+
+
+def test_a_faithful_title_split_is_recognised():
+    assert dh.title_split_only(
+        OLD_TITLE, "Resolved.\n", NEW_TITLE, f"{MOVED}\n\nResolved.\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("old_title", "old_body", "new_title", "new_body"),
+    [
+        # 0.6's title was already one line: nothing was split.
+        ("One line", "b\n", "One line", "b\n"),
+        # 0.7's title is not a prefix of 0.6's -- the title was rewritten.
+        (OLD_TITLE, "Resolved.\n", "A different title", f"{MOVED}\n\nResolved.\n"),
+        # A word of the moved text went missing.
+        (OLD_TITLE, "Resolved.\n", NEW_TITLE, "Elaboration two.\n\nResolved.\n"),
+        # The original body went missing.
+        (OLD_TITLE, "Resolved.\n", NEW_TITLE, f"{MOVED}\n"),
+        # The moved text landed after the body instead of before it.
+        (OLD_TITLE, "Resolved.\n", NEW_TITLE, f"Resolved.\n\n{MOVED}\n"),
+        # A word was added that neither field held.
+        (OLD_TITLE, "Resolved.\n", NEW_TITLE, f"{MOVED}\n\nResolved. Extra.\n"),
+        # 0.7's title still spans lines, so nothing was fixed.
+        (OLD_TITLE, "Resolved.\n", "The real\nquestion?", f"{MOVED}\n\nResolved.\n"),
+    ],
+)
+def test_anything_other_than_a_faithful_split_is_refused(
+    old_title, old_body, new_title, new_body
+):
+    assert not dh.title_split_only(old_title, old_body, new_title, new_body)
+
+
+def split_pair():
+    old = record(title=OLD_TITLE, content="Resolved.\n")
+    new = record(title=NEW_TITLE, content=f"{MOVED}\n\nResolved.\n")
+    return old, new
+
+
+def test_title_splits_finds_only_verified_splits():
+    old, new = split_pair()
+    found = dh.title_splits({"p-a": old}, {"p-a": new})
+    assert set(found) == {"p-a"}
+    assert found["p-a"].new_title == NEW_TITLE
+    assert found["p-a"].moved.strip() == MOVED
+    # A title that merely changed is not a split.
+    assert dh.title_splits({"p-a": old}, {"p-a": record(title="Rewritten")}) == {}
+
+
+def test_export_allowlists_both_halves_of_a_split():
+    old, new = split_pair()
+    splits = dh.title_splits({"p-a": old}, {"p-a": new})
+    findings = dh.classify_export(
+        {"p-a": old},
+        {"p-a": new},
+        dropped_fixtures=NONE,
+        recovered=NONE,
+        splits=splits,
+    )
+    assert sorted(rules(findings)) == ["legacy-title-split", "legacy-title-split"]
+
+
+def test_export_with_no_derived_split_reports_the_same_pair_as_a_regression():
+    """The rule fires off the harness's own derivation, never off a claim.
+
+    With `splits` empty -- which is what an unverifiable split produces -- the
+    identical record pair must come back a regression.
+    """
+    old, new = split_pair()
+    findings = dh.classify_export(
+        {"p-a": old}, {"p-a": new}, dropped_fixtures=NONE, recovered=NONE
+    )
+    assert rules(findings) == (None, None)
+
+
+def test_a_listing_allowlists_exactly_the_trailing_title_lines():
+    old, new = split_pair()
+    splits = dh.title_splits({"p-a": old}, {"p-a": new})
+    old_out = f"○ p-a: The real question?\n\n{MOVED}\n"
+    new_out = "○ p-a: The real question?\n"
+    assert rules(
+        dh.classify_lines(
+            "list",
+            old_out,
+            new_out,
+            dropped_fixtures=NONE,
+            recovered=NONE,
+            splits=splits,
+        )
+    ) == ("legacy-title-split",)
+
+
+def test_a_listing_line_that_is_not_moved_title_text_is_still_a_regression():
+    old, new = split_pair()
+    splits = dh.title_splits({"p-a": old}, {"p-a": new})
+    old_out = f"○ p-a: The real question?\n{MOVED}\nan unrelated line\n"
+    new_out = "○ p-a: The real question?\n"
+    assert rules(
+        dh.classify_lines(
+            "list",
+            old_out,
+            new_out,
+            dropped_fixtures=NONE,
+            recovered=NONE,
+            splits=splits,
+        )
+    ) == (None,)
+
+
+def test_a_listing_difference_that_is_only_blank_lines_is_not_a_split():
+    old, new = split_pair()
+    splits = dh.title_splits({"p-a": old}, {"p-a": new})
+    assert rules(
+        dh.classify_lines(
+            "list",
+            "○ p-a: The real question?\n\n",
+            "○ p-a: The real question?\n",
+            dropped_fixtures=NONE,
+            recovered=NONE,
+            splits=splits,
+        )
+    ) == (None,)
+
+
+def show_output(title: str, body: str) -> str:
+    return f"p-a: {title}\n  Status: captured\n  Type: idea\n\nContent:\n{body}"
+
+
+def test_show_allowlists_a_reconstructible_title_split():
+    old, new = split_pair()
+    split = dh.title_splits({"p-a": old}, {"p-a": new})["p-a"]
+    old_out = show_output(OLD_TITLE, "Resolved.\n")
+    new_out = show_output(NEW_TITLE, f"{MOVED}\n\nResolved.\n")
+    assert rules(dh.classify_show("p-a", old_out, new_out, new_out, split)) == (
+        "legacy-title-split",
+    )
+
+
+def test_show_refuses_when_the_rest_of_the_output_also_moved():
+    """The split explains the title and the body head, and nothing else."""
+    old, new = split_pair()
+    split = dh.title_splits({"p-a": old}, {"p-a": new})["p-a"]
+    old_out = show_output(OLD_TITLE, "Resolved.\n")
+    new_out = show_output(NEW_TITLE, f"{MOVED}\n\nResolved.\n").replace(
+        "captured", "resolved"
+    )
+    assert rules(dh.classify_show("p-a", old_out, new_out, new_out, split)) == (None,)
+
+
+def test_show_without_a_derived_split_is_a_regression():
+    old_out = show_output(OLD_TITLE, "Resolved.\n")
+    new_out = show_output(NEW_TITLE, f"{MOVED}\n\nResolved.\n")
+    assert rules(dh.classify_show("p-a", old_out, new_out, new_out)) == (None,)
+
+
 # --- Corpus-derived search terms ----------------------------------------------
 
 
