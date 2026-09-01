@@ -38,6 +38,7 @@ from seeds.convert import (
     classify,
     convert,
     fork_body,
+    format_report,
     verify,
 )
 from seeds.db import Database
@@ -708,6 +709,129 @@ class TestVerificationCatchesLies:
             verify(seed_files_dir(seeds_dir), unions, db_sides, jsonl_sides)
 
 
+class TestCompletenessOutranksCheck:
+    """`seeds check` exits 0 on an empty store, so it cannot be the whole gate.
+
+    Measured on the merged checker: an empty `.seeds/seeds/` reports "0 files,
+    no violations" and exits 0, while the same corpus rendered in full reports
+    57 violations and exits 1. A converter that emitted nothing, or silently
+    skipped most ids, therefore passes its own check step cleanly. Every test
+    here asserts BOTH halves -- that check is green on the broken tree, and
+    that verification refuses it anyway -- because the first half is what makes
+    the second one necessary.
+    """
+
+    def _unions(self, seeds_dir: Path):
+        from seeds.convert import _load_db, _load_jsonl, _resolve_edges, union_records
+
+        db_sides, db_halves, _ = _load_db(seeds_dir / "seeds.db")
+        jsonl_sides, jsonl_halves = _load_jsonl(seeds_dir / "seeds.jsonl")
+        known = frozenset(set(db_sides) | set(jsonl_sides))
+        edges, _ = _resolve_edges([*db_halves, *jsonl_halves], known)
+        unions, _ = union_records(db_sides, jsonl_sides, edges)
+        return unions, db_sides, jsonl_sides
+
+    def test_check_really_is_green_on_an_empty_store(self, temp_dir):
+        """The premise, asserted rather than assumed."""
+        seeds_dir = temp_dir / ".seeds"
+        write_jsonl(seeds_dir, [record("seeds-a1")])
+        convert(seeds_dir)
+        for path in seed_files_dir(seeds_dir).glob("*.md"):
+            path.unlink()
+
+        assert check_violations(seeds_dir) == []
+
+    def test_a_zero_file_conversion_is_a_hard_error(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        write_jsonl(
+            seeds_dir, [record("seeds-a1"), record("seeds-b2"), record("seeds-c3")]
+        )
+        convert(seeds_dir)
+        unions, db_sides, jsonl_sides = self._unions(seeds_dir)
+        for path in seed_files_dir(seeds_dir).glob("*.md"):
+            path.unlink()
+
+        assert check_violations(seeds_dir) == []
+        with pytest.raises(ConversionError, match="holds none of them"):
+            verify(seed_files_dir(seeds_dir), unions, db_sides, jsonl_sides)
+
+    def test_a_short_conversion_names_the_missing_ids(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        write_jsonl(
+            seeds_dir, [record("seeds-a1"), record("seeds-b2"), record("seeds-c3")]
+        )
+        convert(seeds_dir)
+        unions, db_sides, jsonl_sides = self._unions(seeds_dir)
+        (seed_files_dir(seeds_dir) / "seeds-b2.md").unlink()
+
+        assert check_violations(seeds_dir) == []
+        with pytest.raises(ConversionError) as caught:
+            verify(seed_files_dir(seeds_dir), unions, db_sides, jsonl_sides)
+        assert "seeds-b2" in str(caught.value)
+        assert "seeds-a1" not in str(caught.value)
+
+    def test_a_union_that_skipped_an_id_is_caught_before_any_file_is_read(
+        self, temp_dir
+    ):
+        """Equal counts can still hide a swap, so the comparison is on SETS."""
+        seeds_dir = temp_dir / ".seeds"
+        write_jsonl(seeds_dir, [record("seeds-a1"), record("seeds-b2")])
+        convert(seeds_dir)
+        unions, db_sides, jsonl_sides = self._unions(seeds_dir)
+        short = [u for u in unions if u.record.id != "seeds-b2"]
+
+        with pytest.raises(ConversionError, match="does not cover the source stores"):
+            verify(seed_files_dir(seeds_dir), short, db_sides, jsonl_sides)
+
+    def test_an_absence_the_converter_never_declared_is_a_failure(self, temp_dir):
+        """The six fixtures are absences the converter DECLARED. Passing an
+        empty drop list makes the same absence unexplained, and it must fail."""
+        seeds_dir = temp_dir / ".seeds"
+        write_jsonl(seeds_dir, [record("seeds-a1"), record("seeds-71")])
+        report = convert(seeds_dir)
+        assert report.dropped_fixtures == ["seeds-71"]
+
+        from seeds.convert import _load_jsonl
+
+        jsonl_sides, _ = _load_jsonl(seeds_dir / "seeds.jsonl")
+        unions, db_sides, _ = self._unions(seeds_dir)
+        kept = [u for u in unions if u.record.id != "seeds-71"]
+        for union in kept:
+            union.record.converted_at = read_seed_file(
+                seed_files_dir(seeds_dir) / f"{union.record.id}.md"
+            ).converted_at
+
+        # Declared: passes. Undeclared: the identical tree is refused.
+        assert (
+            verify(
+                seed_files_dir(seeds_dir),
+                kept,
+                db_sides,
+                jsonl_sides,
+                drop_ids=frozenset({"seeds-71"}),
+            )
+            == 1
+        )
+        with pytest.raises(ConversionError, match="does not cover the source stores"):
+            verify(seed_files_dir(seeds_dir), kept, db_sides, jsonl_sides)
+
+    def test_the_report_prints_the_arithmetic(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        write_jsonl(
+            seeds_dir,
+            [record("seeds-a1"), *(record(i) for i in sorted(FIXTURE_IDS))],
+        )
+
+        report = convert(seeds_dir)
+
+        assert report.source_ids == 1 + len(FIXTURE_IDS)
+        assert report.total == 1
+        assert format_report(report).splitlines()[1] == (
+            "  7 seed(s) in the source stores -> 1 converted: 1 written, "
+            "0 already current"
+        )
+
+
 # --- Strict reading of the source stores -------------------------------------
 
 
@@ -906,7 +1030,7 @@ class TestConvertCommand:
         result = cli_runner.invoke(main, ["convert"])
 
         assert result.exit_code == 0, result.output
-        assert "1 seeds: 1 written" in result.output
+        assert "1 seed(s) in the source stores -> 1 converted" in result.output
         assert "round-trip verified 1 record(s)" in result.output
 
     def test_an_unresolved_fork_exits_non_zero_and_names_the_file(
