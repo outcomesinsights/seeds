@@ -519,7 +519,8 @@ def check_violations(seeds_dir: Path, *, now: datetime | None = None) -> list[Fi
                 message="no seed-file store here",
                 remediation=(
                     "the store is the directory listing itself (§1); create it "
-                    "with 'seeds init', or convert a pre-0.7 store into it"
+                    "with 'seeds init' in a new project, or run 'seeds convert' "
+                    "in one that still has .seeds/seeds.jsonl"
                 ),
             )
         ]

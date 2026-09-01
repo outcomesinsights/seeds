@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import shlex
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -43,6 +44,7 @@ from seeds.store import (
     find_seeds_dir,
     has_been_edited,
     is_terminal,
+    needs_conversion,
     new_record,
     questions_asked_about,
     relates_to,
@@ -62,15 +64,19 @@ def _uninitialized_error(seeds_dir: Path) -> str:
     if not seeds_dir.exists():
         return "Error: seeds not initialized. Run 'seeds init' first."
 
-    jsonl_path = seeds_dir / JSONL_FILE
-    if jsonl_path.exists():
+    if needs_conversion(seeds_dir):
         return (
             f"Error: no seed files in {seed_files_dir(seeds_dir)}, but "
-            f"{jsonl_path} is present.\n"
+            f"{seeds_dir / JSONL_FILE} is present.\n"
             "This project has not been converted to the seed-file store yet. "
             "Run 'seeds convert'."
         )
     return "Error: seeds not initialized. Run 'seeds init' first."
+
+
+def _resolve_seeds_dir() -> Path:
+    """The ``.seeds`` this invocation is about, whether or not it is usable."""
+    return find_seeds_dir() or Path.cwd() / SEEDS_DIR
 
 
 class Context:
@@ -86,7 +92,7 @@ class Context:
         to read -- see :func:`_uninitialized_error`.
         """
         if self.store is None:
-            seeds_dir = find_seeds_dir() or Path.cwd() / SEEDS_DIR
+            seeds_dir = _resolve_seeds_dir()
             store = Store(seeds_dir)
             if not store.is_initialized():
                 click.echo(_uninitialized_error(seeds_dir), err=True)
@@ -519,7 +525,25 @@ def jot(ctx: Context, thought: str) -> None:
     """Quickly capture a thought with minimal friction.
 
     THOUGHT is the idea to capture (becomes the title).
+
+    Refusing on an unconverted store is right; losing the thought with it is
+    not. jot is the minimum-friction verb whose whole job is catching an idea
+    before it escapes, and first contact with an unconverted repo happens
+    mid-thought, so the refusal prints the text back and the exact command to
+    re-run (seeds-4co.18).
     """
+    seeds_dir = _resolve_seeds_dir()
+    if not Store(seeds_dir).is_initialized():
+        click.echo(_uninitialized_error(seeds_dir), err=True)
+        click.echo("", err=True)
+        click.echo("Nothing was written. Your thought, so it survives:", err=True)
+        click.echo("", err=True)
+        click.echo(f"  {thought}", err=True)
+        click.echo("", err=True)
+        click.echo("Re-run it once the store is usable:", err=True)
+        click.echo(f"  seeds jot {shlex.quote(thought)}", err=True)
+        sys.exit(1)
+
     store = ctx.get_store()
 
     seed_id = store.next_id(seed_text=thought)
@@ -1511,6 +1535,13 @@ def prime(no_digest: bool, digest_limit: int) -> None:
     Silently exits with code 0 if not in a seeds project.
     This enables cross-platform hook integration where both
     seeds and beads hooks can coexist.
+
+    On an UNCONVERTED project it still emits the full document and still exits
+    0 -- but the document carries the conversion notice twice, once at the top
+    and once where the project-state block would have been. Returning
+    normal-looking context there was the defect (seeds-4co.18): the static half
+    rendered, the state block vanished silently, and an agent reading it
+    concluded the project had no seeds.
     """
     from seeds.prime import get_prime_output
 
@@ -1525,8 +1556,14 @@ def prime(no_digest: bool, digest_limit: int) -> None:
     if not store.is_initialized():
         # A .seeds/ that holds no seed files yet -- an unconverted project, or
         # one mid-init. The static workflow text is still the right answer;
-        # only the digest needs a store.
-        click.echo(get_prime_output(include_digest=False))
+        # only the digest needs a store. Which of the two it is decides whether
+        # the reader is told a block is missing.
+        click.echo(
+            get_prime_output(
+                include_digest=False,
+                unconverted=needs_conversion(seeds_dir),
+            )
+        )
         return
 
     click.echo(
@@ -1745,6 +1782,11 @@ def check_cmd(smells: bool, against_git: bool) -> None:
     if seeds_dir is None:
         click.echo("Error: seeds not initialized. Run 'seeds init' first.", err=True)
         sys.exit(1)
+    if needs_conversion(seeds_dir):
+        # Otherwise this reports store-missing as a bare path, which is a true
+        # statement of a symptom and no help at all on an unconverted repo.
+        click.echo(_uninitialized_error(seeds_dir), err=True)
+        sys.exit(1)
 
     findings = check_violations(seeds_dir)
     if findings:
@@ -1808,11 +1850,20 @@ def convert_cmd(keep_fixtures: bool) -> None:
     -- two bodies where neither is a prefix of the other -- lands as a file
     carrying both, with git conflict markers, for ordinary merge tooling.
 
-    Non-destructive. The tree is written alongside the pre-0.7 seeds.db and
-    seeds.jsonl and neither is touched, so reverting the whole conversion is
-    `rm -rf .seeds/seeds/`. Re-running against an unchanged store rewrites
-    nothing. Keep seeds.jsonl in the repository afterwards: its git history is
-    the only source for anything before a seed's converted_at.
+    The tree is written alongside the pre-0.7 seeds.db and seeds.jsonl, and
+    neither is rewritten. Re-running against an unchanged store rewrites
+    nothing.
+
+    seeds.jsonl is then RETIRED: where git can restore it -- inside a work
+    tree, tracked, and with no uncommitted changes -- its deletion is staged,
+    so the removal lands in the same commit as the seed files. Failing any one
+    of those three, the file is left alone and this says which one failed. The
+    FILE is disposable; its git HISTORY must never be rewritten or filtered
+    out of the repository, because `seeds history` reads it for everything
+    before a seed's converted_at. seeds.db is never deleted, for the opposite
+    reason: .seeds/.gitignore excludes *.db, so git holds no copy of it.
+
+    Every run prints the exact command that reverts the state it created.
 
     Exits non-zero while a fork is unresolved or `seeds check` reports a
     violation on the output: the data landed, but the store is not finished.
@@ -1846,19 +1897,29 @@ def convert_cmd(keep_fixtures: bool) -> None:
 def export_cmd(as_json: bool) -> None:
     """Write the whole corpus to stdout as JSON. Creates no file.
 
-    This is the machine-readable channel that replaces the tracked
-    `.seeds/seeds.jsonl` (docs/storage-format.md §11). Killing that file costs
-    availability, not speed: `grep` and DuckDB both answer questions about a
-    repo's seeds today with no parser written by the caller, and 13 repos of
-    cross-project query depend on it. A pipe restores that without restoring a
-    second store -- nothing tracked, nothing to diverge, nothing to destroy.
+    This serves STRUCTURED EXTRACTION: a consumer that wants fields, not
+    matches -- counts by status, a join against beads, anything you would write
+    SQL for. Pipe it into DuckDB on demand:
 
-    One JSON object per line, so a grep hit is a whole record and several
-    repos' output concatenates into one stream. For ad-hoc SQL, pipe it into
-    DuckDB on demand:
-
+    \b
         seeds export --json | duckdb -c "SELECT status, count(*)
           FROM read_json_auto('/dev/stdin') GROUP BY 1"
+
+    FULL-TEXT SEARCH ACROSS REPOS IS RIPGREP'S JOB, not this command's. A seed
+    is a markdown file, so it is one glob over the stores:
+
+    \b
+        rg -l "adjudicat" ~/projects/*/.seeds/seeds/
+        rg -i -C2 "immutable row" ~/projects/*/.seeds/seeds/
+
+    which is better than what it replaces -- the seed id is in the path and you
+    get real context lines, where grepping the retired `.seeds/seeds.jsonl`
+    returned a 120-character slice of one escaped line.
+
+    So this command exists because a pipe to stdout costs nothing -- no second
+    store, nothing to diverge, nothing to sync -- and NOT because searching
+    across repos needs it. One JSON object per line, so a grep hit is still a
+    whole record and several repos' output concatenates into one stream.
 
     Either the whole corpus is written or nothing is: a file the reader refuses
     aborts before the first byte, because a stream that stops halfway looks
@@ -1879,6 +1940,11 @@ def export_cmd(as_json: bool) -> None:
     seeds_dir = find_seeds_dir()
     if seeds_dir is None:
         click.echo("Error: seeds not initialized. Run 'seeds init' first.", err=True)
+        sys.exit(1)
+    if needs_conversion(seeds_dir):
+        # Ahead of export_json, which would otherwise report the missing tree
+        # as a bare path and leave the reader to work out the recovery.
+        click.echo(_uninitialized_error(seeds_dir), err=True)
         sys.exit(1)
 
     try:

@@ -51,8 +51,10 @@ DB_FILE = "seeds.db"
 JSONL_FILE = "seeds.jsonl"
 """The legacy JSONL export's filename inside ``.seeds/``.
 
-Frozen after conversion, never deleted: its git history is the only source for
-anything before a seed's ``converted_at`` (``docs/storage-format.md`` §11).
+Retired on conversion day, and the *file* is then deleted -- ``seeds convert``
+stages the removal wherever git can restore it. What is never deleted is its
+**git history**, the only source for anything before a seed's ``converted_at``
+(``docs/storage-format.md`` §11).
 """
 
 PREFIX_CONFIG_KEY = "prefix"

@@ -2308,6 +2308,39 @@ class TestPrimeCommand:
         assert "seeds prefix" in result.output
         assert "--dry-run" in result.output
 
+    def test_prime_teaches_the_cross_repo_rg_recipe(self, cli_runner, initialized_env):
+        """Bead seeds-4co.20: the gap prime exists to close.
+
+        All 35 transcript invocations of cross-repo seed search were hand-rolled
+        shell loops, reinvented each time, because nothing told the agent how.
+        The recipe has to be in the document an agent is handed, not left to
+        instinct -- and it has to name the glob rather than a loop.
+        """
+        result = cli_runner.invoke(main, ["prime"])
+
+        assert result.exit_code == 0
+        assert "rg -l" in result.output
+        assert "/.seeds/seeds/" in result.output
+        assert "-C2" in result.output, "context lines are half of why rg wins"
+        assert "do not invent a shell loop" in result.output
+
+    def test_prime_does_not_send_agents_back_to_the_retired_jsonl(
+        self, cli_runner, initialized_env
+    ):
+        result = cli_runner.invoke(main, ["prime"])
+
+        _, _, recipe = result.output.partition("Searching Across Repos")
+        assert "retired" in recipe
+        assert "stale" in recipe
+
+    def test_prime_frames_export_as_structured_extraction_not_search(
+        self, cli_runner, initialized_env
+    ):
+        result = cli_runner.invoke(main, ["prime"])
+
+        assert "STRUCTURED extraction" in result.output
+        assert "DuckDB" in result.output
+
     def test_prime_silent_exit_outside_seeds_project(self, cli_runner):
         """Verify prime silently exits when not in a seeds project."""
         with tempfile.TemporaryDirectory() as tmpdir:

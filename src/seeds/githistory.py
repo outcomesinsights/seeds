@@ -16,20 +16,20 @@ the caller decides. An *unborn* ``HEAD`` is not one of those cases: "there is
 no previous commit" is a real, complete answer, and the caller models it as an
 empty before-state.
 
-``_subprocess_env`` is shared with :mod:`seeds.gitstage` because it describes
-git's hook contract — a hook has ``GIT_DIR`` and friends pointing at the commit
-in progress, which is exactly the wrong repository to answer a question about
-some other directory.
+Every git process this module starts comes from :mod:`seeds.gitstage`, which is
+the single door: it strips the repo-pinning ``GIT_*`` variables git exports into
+hooks, so a question asked about some other directory cannot be answered about
+the commit in progress. ``GitUnavailable`` and ``repo_root`` live there for the
+same reason and are re-exported here, where their callers already look for them.
 """
 
 from __future__ import annotations
 
-import subprocess
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from seeds.gitstage import _subprocess_env
+from seeds.gitstage import GitUnavailable, git_bytes, git_text, repo_root
 
 __all__ = [
     "Commit",
@@ -49,63 +49,9 @@ __all__ = [
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 
-class GitUnavailable(Exception):
-    """git could not answer at all: not installed, or not in a work tree."""
-
-
-def _git_text(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    try:
-        return subprocess.run(
-            ["git", *args],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            check=False,
-            env=_subprocess_env(),
-        )
-    except OSError as exc:  # git not installed, cwd gone
-        raise GitUnavailable(f"could not run git: {exc}") from exc
-
-
-def _git_bytes(
-    cwd: Path, *args: str, stdin: bytes = b""
-) -> subprocess.CompletedProcess[bytes]:
-    """As :func:`_git_text`, but for output that is blob content, not text.
-
-    Seed files are UTF-8 by the format, but a corrupted one in history is
-    exactly the sort of thing a checker is asked about, so the bytes are
-    decoded with replacement at the point of use rather than here.
-    """
-    try:
-        return subprocess.run(
-            ["git", *args],
-            cwd=cwd,
-            capture_output=True,
-            check=False,
-            input=stdin,
-            env=_subprocess_env(),
-        )
-    except OSError as exc:
-        raise GitUnavailable(f"could not run git: {exc}") from exc
-
-
-def repo_root(path: Path) -> Path:
-    """The work tree containing ``path``, or raise :class:`GitUnavailable`."""
-    path = Path(path)
-    if not path.is_dir():
-        raise GitUnavailable(f"{path} is not a directory")
-    proc = _git_text(path, "rev-parse", "--show-toplevel")
-    if proc.returncode != 0 or not proc.stdout.strip():
-        raise GitUnavailable(
-            f"{path} is not inside a git work tree, so there is no history "
-            f"to compare against"
-        )
-    return Path(proc.stdout.strip()).resolve()
-
-
 def rev_exists(root: Path, rev: str) -> bool:
     """Whether ``rev`` names a commit — ``False`` for an unborn HEAD."""
-    proc = _git_text(root, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")
+    proc = git_text(root, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")
     return proc.returncode == 0
 
 
@@ -116,7 +62,7 @@ def commit_counts(root: Path, reldir: str) -> dict[str, int]:
     committed — a seed jotted since the last commit, which is not a seed with a
     long history, so the absence is the right answer rather than a gap.
     """
-    proc = _git_text(root, "log", "--pretty=format:", "--name-only", "--", reldir)
+    proc = git_text(root, "log", "--pretty=format:", "--name-only", "--", reldir)
     if proc.returncode != 0:
         return {}
     counts: Counter[str] = Counter(
@@ -131,7 +77,7 @@ def tree_files(root: Path, rev: str, reldir: str) -> dict[str, str]:
     ``-z`` rather than the default listing: the terminator is unambiguous, so a
     path git would otherwise quote and escape cannot be misread.
     """
-    proc = _git_text(root, "ls-tree", "-r", "-z", rev, "--", reldir)
+    proc = git_text(root, "ls-tree", "-r", "-z", rev, "--", reldir)
     if proc.returncode != 0:
         return {}
     out: dict[str, str] = {}
@@ -156,7 +102,7 @@ def read_blobs(root: Path, shas: list[str]) -> dict[str, str]:
     if not shas:
         return {}
     stdin = ("\n".join(shas) + "\n").encode()
-    proc = _git_bytes(root, "cat-file", "--batch", stdin=stdin)
+    proc = git_bytes(root, "cat-file", "--batch", stdin=stdin)
     if proc.returncode != 0:
         return {}
     out: dict[str, str] = {}
@@ -217,7 +163,7 @@ def path_commits(root: Path, relpath: str) -> list[Commit]:
     a seed jotted since the last commit, or a path that does not exist. That is
     a real answer, not a failure, so it is not raised.
     """
-    proc = _git_text(
+    proc = git_text(
         root,
         "log",
         "--reverse",
@@ -255,7 +201,7 @@ def show_file(root: Path, rev: str, relpath: str) -> str | None:
     a file that will not decode is a thing history can hold, and a crash here
     would make the whole history unreadable over one bad revision.
     """
-    proc = _git_bytes(root, "show", f"{rev}:{relpath}")
+    proc = git_bytes(root, "show", f"{rev}:{relpath}")
     if proc.returncode != 0:
         return None
     return proc.stdout.decode("utf-8", errors="replace")

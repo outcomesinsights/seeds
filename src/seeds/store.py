@@ -44,6 +44,7 @@ from seeds.idgen import (
     generate_hash_id,
     is_hash_suffix,
 )
+from seeds.legacy import JSONL_FILE
 from seeds.models import (
     DEFAULT_PREFIX,
     RelationType,
@@ -103,6 +104,24 @@ def find_seeds_dir(start: Path | None = None) -> Path | None:
         if parent == current:
             return None
         current = parent
+
+
+def needs_conversion(seeds_dir: Path) -> bool:
+    """Whether ``seeds_dir`` is a pre-0.7 store that has not been converted.
+
+    Three states hide behind "there are no seed files", and only this one has a
+    recovery that is not ``seeds init``: a ``.seeds/`` carrying the retired
+    ``seeds.jsonl`` and no ``seeds/`` tree. Conversion is on-demand -- repos are
+    converted the first time someone uses seeds in them -- so this is a state
+    every command still meets in the wild, and each one has to name ``seeds
+    convert`` rather than send the operator to ``seeds init``, which refuses
+    there (bead seeds-1j3, and seeds-4co.18 for the three commands that were
+    still getting it wrong).
+
+    A filename comparison, deliberately: nothing here opens the legacy store.
+    """
+    seeds_dir = Path(seeds_dir)
+    return (seeds_dir / JSONL_FILE).exists() and not seed_files_dir(seeds_dir).is_dir()
 
 
 # --- Repo configuration (§9) -------------------------------------------------
@@ -804,6 +823,7 @@ __all__ = [
     "has_been_edited",
     "has_prefix_configured",
     "is_terminal",
+    "needs_conversion",
     "new_record",
     "questions_asked_about",
     "read_config",

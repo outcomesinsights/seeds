@@ -1,4 +1,36 @@
-"""seeds prime command output for AI context injection."""
+"""seeds prime command output for AI context injection.
+
+**The unconverted repo is a first-class case here** (bead seeds-4co.18).
+Conversion is on-demand -- repos are converted the first time someone uses
+seeds in them -- so there is no migration guide and no batch tool, and what an
+agent is handed at first contact *is* the migration experience.
+
+Every other data-touching command refuses and names ``seeds convert``. prime
+could not: the static half of this document rendered perfectly, the live-state
+block was silently absent, and nothing on screen said a block was missing. An
+agent has no reason to suspect it and concludes the project has no seeds. The
+one measured example had 29.
+
+@aguynamedryan ruled that prime must NOT abort: aborting would be doubly wrong,
+because the agent loses the verbs *and* stays uninformed. So the fix is in the
+text, in two places, and the placement is the point:
+
+* :data:`CONVERSION_BANNER` at the very top, because a long context is read
+  top-down and is sometimes truncated before the end;
+* :data:`CONVERSION_NOTICE` **where the state block would have been**, so the
+  absence is explained at the point of absence rather than in a footnote after
+  the reader has already formed a picture.
+
+And prime keeps **exit 0**. It produced usable output, and it is consumed as
+text through hooks, so the signal belongs in the text rather than in a status a
+hook would trip over.
+
+Deliberately NOT done: reading the legacy store to report how many seeds are
+waiting. That was asked for and declined. This module imports no SQLite and no
+legacy reader -- :mod:`seeds.convert` stays the only caller of
+:mod:`seeds.legacy`. The notice says state is unavailable, says nothing is
+lost, and names the command.
+"""
 
 from __future__ import annotations
 
@@ -71,6 +103,22 @@ Seeds should capture the **journey**, not just conclusions. When investigating:
 - `seeds recent [--since=7d]` - Recently touched (any status)
 - `seeds search '<regex>'` - ripgrep over the seed files (case-insensitive; no stemming, so search for the stem: `merg` finds both `merge` and `merging`)
 
+### Searching Across Repos (use ripgrep directly — there is no seeds verb)
+
+A seed is a markdown file, so searching *many* projects at once is one glob over
+their stores. Use this recipe; do not invent a shell loop, and do not read
+`.seeds/seeds.jsonl` — it is retired, and stale wherever it still exists.
+
+```
+rg -l "adjudicat" ~/projects/*/.seeds/seeds/          # which repos mention it
+rg -i -C2 "immutable row" ~/projects/*/.seeds/seeds/  # with context lines
+```
+
+The seed id is in the file path and you get real context, which is strictly
+better than the 120-character slice of one escaped line that grepping the
+retired JSONL used to return. Substitute the directory that holds the projects
+you mean (a habitat's root, `~/projects/<org>/`, or `..` from a sibling repo).
+
 ### Creating
 - `seeds create --title="..." --type=idea --tags=foo,bar` - Full creation
 - `seeds create --title="..." --parent=<id>` - Create child seed
@@ -93,7 +141,7 @@ Seeds should capture the **journey**, not just conclusions. When investigating:
 - `seeds show <id> --full` - Detailed view including superseded text
 - `seeds tree <id>` - Hierarchy and relationships
 - `seeds history <id>` - How the seed changed, one line per commit: date, author, changed fields, subject. Structures and labels; never summarises, so the reading is yours
-- `seeds export --json` - The whole corpus as JSONL on stdout (for grep/DuckDB)
+- `seeds export --json` - The whole corpus as JSONL on stdout, for STRUCTURED extraction (pipe it into DuckDB and query it as a table). For text search across repos, use the rg recipe above instead
 
 ### Displaying Seeds to User
 Claude Code CLI truncates bash output, so users can't see full seed content from `seeds show`.
@@ -125,6 +173,33 @@ directory name; `seeds rename-prefix` changes it later.
 - `seeds rename-prefix <new> --no-rewrite-bodies` - Skip rewriting ID
   references inside title/body/resolution
 """
+
+
+CONVERSION_BANNER = """\
+> **⚠ THIS PROJECT'S SEED STORE IS OUT OF DATE — run `seeds convert` first.**
+> `.seeds/` still holds the pre-0.7 `seeds.jsonl` and no `.seeds/seeds/` tree.
+> Every command below that reads or writes seed data will refuse until the
+> conversion is run. **Existing seeds are NOT lost**, and the project-state
+> section at the end of this document is missing for that reason and no other."""
+
+CONVERSION_NOTICE = """\
+## Current Seeds
+
+**Unavailable — this project has not been converted to the seed-file store.**
+
+`.seeds/seeds.jsonl` is present and `.seeds/seeds/` is not, so the block that
+normally goes here — counts, recently updated, active exploration, open
+questions, tag clusters — could not be built.
+
+**Do not read that absence as "this project has no seeds."** Nothing has been
+lost and nothing has been read: this command deliberately does not open the
+pre-0.7 store, so it cannot even tell you how many seeds are waiting.
+
+Recovery, once, in this repo:
+
+```
+seeds convert    # then re-run `seeds prime`
+```"""
 
 
 _STATUS_ICONS = {
@@ -225,6 +300,7 @@ def get_prime_output(
     *,
     include_digest: bool = True,
     digest_limit: int = 20,
+    unconverted: bool = False,
 ) -> str:
     """Get the prime output for AI context injection.
 
@@ -232,8 +308,14 @@ def get_prime_output(
     of project state (counts, recent activity, exploration, questions, tag
     clusters) after the static workflow text. ``digest_limit`` caps the
     "Recently Updated" entries.
+
+    ``unconverted`` wraps the static text in the two-part conversion notice
+    instead — see the module docstring on why it is two parts and why this
+    still returns a full, usable document.
     """
     body = PRIME_OUTPUT.strip()
+    if unconverted:
+        return f"{CONVERSION_BANNER}\n\n{body}\n\n{CONVERSION_NOTICE}"
     if store is None or not include_digest:
         return body
     return body + "\n\n" + build_digest(store, limit_recent=digest_limit).lstrip("\n")

@@ -2,13 +2,21 @@
 
 ``.seeds/seeds.jsonl`` stops being written on conversion day
 (``docs/storage-format.md`` §11), and what it took with it was *availability*,
-not speed. Today ``grep`` and a DuckDB ``read_json_auto`` both answer questions
-about a repo's seeds with seeds not installed and no parser written by the
-caller; 13 repos of cross-project query depend on that. The 35 ms
+not speed: a DuckDB ``read_json_auto`` answered questions about a repo's seeds
+with seeds not installed and no parser written by the caller. The 35 ms
 frontmatter-scan measurement answered a different objection — it proved reading
 markdown is fast, not that anything other than ``seeds`` can read it.
 
-So this module is the replacement channel, and its shape is chosen for that
+**The consumer is structured extraction, and only that.** This module used to
+claim 13 repos of cross-project *query* depended on it. Re-measured for
+``seeds-4co.20``: they do not. Roughly 2-3 of 26 real calls wanted fields;
+the rest were full-text search, which is ripgrep's job and got *better* after
+conversion — ``rg -l "adjudicat" ~/projects/*/.seeds/seeds/`` puts the seed id
+in the file path and gives real context lines, where grepping the JSONL returned
+a 120-character slice of one escaped line. The export stays because a pipe to
+stdout costs nothing, not because search needs it.
+
+So this module is the structured channel, and its shape is chosen for that
 consumer:
 
 **One JSON object per line, to stdout.** A pipe, not a tracked file: nothing to

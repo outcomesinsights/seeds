@@ -485,10 +485,32 @@ hand-built bad inputs with hand-computed expectations.
 ## 11. The JSONL after conversion
 
 `.seeds/seeds.jsonl` stops being written on conversion day. **Its git history
-stays load-bearing forever and must never be filtered out of the repository as
-cleanup.** `seeds history` reads it for everything before `converted_at`, and
+stays load-bearing forever and must never be rewritten or filtered out of the
+repository.** `seeds history` reads it for everything before `converted_at`, and
 `seeds-wurl` proved that git was the only source that held the truth when both
 live stores agreed and both were wrong.
 
+The **file** is the opposite: disposable from that same moment, and a hazard if
+kept. Nothing writes it again, so it drifts from the store with every seed
+written while still looking authoritative — measured six hours after this
+repo's own conversion, the leftover file held 314 records to the tree's 309 and
+was missing a seed created since. So `seeds convert` **stages its deletion**,
+under three conditions that are all required, because failing any one of them
+means the bytes exist nowhere else:
+
+1. the repo is a git work tree;
+2. `.seeds/seeds.jsonl` is tracked;
+3. it has no uncommitted changes.
+
+Failing any one, the file is left in place and the conversion says which
+condition failed and that the leftover is now stale. Deleting the file is safe
+*because* git holds it; `.seeds/seeds.db` is never deleted for exactly the
+opposite reason — `.seeds/.gitignore` excludes `*.db`, so git holds no copy to
+restore from.
+
 Machine consumers are served by `seeds export --json`, a pipe to stdout, not a
-tracked file.
+tracked file — and it serves **structured extraction** (pipe it into DuckDB),
+not search. Full-text search across many repos is ripgrep's, and one glob:
+`rg -l "adjudicat" ~/projects/*/.seeds/seeds/`. That is an upgrade on grepping
+the JSONL, which returned a 120-character slice of one escaped line where rg
+puts the seed id in the path and gives real context.

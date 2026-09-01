@@ -24,9 +24,23 @@ both bodies with git conflict markers, and the operator finishes it with the
 same merge tooling they use for everything else. Today the same situation is a
 deadlock cleared by hand-rebuilding a body and handing it back.
 
-**Nothing is destroyed.** The tree is written alongside ``seeds.db`` and
-``seeds.jsonl``; neither is touched, and reverting the whole conversion is
-``rm -rf .seeds/seeds/``.
+**Nothing is destroyed, and one thing is retired.** Neither source store is
+ever rewritten. ``seeds.db`` is never removed either: ``.seeds/.gitignore``
+excludes ``*.db``, so git holds no copy of it and a deletion would be final.
+
+``seeds.jsonl`` is the opposite case, and the conversion **stages its
+deletion** — where, and only where, git can put it back: inside a work tree,
+tracked, and with no uncommitted changes. Leaving it is not tidiness deferred,
+it is a defect: nothing writes the file again, so from conversion day it drifts
+while still looking authoritative, and the shell loops that grep it keep
+returning pre-conversion data and reporting nothing. What has to survive is its
+**git history**, not the file — ``seeds history`` reads the JSONL's commits for
+everything before a seed's ``converted_at``, so that history must never be
+rewritten or filtered out of the repository.
+
+Because the state a run leaves behind now depends on which of those conditions
+held, :attr:`ConversionReport.revert_command` is computed rather than quoted,
+and the report prints the command for the state this run actually created.
 
 The verification half — re-read the tree, rebuild the records, diff them
 field-by-field against both the union and the raw sources, then run ``seeds
@@ -48,6 +62,7 @@ from pathlib import Path
 from typing import Literal
 
 from seeds.check import Finding, check_violations
+from seeds.gitstage import plan_tracked_deletion, stage_tracked_deletion
 from seeds.legacy import (
     DB_FILE,
     JSONL_FILE,
@@ -887,6 +902,15 @@ class ConversionReport:
     prefix_written: str | None = None
     verified: int = 0
     check_findings: list[Finding] = field(default_factory=list)
+    #: Whether ``.seeds/seeds.jsonl``'s removal was staged for the next commit.
+    jsonl_deletion_staged: bool = False
+    #: Why it was not, when it was not. A sentence naming the condition that
+    #: failed, so the operator learns which one rather than that "something"
+    #: stopped it.
+    jsonl_deletion_blocked: str | None = None
+    #: The command that undoes exactly what this run did — which depends on
+    #: whether the deletion was staged, so it is not a constant.
+    revert_command: str = "rm -rf .seeds/seeds/"
 
     @property
     def total(self) -> int:
@@ -959,6 +983,7 @@ def format_report(report: ConversionReport) -> str:
             f"the tree; left alone: {', '.join(report.forks_already_resolved)}"
         )
     out.append(f"  round-trip verified {report.verified} record(s)")
+    out.extend(_retirement_lines(report))
     if report.forks:
         out.append("")
         out.append(
@@ -969,7 +994,45 @@ def format_report(report: ConversionReport) -> str:
     if report.check_findings:
         out.append("")
         out.append(f"seeds check: {len(report.check_findings)} violation(s).")
+    out.append("")
+    out.append("Revert this conversion with:")
+    out.append(f"  {report.revert_command}")
     return "\n".join(out)
+
+
+def _retirement_lines(report: ConversionReport) -> list[str]:
+    """What happened to the two pre-0.7 files, and why they differ.
+
+    The asymmetry is counterintuitive enough to be worth stating in the output
+    every time rather than in a doc nobody is reading at that moment: the JSONL
+    is the *safe* one to delete because git holds it, and the database is the
+    dangerous one because ``.seeds/.gitignore`` excludes ``*.db`` and git holds
+    nothing.
+    """
+    out: list[str] = []
+    if report.jsonl_deletion_staged:
+        out.append(
+            f"  staged the deletion of {JSONL_FILE} — it is retired, and its "
+            f"git history (which 'seeds history' reads for everything before "
+            f"converted_at) is untouched and stays. Commit the removal with "
+            f"the seed files."
+        )
+    elif report.jsonl_deletion_blocked:
+        out.append(f"  left {JSONL_FILE} in place: {report.jsonl_deletion_blocked}.")
+        out.append(
+            f"    It is now STALE. Nothing writes it again, so it will keep "
+            f"looking authoritative while drifting from the store — do not "
+            f"read it. Read "
+            f"{_display(report.out_dir, report.seeds_dir.resolve().parent)}/ "
+            f"or 'seeds export --json'."
+        )
+    if report.db_present:
+        out.append(
+            f"  {DB_FILE} is never deleted: .seeds/.gitignore excludes *.db, "
+            f"so git holds no copy of it to restore from. {JSONL_FILE} is the "
+            f"safe one for exactly the opposite reason."
+        )
+    return out
 
 
 # --- Verification ------------------------------------------------------------
@@ -1309,10 +1372,12 @@ def convert(
 ) -> ConversionReport:
     """Convert the store under ``seeds_dir`` into ``seeds_dir/seeds/``.
 
-    Non-destructive: ``seeds.db`` and ``seeds.jsonl`` are read and never
-    written, and a file already in the tree that no longer has a record is
-    reported rather than removed. Reverting the whole thing is
-    ``rm -rf .seeds/seeds/``.
+    ``seeds.db`` and ``seeds.jsonl`` are read and never rewritten, and a file
+    already in the tree that no longer has a record is reported rather than
+    removed. The one removal is ``seeds.jsonl`` itself, whose deletion is
+    *staged* when git can restore it — see :func:`_retire_jsonl`.
+    :attr:`ConversionReport.revert_command` is the command that undoes the
+    state this particular run left behind.
 
     Byte-idempotent: a second run against an unchanged store rewrites nothing,
     because ``converted_at`` — the one field with no source in the old store —
@@ -1369,7 +1434,75 @@ def convert(
     report.stale_files = _stale_files(out_dir, {u.record.id for u in unions})
     report.prefix_written = _write_config(seeds_dir, db_path, known)
     report.check_findings = _gate(seeds_dir, set(report.forks))
+    _retire_jsonl(jsonl_path, report)
     return report
+
+
+def _retire_jsonl(jsonl_path: Path, report: ConversionReport) -> None:
+    """Stage ``seeds.jsonl``'s deletion, or say which condition stopped it.
+
+    Runs last, after verification: the file is only disposable once the tree
+    that replaces it has been read back and checked.
+
+    An unresolved fork blocks it too, and that is a fourth condition on top of
+    the three :func:`~seeds.gitstage.plan_tracked_deletion` checks. A fork is
+    finished by editing the seed file and **re-running the converter**, which
+    :func:`_write_tree` explicitly supports — and a re-run reads the union of
+    the two stores. With the JSONL gone from the working tree, the second run
+    would see only the database and quietly overwrite the half the operator was
+    merging. So the second source stays until the merge it is a source for is
+    done.
+    """
+    root: Path | None = report.seeds_dir.resolve().parent
+    if jsonl_path.exists():
+        if report.forks:
+            report.jsonl_deletion_blocked = (
+                f"{len(report.forks)} fork(s) are unresolved, and this file is "
+                f"one of the two sources a re-run merges"
+            )
+        else:
+            plan = plan_tracked_deletion(jsonl_path)
+            if plan.deletable:
+                stage_tracked_deletion(plan)
+                report.jsonl_deletion_staged = True
+                root = plan.root
+            else:
+                report.jsonl_deletion_blocked = plan.blocker
+    report.revert_command = _revert_command(report, root)
+
+
+def _revert_command(report: ConversionReport, root: Path | None) -> str:
+    """The command that undoes exactly this run, in the order it must run.
+
+    Assembled rather than quoted, because a run leaves behind a different state
+    depending on which pieces it did: the tree always, ``config.yaml`` only when
+    this run was the one that wrote it (§9 — a store that already had one keeps
+    it), and a staged deletion only where git could hold the JSONL.
+    """
+    parts: list[str] = []
+    if report.jsonl_deletion_staged:
+        parts.append(
+            f"git checkout HEAD -- {_display(report.seeds_dir / JSONL_FILE, root)}"
+        )
+    parts.append(f"rm -rf {_display(report.out_dir, root)}")
+    if report.prefix_written:
+        parts.append(f"rm -f {_display(report.seeds_dir / 'config.yaml', root)}")
+    return " && ".join(parts)
+
+
+def _display(path: Path, root: Path | None) -> str:
+    """``path`` relative to ``root`` when it is under it, else in full.
+
+    The revert command has to be runnable, so a path it names is either
+    repo-relative (and the operator runs it from the repo root, where the git
+    half of the command has to run anyway) or absolute.
+    """
+    if root is not None:
+        try:
+            return path.resolve().relative_to(root).as_posix()
+        except ValueError:
+            pass
+    return str(path)
 
 
 def _fixture_drops(

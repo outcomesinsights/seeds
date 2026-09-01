@@ -177,14 +177,30 @@ seeds doctor                             # Installation and store health
 seeds export --json                      # The whole corpus as JSONL on stdout
 ```
 
-For machine consumers, `seeds export --json` is a pipe rather than a tracked
-file — one JSON object per line, so a `grep` hit is a whole record and several
-repos' output concatenates into one stream:
+`seeds export --json` serves **structured extraction** — pipe it into DuckDB and
+query it as a table. It is a pipe rather than a tracked file, one JSON object
+per line, so several repos' output concatenates into one stream:
 
 ```bash
 seeds export --json | duckdb -c "SELECT status, count(*)
   FROM read_json_auto('/dev/stdin') GROUP BY 1"
 ```
+
+#### Searching across many repos
+
+Full-text search across projects is **ripgrep's job, not a seeds command**. A
+seed is a markdown file, so the whole recipe is a glob over the stores:
+
+```bash
+rg -l  "adjudicat"      ~/projects/*/.seeds/seeds/   # which repos mention it
+rg -i -C2 "immutable row" ~/projects/*/.seeds/seeds/ # with context
+```
+
+This is strictly better than what it replaces. Grepping the retired
+`.seeds/seeds.jsonl` returned a 120-character slice of one escaped line; rg over
+the tree puts the seed id in the file path and gives real context lines. There
+is no verb for it and there does not need to be — but write the glob, not a
+shell loop.
 
 #### Converting a pre-0.7 project
 
@@ -196,14 +212,21 @@ seeds convert                            # SQLite + JSONL -> .seeds/seeds/*.md
 ```
 
 It reads the UNION of the two stores, per id and per field, and writes the tree
-alongside them without touching either — reverting the whole conversion is `rm
--rf .seeds/seeds/`. Where the two stores genuinely disagree, the seed lands with
-git conflict markers for ordinary merge tooling, and the command exits non-zero
-until a human resolves it.
+alongside them without rewriting either. Where the two stores genuinely
+disagree, the seed lands with git conflict markers for ordinary merge tooling,
+and the command exits non-zero until a human resolves it.
 
-`.seeds/seeds.jsonl` stops being written on conversion day but **must never be
-deleted or filtered out of the repository**: its git history is the only source
-for anything before a seed's `converted_at`.
+`.seeds/seeds.jsonl` stops being written on conversion day, so the conversion
+**stages its deletion** — but only where git can put it back: inside a work
+tree, tracked, and with no uncommitted changes. Fail any one of those three and
+the file is left alone and the command says which. The file is disposable; its
+**git history must never be rewritten or filtered out of the repository**,
+because that history is the only source for anything before a seed's
+`converted_at` (`seeds history` reads it). `.seeds/seeds.db` is never deleted
+for the opposite reason: `.seeds/.gitignore` excludes `*.db`, so git holds no
+copy of it.
+
+Every run prints the exact command that reverts the state it just created.
 
 ### AI Context
 
