@@ -57,6 +57,22 @@ eyeballed. ``tests/test_differential_harness.py`` exercises the classifiers on
 hand-built inputs with hand-computed verdicts, so they never merely agree with
 whatever the tool currently does.
 
+Refusing is an outcome, and it says which kind
+----------------------------------------------
+Exit 2 means "no comparison was made here", and the operator's next move
+depends entirely on *why*. ``convert-crashed`` is a defect in this checkout.
+``empty-corpus`` is a store that never held anything. ``no-0.6-baseline`` is
+neither: seeds 0.6 cannot read the store either, because its SQLite predates a
+table 0.6 requires and 0.6 ships no migration that runs to create it. ``mani``
+is that case — its store has no ``relationships`` table, 0.6's
+``migrate_to_relationships`` is defined and never called, and 0.6 dies inside
+its own ``db.py``. The repo was orphaned under 0.6 before 0.7 existed, so 0.7
+is the first version that can read it at all; printing 0.6's traceback in that
+slot invited the exact opposite reading. Every :class:`Refusal` therefore
+declares one of :data:`REFUSAL_REASONS`, the summary groups by cause and
+prints the argument for each, and the ``no-0.6-baseline`` message carries what
+0.7 *did* do with the store — which is real, and is not a comparison.
+
 The cross-repo half
 -------------------
 35 shell loops across 18 sessions read ``.seeds/seeds.jsonl`` directly. That
@@ -268,8 +284,77 @@ class Comparison:
     findings: list[Finding] = field(default_factory=list)
 
 
+#: Why a comparison could not be made, keyed by the slug each refusal cites.
+#: A refusal is an *outcome*, not an error, and the operator's next move
+#: depends entirely on which of these it was: ``convert-crashed`` is a defect
+#: in this checkout, ``no-0.6-baseline`` is a fact about the store that predates
+#: this checkout entirely, and ``empty-corpus`` is neither. Collapsing them into
+#: one "REFUSED" bucket — which is what a raw traceback does — invites exactly
+#: the wrong reading, that 0.7 broke a repo 0.6 had already orphaned.
+#:
+#: ``tests/test_differential_harness.py`` walks this module's AST and fails if
+#: any ``Refusal`` cites a slug that is not described here, or if a slug
+#: described here is never raised. A convention is not a gate.
+REFUSAL_REASONS: dict[str, str] = {
+    "not-a-store": (
+        "The path named on the command line does not hold a pre-0.7 seeds "
+        "store at all -- no .seeds/, or a .seeds/ with neither seeds.db nor "
+        "seeds.jsonl in it. Nothing was copied and nothing was run."
+    ),
+    "already-converted": (
+        "The store has a .seeds/seeds/ tree already, so the pre-conversion "
+        "behaviour this harness exists to compare against is gone. Refused "
+        "rather than half-compared."
+    ),
+    "convert-crashed": (
+        "seeds 0.7's own converter raised on this store, so 0.7's behaviour "
+        "cannot be observed. This one IS a defect in the current checkout: the "
+        "0.6 side of the comparison was never reached."
+    ),
+    "no-0.6-baseline": (
+        "seeds 0.6 cannot read this store either -- its SQLite predates a "
+        "table 0.6 requires, and 0.6 ships no migration that runs to create "
+        "it. There is no 0.6 behaviour to compare against, because there never "
+        "was any: the store was orphaned under 0.6, before 0.7 existed. NOT a "
+        "defect in the current checkout, and the opposite of one -- 0.7 is the "
+        "first version that can read the store at all. The refusal carries "
+        "what 0.7 did with it, which is real but is not a comparison."
+    ),
+    "0.6-command-failed": (
+        "seeds 0.6 exited non-zero building its side of the corpus, for some "
+        "reason other than a missing table. Reported as its last error line "
+        "rather than its traceback."
+    ),
+    "0.7-command-failed": (
+        "seeds 0.7 exited non-zero building its side of the corpus, after "
+        "converting it successfully. Like convert-crashed, a defect in the "
+        "current checkout: 0.6 got as far as writing its side, and 0.7 did not."
+    ),
+    "empty-corpus": (
+        "Both versions agree the store holds no seeds, or a comparison that "
+        "MUST have compared something compared nothing. A clean verdict here "
+        "would rest on diffing two empty strings, which is the failure mode "
+        "the anti-vacuity guard exists to make impossible."
+    ),
+    "harness-broken": (
+        "The harness could not set itself up -- the v0.6.0 archive, the fault "
+        "injector, duckdb, or an output shape it parses. Says nothing about "
+        "either version of seeds."
+    ),
+}
+
+
 class Refusal(Exception):
-    """The harness cannot make an honest comparison and says so."""
+    """The harness cannot make an honest comparison, and says which kind.
+
+    ``reason`` is keyword-only and required: every refusal has to declare which
+    of :data:`REFUSAL_REASONS` it is, so the report can separate causes that
+    call for different responses instead of printing one undifferentiated wall.
+    """
+
+    def __init__(self, message: str, *, reason: str) -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 # --- Pure classifiers (unit-tested in tests/test_differential_harness.py) ------
@@ -285,6 +370,39 @@ def line_id(line: str) -> str | None:
     """The seed id a rendered line is about, or None if it is not a seed line."""
     m = _LINE_ID.match(line)
     return m.group(1) if m else None
+
+
+#: 0.6 dying because the store predates a table it requires. Anchored to the
+#: exception line of a Python traceback, and deliberately NOT a loose "no such
+#: table" substring search: the phrase can appear in a seed body, and a body is
+#: something this harness echoes.
+_MISSING_TABLE = re.compile(
+    r"^sqlite3\.OperationalError: no such table: (\w+)\s*$", re.MULTILINE
+)
+
+
+def missing_legacy_table(stderr: str) -> str | None:
+    """The table 0.6 needed and this store does not have, or None.
+
+    This is the signature of a store that predates the schema 0.6 assumes --
+    ``mani``'s SQLite has no ``relationships`` table, and 0.6's own
+    ``migrate_to_relationships`` (which would have built one from the legacy
+    ``related_to`` column) is never called from anywhere in the v0.6.0 tree. So
+    0.6 raises from inside its own ``db.py`` and there is no baseline to be
+    had, as against the harness having driven it wrongly.
+    """
+    m = _MISSING_TABLE.search(stderr)
+    return m.group(1) if m else None
+
+
+def last_error_line(stderr: str) -> str:
+    """The last non-empty line of a subprocess's stderr.
+
+    A thirty-line traceback pasted into a refusal is not an outcome; the line
+    at the bottom of it is the one that says what happened.
+    """
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    return lines[-1] if lines else "(no output on stderr)"
 
 
 def trailing_newline_only(old: str, new: str) -> bool:
@@ -399,7 +517,8 @@ def split_prime(text: str) -> tuple[str, str]:
             return "".join(lines[:i]), "".join(lines[i:])
     raise Refusal(
         f"'seeds prime' output has no {PRIME_DIGEST_HEADING!r} heading, so the "
-        "generated digest cannot be told apart from the static template"
+        "generated digest cannot be told apart from the static template",
+        reason="harness-broken",
     )
 
 
@@ -940,7 +1059,8 @@ def provision_legacy(work: Path) -> Path:
     if archive.returncode != 0:
         raise Refusal(
             f"cannot extract {LEGACY_TAG} from {REPO_ROOT}: "
-            f"{archive.stderr.decode(errors='replace').strip()}"
+            f"{archive.stderr.decode(errors='replace').strip()}",
+            reason="harness-broken",
         )
     extract = subprocess.run(
         ["tar", "-x", "-C", str(root)],
@@ -950,11 +1070,13 @@ def provision_legacy(work: Path) -> Path:
     )
     if extract.returncode != 0:
         raise Refusal(
-            f"cannot unpack {LEGACY_TAG}: {extract.stderr.decode(errors='replace')}"
+            f"cannot unpack {LEGACY_TAG}: {extract.stderr.decode(errors='replace')}",
+            reason="harness-broken",
         )
     if not (root / "src" / "seeds" / "db.py").exists():
         raise Refusal(
-            f"{LEGACY_TAG} has no src/seeds/db.py, so it is not a pre-0.7 checkout"
+            f"{LEGACY_TAG} has no src/seeds/db.py, so it is not a pre-0.7 checkout",
+            reason="harness-broken",
         )
     return root
 
@@ -1006,7 +1128,10 @@ def inject(kind: str, files_dir: Path) -> str:
     """
     victims = sorted(files_dir.glob("*.md"))
     if not victims:
-        raise Refusal("nothing to inject into: the converted tree has no seed files")
+        raise Refusal(
+            "nothing to inject into: the converted tree has no seed files",
+            reason="harness-broken",
+        )
     victim = victims[0]
     if kind == "drop-seed":
         victim.unlink()
@@ -1017,16 +1142,22 @@ def inject(kind: str, files_dir: Path) -> str:
             r"^title: (.*)$", r"title: INJECTED \1", text, count=1, flags=re.MULTILINE
         )
         if new_text == text:
-            raise Refusal(f"{victim.name} has no 'title:' line to mutate")
+            raise Refusal(
+                f"{victim.name} has no 'title:' line to mutate",
+                reason="harness-broken",
+            )
         victim.write_text(new_text, encoding="utf-8")
         return f"rewrote the title of {victim.name}"
     if kind == "truncate-body":
         head, sep, body = text.partition("\n---\n")
         if not sep or len(body) < 40:
-            raise Refusal(f"{victim.name} has no body long enough to truncate")
+            raise Refusal(
+                f"{victim.name} has no body long enough to truncate",
+                reason="harness-broken",
+            )
         victim.write_text(head + sep + body[: len(body) // 2] + "\n", encoding="utf-8")
         return f"truncated the body of {victim.name}"
-    raise Refusal(f"unknown injection {kind!r}")
+    raise Refusal(f"unknown injection {kind!r}", reason="harness-broken")
 
 
 # --- Per-repo run -------------------------------------------------------------
@@ -1038,6 +1169,11 @@ class RepoResult:
     old_count: int = 0
     new_count: int = 0
     conversion: str = ""
+    #: What 0.7 alone did to the store, in one clause, independent of any
+    #: comparison. Kept apart from :attr:`conversion` because a refusal that
+    #: never reaches a comparison still has this much to report, and because
+    #: it must name whether the round trip was VERIFIED rather than implying it.
+    conversion_headline: str = ""
     comparisons: list[Comparison] = field(default_factory=list)
     injected: str | None = None
     old_db_records: dict[str, dict] = field(default_factory=dict)
@@ -1073,14 +1209,18 @@ def run_repo(
 ) -> RepoResult:
     source = repo / ".seeds"
     if not source.is_dir():
-        raise Refusal(f"{repo}: no .seeds directory")
+        raise Refusal(f"{repo}: no .seeds directory", reason="not-a-store")
     if (source / "seeds").is_dir():
         raise Refusal(
             f"{repo}: .seeds/seeds/ already exists, so this store is already "
-            "converted; there is no pre-conversion behaviour left to compare"
+            "converted; there is no pre-conversion behaviour left to compare",
+            reason="already-converted",
         )
     if not (source / "seeds.db").exists() and not (source / "seeds.jsonl").exists():
-        raise Refusal(f"{repo}: .seeds holds neither seeds.db nor seeds.jsonl")
+        raise Refusal(
+            f"{repo}: .seeds holds neither seeds.db nor seeds.jsonl",
+            reason="not-a-store",
+        )
 
     result = RepoResult(repo=repo)
     result.source_jsonl_records = read_jsonl(source / "seeds.jsonl")
@@ -1101,11 +1241,14 @@ def run_repo(
     try:
         report = convert(new_dir / ".seeds")
     except ConversionError as exc:
-        raise Refusal(f"{repo}: seeds convert refused: {exc}") from exc
+        raise Refusal(
+            f"{repo}: seeds convert refused: {exc}", reason="convert-crashed"
+        ) from exc
     except Exception as exc:
         raise Refusal(
             f"{repo}: seeds convert CRASHED on this store, so 0.7 behaviour cannot "
-            f"be observed at all: {type(exc).__name__}: {exc}"
+            f"be observed at all: {type(exc).__name__}: {exc}",
+            reason="convert-crashed",
         ) from exc
     result.dropped_fixtures = frozenset(report.dropped_fixtures)
     result.dropped_edge_types = frozenset(report.dropped_legacy_edges)
@@ -1119,6 +1262,10 @@ def run_repo(
         + (f"{vestigial}, " if vestigial else "")
         + f"{len(report.forks)} fork(s), "
         f"check {'clean' if report.clean else 'NOT CLEAN'}"
+    )
+    result.conversion_headline = (
+        f"{report.total} seed(s) converted, {report.verified} round-trip "
+        f"verified, check {'clean' if report.clean else 'NOT CLEAN'}"
     )
     if report.forks or report.check_findings:
         result.comparisons.append(
@@ -1144,11 +1291,28 @@ def run_repo(
     #    `sync --flush-only` writes out; 0.7's is `export --json`.
     flush = old("sync", "--flush-only")
     if flush.returncode != 0:
-        raise Refusal(f"{repo}: 0.6 'sync --flush-only' failed: {flush.stderr.strip()}")
+        absent = missing_legacy_table(flush.stderr)
+        if absent is not None:
+            raise Refusal(
+                f"{repo}: seeds 0.6 ({LEGACY_TAG}) cannot read this store either "
+                f"-- its own db.py raises 'no such table: {absent}', and 0.6 never "
+                "runs the migration that would create one -- so there is no 0.6 "
+                "baseline to compare against and nothing here is evidence about "
+                "0.7. This store was already orphaned under 0.6, before 0.7 "
+                f"existed. 0.7 does read it: {result.conversion_headline}",
+                reason="no-0.6-baseline",
+            )
+        raise Refusal(
+            f"{repo}: 0.6 'sync --flush-only' failed: {last_error_line(flush.stderr)}",
+            reason="0.6-command-failed",
+        )
     result.old_db_records = read_jsonl(old_dir / ".seeds" / "seeds.jsonl")
     dump = new("export", "--json")
     if dump.returncode != 0:
-        raise Refusal(f"{repo}: 0.7 'export --json' failed: {dump.stderr.strip()}")
+        raise Refusal(
+            f"{repo}: 0.7 'export --json' failed: {last_error_line(dump.stderr)}",
+            reason="0.7-command-failed",
+        )
     result.new_records = {
         json.loads(line)["id"]: json.loads(line)
         for line in dump.stdout.splitlines()
@@ -1159,7 +1323,8 @@ def run_repo(
     if not result.old_count or not result.new_count:
         raise Refusal(
             f"{repo}: corpus is empty on one side (0.6: {result.old_count}, "
-            f"0.7: {result.new_count}); there is nothing to compare"
+            f"0.7: {result.new_count}); there is nothing to compare",
+            reason="empty-corpus",
         )
 
     recovered = frozenset(set(result.source_jsonl_records) - set(result.old_db_records))
@@ -1341,7 +1506,8 @@ def run_repo(
     if empty:
         raise Refusal(
             f"{repo}: {', '.join(empty)} produced no output on either side, so a "
-            "clean verdict would rest on comparing nothing"
+            "clean verdict would rest on comparing nothing",
+            reason="empty-corpus",
         )
     return result
 
@@ -1366,7 +1532,10 @@ def duckdb_rows(stream: bytes) -> list[tuple[str, str, str]]:
         check=False,
     )
     if proc.returncode != 0:
-        raise Refusal(f"duckdb failed: {proc.stderr.decode(errors='replace').strip()}")
+        raise Refusal(
+            f"duckdb failed: {proc.stderr.decode(errors='replace').strip()}",
+            reason="harness-broken",
+        )
     rows = []
     for line in proc.stdout.decode().splitlines():
         parts = line.split(",")
@@ -1388,7 +1557,10 @@ def cross_repo(results: Sequence[RepoResult]) -> tuple[list[Finding], str]:
         for r in res.new_records.values()
     )
     if not old_stream or not new_stream:
-        raise Refusal("cross-repo: one of the two streams is empty; nothing compared")
+        raise Refusal(
+            "cross-repo: one of the two streams is empty; nothing compared",
+            reason="empty-corpus",
+        )
 
     old_rows = {row[0]: row for row in duckdb_rows(old_stream)}
     new_rows = {row[0]: row for row in duckdb_rows(new_stream)}
@@ -1465,6 +1637,41 @@ def format_repo(result: RepoResult) -> str:
     for finding in result.regressions:
         lines.append(f"    REGRESSION  {finding.command}: {finding.detail}")
     return "\n".join(lines)
+
+
+def group_refusals(refusals: Sequence[tuple[str, str]]) -> list[tuple[str, list[str]]]:
+    """Refusal messages bucketed by cause, in :data:`REFUSAL_REASONS` order.
+
+    The order is the declaration order rather than the encounter order so the
+    summary reads the same way every run, and so the causes stay side by side
+    instead of interleaving with whatever order the repos were named in.
+    """
+    by_reason: dict[str, list[str]] = {}
+    for reason, message in refusals:
+        by_reason.setdefault(reason, []).append(message)
+    ordered = [(r, by_reason[r]) for r in REFUSAL_REASONS if r in by_reason]
+    # A reason the table does not describe would vanish here; report it rather
+    # than silently dropping a refusal out of the summary.
+    ordered.extend((r, m) for r, m in by_reason.items() if r not in REFUSAL_REASONS)
+    return ordered
+
+
+def format_refusals(refusals: Sequence[tuple[str, str]]) -> str:
+    """The refusal summary: causes first, each with its argument, then repos.
+
+    The bead this shape answers (``seeds-4co.27``) is about an operator reading
+    a refusal on ``mani`` and concluding 0.7 broke the repo, when in fact 0.6
+    had already orphaned it. So the cause is stated before the repos it hit,
+    and stated as a reason rather than a slug -- the same discipline
+    :data:`ALLOWLIST` is held to.
+    """
+    out: list[str] = []
+    for reason, messages in group_refusals(refusals):
+        out.append(f"  [{reason}] {len(messages)} repo(s)")
+        why = REFUSAL_REASONS.get(reason, "UNDOCUMENTED refusal reason.")
+        out.extend(f"    why: {line}" for line in why.replace(". ", ".\n").split("\n"))
+        out.extend(f"    - {message}" for message in messages)
+    return "\n".join(out)
 
 
 def format_allowlist() -> str:
@@ -1595,7 +1802,7 @@ def _run(args: argparse.Namespace) -> int:
             print()
 
             results: list[RepoResult] = []
-            refusals: list[str] = []
+            refusals: list[tuple[str, str]] = []
             for i, repo in enumerate(args.repos):
                 try:
                     results.append(
@@ -1609,8 +1816,8 @@ def _run(args: argparse.Namespace) -> int:
                         )
                     )
                 except Refusal as exc:
-                    refusals.append(str(exc))
-                    print(f"REFUSED  {exc}\n")
+                    refusals.append((exc.reason, str(exc)))
+                    print(f"REFUSED  [{exc.reason}] {exc}\n")
             for result in results:
                 print(format_repo(result))
                 print()
@@ -1633,14 +1840,14 @@ def _run(args: argparse.Namespace) -> int:
                         print(f"    REGRESSION  {finding.detail}")
                     print()
                 except Refusal as exc:
-                    refusals.append(str(exc))
-                    print(f"REFUSED  {exc}\n")
+                    refusals.append((exc.reason, str(exc)))
+                    print(f"REFUSED  [{exc.reason}] {exc}\n")
 
             total_regressions = sum(len(r.regressions) for r in results) + len(
                 [f for f in cross if f.is_regression]
             )
         except Refusal as exc:
-            print(f"REFUSED  {exc}", file=sys.stderr)
+            print(f"REFUSED  [{exc.reason}] {exc}", file=sys.stderr)
             return 2
 
     if args.inject:
@@ -1659,7 +1866,11 @@ def _run(args: argparse.Namespace) -> int:
         return 1
 
     if refusals:
-        print(f"REFUSED on {len(refusals)} repo(s); nothing was proved about them.")
+        print(
+            f"REFUSED on {len(refusals)} repo(s); nothing was compared for them. "
+            "By cause:"
+        )
+        print(format_refusals(refusals))
         return 2
     if total_regressions:
         print(f"FAIL: {total_regressions} unexplained difference(s).")

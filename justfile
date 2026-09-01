@@ -114,7 +114,10 @@ flake-deps:
 # one workflow that spans repos. Give it two or more repos for that to mean
 # anything.
 #
-# Exit 0 clean, 1 with unexplained differences, 2 when it refuses to guess.
+# Exit 0 clean, 1 with unexplained differences, 2 when it refuses to guess. A
+# refusal is named -- the summary groups the refused repos by cause and prints
+# the argument for each, because "seeds 0.6 cannot read this store either" and
+# "seeds 0.7's converter crashed" call for opposite responses.
 # Every run tees a timestamped log into claude_stuff/ and prints the path.
 #
 # Usage: just differential ~/projects/outins/vocabulary_formats ~/projects/outins/epc

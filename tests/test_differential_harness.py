@@ -662,3 +662,148 @@ def test_the_invariant_detector_actually_fires():
 def test_every_justification_is_a_real_argument():
     for name, why in dh.ALLOWLIST.items():
         assert len(why) > 120, f"{name}'s justification is too thin to be one"
+
+
+# --- Refusal reasons ----------------------------------------------------------
+#
+# A refusal is an outcome, not an error, and which outcome it is decides what
+# the operator should do next. `mani` (bead seeds-4co.27) is the case that
+# forced the distinction: seeds 0.6 cannot read that store either, so its
+# refusal is a fact about a repo orphaned before 0.7 existed -- the opposite of
+# the "0.7 broke my repo" a bare traceback in the same slot implied.
+
+
+def cited_refusal_reasons(source: str) -> set[str]:
+    """Every string literal passed as ``Refusal(..., reason=...)``."""
+    found = set()
+    for node in ast.walk(ast.parse(source)):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+            continue
+        if node.func.id != "Refusal":
+            continue
+        for kw in node.keywords:
+            if kw.arg == "reason" and isinstance(kw.value, ast.Constant):
+                found.add(kw.value.value)
+    return found
+
+
+def test_every_refusal_declares_a_documented_reason():
+    source = SCRIPT.read_text(encoding="utf-8")
+    cited = cited_refusal_reasons(source)
+    assert cited, "the AST walk found no reasons at all, so it proves nothing"
+    assert cited <= set(dh.REFUSAL_REASONS), (
+        f"refusal reason(s) with no written explanation: "
+        f"{sorted(cited - set(dh.REFUSAL_REASONS))}"
+    )
+
+
+def test_no_reason_is_documented_but_unreachable():
+    # The inverse gate: a described cause nothing can raise is a lie about what
+    # the harness can conclude.
+    source = SCRIPT.read_text(encoding="utf-8")
+    unreachable = set(dh.REFUSAL_REASONS) - cited_refusal_reasons(source)
+    assert not unreachable, f"documented but never raised: {sorted(unreachable)}"
+
+
+def test_the_reason_detector_actually_fires():
+    assert cited_refusal_reasons('raise Refusal("x", reason="invented")') == {
+        "invented"
+    }
+    assert "invented" not in dh.REFUSAL_REASONS
+
+
+def test_the_three_causes_the_ruling_separates_are_distinct():
+    # @aguynamedryan, 2026-09-01: keep refusing, but distinguish WHY. These
+    # three must not collapse into one bucket.
+    for reason in ("empty-corpus", "convert-crashed", "no-0.6-baseline"):
+        assert reason in dh.REFUSAL_REASONS
+    texts = [dh.REFUSAL_REASONS[r] for r in dh.REFUSAL_REASONS]
+    assert len(set(texts)) == len(texts), "two causes share one explanation"
+
+
+def test_every_refusal_reason_is_a_real_argument():
+    for name, why in dh.REFUSAL_REASONS.items():
+        assert len(why) > 120, f"{name}'s explanation is too thin to be one"
+
+
+def test_refusal_carries_its_reason():
+    exc = dh.Refusal("nope", reason="empty-corpus")
+    assert exc.reason == "empty-corpus"
+    assert str(exc) == "nope"
+
+
+@pytest.mark.parametrize(
+    "stderr,expected",
+    [
+        # The real v0.6.0 failure on mani, trimmed to its last two lines.
+        (
+            '  File "/x/src/seeds/db.py", line 682, in get_relationships\n'
+            "sqlite3.OperationalError: no such table: relationships\n",
+            "relationships",
+        ),
+        # Any other missing table is the same class of fact.
+        ("sqlite3.OperationalError: no such table: config\n", "config"),
+        # A 0.6 failure that is NOT a missing table must not be mistaken for
+        # one: it says nothing about whether 0.6 could read the store.
+        ("sqlite3.OperationalError: database is locked\n", None),
+        ("Traceback (most recent call last):\nValueError: bad id\n", None),
+        ("", None),
+        # A seed body quoting the phrase is not an exception line. The harness
+        # echoes bodies, so the anchor is what keeps this from misfiring.
+        ("we hit 'no such table: relationships' back in March\n", None),
+        # Nor is a differently-typed error that merely mentions the words.
+        ("RuntimeError: no such table: relationships\n", None),
+    ],
+)
+def test_missing_legacy_table(stderr, expected):
+    assert dh.missing_legacy_table(stderr) == expected
+
+
+@pytest.mark.parametrize(
+    "stderr,expected",
+    [
+        ("a\nb\nsqlite3.OperationalError: boom\n\n", "sqlite3.OperationalError: boom"),
+        ("   only line   \n", "only line"),
+        ("\n\n", "(no output on stderr)"),
+        ("", "(no output on stderr)"),
+    ],
+)
+def test_last_error_line(stderr, expected):
+    assert dh.last_error_line(stderr) == expected
+
+
+def test_refusals_group_by_cause_in_declaration_order():
+    refusals = [
+        ("no-0.6-baseline", "mani: ..."),
+        ("empty-corpus", "beads: ..."),
+        ("no-0.6-baseline", "other: ..."),
+        ("empty-corpus", "agent_assessor: ..."),
+    ]
+    # Grouped, and ordered by REFUSAL_REASONS rather than by encounter, so a
+    # run reads the same way whatever order the repos were named in.
+    assert dh.group_refusals(refusals) == [
+        ("no-0.6-baseline", ["mani: ...", "other: ..."]),
+        ("empty-corpus", ["beads: ...", "agent_assessor: ..."]),
+    ]
+    assert list(dh.REFUSAL_REASONS).index("no-0.6-baseline") < list(
+        dh.REFUSAL_REASONS
+    ).index("empty-corpus")
+
+
+def test_an_undocumented_reason_still_reaches_the_summary():
+    # It must never be silently dropped: a refusal that vanishes from the
+    # summary is a repo the operator thinks was proved.
+    grouped = dh.group_refusals([("invented", "somewhere: ...")])
+    assert grouped == [("invented", ["somewhere: ..."])]
+    assert "somewhere: ..." in dh.format_refusals([("invented", "somewhere: ...")])
+    assert "UNDOCUMENTED" in dh.format_refusals([("invented", "somewhere: ...")])
+
+
+def test_the_summary_names_each_cause_before_the_repos_it_hit():
+    text = dh.format_refusals(
+        [("no-0.6-baseline", "mani: ..."), ("empty-corpus", "beads: ...")]
+    )
+    assert text.index("[no-0.6-baseline]") < text.index("mani: ...")
+    assert text.index("mani: ...") < text.index("[empty-corpus]")
+    # And the cause is spelled out, not just slugged.
+    assert "why:" in text
