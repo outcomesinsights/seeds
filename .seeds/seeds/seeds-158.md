@@ -4,7 +4,7 @@ title: "Resolved: seeds audits its own body of knowledge as `winnow` — all fiv
 status: resolved
 type: question
 created_at: 2026-06-15T21:58:55.152165+00:00
-updated_at: 2026-09-01T16:59:38.620538+00:00
+updated_at: 2026-09-01T17:18:38.252837+00:00
 resolved_at: 2026-09-01T16:59:38.620530+00:00
 tags:
   - self-audit
@@ -35,6 +35,9 @@ relationships:
   - target_id: seeds-175.8
     rel_type: relates-to
     created_at: 2026-06-17T16:41:25.466085+00:00
+  - target_id: seeds-187
+    rel_type: relates-to
+    created_at: 2026-09-01T17:18:38.250786+00:00
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
