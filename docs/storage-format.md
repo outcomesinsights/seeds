@@ -289,15 +289,25 @@ checking cannot tell which of the two files is the wrong one.
 | --- | --- | --- |
 | `relates-to` | `relates-to` | symmetric |
 | `questions` | `questioned-by` | directional |
-| `answers` | `answered-by` | directional |
 
-Those five strings are the closed set of legal `rel_type` values.
-`questioned-by` and `answered-by` are storage-side names introduced by this
-document to satisfy the both-ends rule; today's `RelationType` in `models.py`
-carries only `relates-to`, `questions`, and `answers`, so phase 2 adds the two
-inverses when it builds the writer. Adding a sixth type in future means adding
-its inverse in the same change — a directional type with no inverse cannot be
-stored in this format at all.
+Those three strings are the closed set of legal `rel_type` values.
+`questioned-by` is a storage-side name introduced by this document to satisfy the
+both-ends rule; today's `RelationType` in `models.py` has no such member, so
+phase 2 adds it when it builds the writer. Adding a further type in future means
+adding its inverse in the same change — a directional type with no inverse cannot
+be stored in this format at all.
+
+**`answers` is dropped** (@aguynamedryan, ruled 2026-08-31). An earlier draft of
+this document listed `answers`/`answered-by` as a fourth and fifth string. The
+type is vestigial: `seeds answer` (cli.py:1269) stores an answer as the
+question-seed's own **content** and re-stamps `resolved_at` — it has never
+created an edge. Nothing else does either; the only route to one is a hand-run
+`seeds link --type answers`, and the corpus holds **zero** of them against 534
+`relates-to` and 57 `questions`. An edge-based answering model was designed, then
+superseded by the content-field approach before anyone used it, and the enum
+member was left behind. Phase 2 removes `RelationType.ANSWERS` and the `answers`
+choice on `seeds link --type`. This does not touch `seeds answer`, which never
+depended on it.
 
 The symmetry rule `seeds check` enforces: for every edge in A naming B with type
 `T`, B's file contains an edge naming A with type `inverse(T)` and an identical
