@@ -646,10 +646,10 @@ class FieldDivergence:
     """One field the two stores disagreed about, and how the union settled it.
 
     Reported, never silent. Replacement is the normal editing verb for a title,
-    a status, a type and a resolution — ``find_divergence`` deliberately does
-    not guard them for that reason — so the live store wins them. That is a
-    defensible rule and still a discarded value, so the discarded value is
-    printed rather than dropped on the floor.
+    a status, a type and a resolution — the retired sync's divergence guard
+    deliberately did not protect them for that reason — so the live store wins
+    them. That is a defensible rule and still a discarded value, so the
+    discarded value is printed rather than dropped on the floor.
     """
 
     seed_id: str
