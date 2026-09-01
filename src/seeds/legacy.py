@@ -60,6 +60,46 @@ stages the removal wherever git can restore it. What is never deleted is its
 PREFIX_CONFIG_KEY = "prefix"
 """The ``config`` table key the project prefix lived under before §9."""
 
+VESTIGIAL_REL_TYPES = frozenset({"answers"})
+"""Legacy ``rel_type`` values that are dropped rather than translated.
+
+``answers`` is the only one, and it is here because it was ruled vestigial
+(``docs/storage-format.md`` §5.2) *after* real stores had already recorded a
+handful of rows: ``seeds answer`` stores an answer as the question-seed's own
+content and never made an edge, so the only route to one was a hand-run
+``seeds link --type answers``. Removing ``RelationType.ANSWERS`` was right;
+what it missed is that a pre-0.7 SQLite store can still hold the rows. Measured
+2026-09-01 across the 13 unconverted repos on titan: 5 rows in three of them
+(code_set_catalog 3, code_collector 1, habituate 1) against 2,384 edges total.
+
+This set is *not* a general escape hatch. It names values already ruled dead,
+one by one; anything else outside :class:`~seeds.models.RelationType` raises
+:class:`LegacyRelationTypeError` so a future unknown cannot vanish into the
+same bucket.
+"""
+
+
+class LegacyRelationTypeError(ValueError):
+    """A legacy ``relationships`` row names a ``rel_type`` nothing can read.
+
+    Carries the row rather than a message alone, so the converter can render
+    the same diagnostic it renders for the JSONL path — which store, which
+    edge, which value — instead of the bare ``ValueError`` that constructing
+    :class:`~seeds.models.RelationType` eagerly used to raise.
+    """
+
+    def __init__(
+        self, path: Path, source_id: str, target_id: str, rel_type: str
+    ) -> None:
+        self.path = path
+        self.source_id = source_id
+        self.target_id = target_id
+        self.rel_type = rel_type
+        super().__init__(
+            f"{path}: edge {source_id} -> {target_id}: rel_type {rel_type!r} "
+            "is not readable"
+        )
+
 
 def _str_to_datetime(value: str | None) -> datetime | None:
     """An ISO timestamp string as a datetime, or ``None``."""
@@ -126,22 +166,69 @@ class LegacyDatabase:
         return [self._row_to_seed(row) for row in rows]
 
     def get_relationships(self, seed_id: str) -> list[Relationship]:
-        """Every relationship row naming ``seed_id`` at either end."""
+        """Every readable relationship row naming ``seed_id`` at either end.
+
+        A row whose ``rel_type`` is in :data:`VESTIGIAL_REL_TYPES` is skipped —
+        it names a relation already ruled dead, and translating it would invent
+        a semantic nobody chose. It is skipped here rather than filtered by the
+        caller so that ``convert``'s own verification, which re-reads through
+        this same method, sees the same edges the conversion did.
+        The dropped rows are still enumerated, by
+        :meth:`vestigial_relationship_keys`, so a drop is reported and never
+        silent.
+
+        Any *other* unreadable value raises :class:`LegacyRelationTypeError`.
+        """
         conn = self._get_conn()
         rows = conn.execute(
             "SELECT * FROM relationships WHERE source_id = ? OR target_id = ? "
             "ORDER BY created_at",
             (seed_id, seed_id),
         ).fetchall()
-        return [
-            Relationship(
-                source_id=row["source_id"],
-                target_id=row["target_id"],
-                rel_type=RelationType(row["rel_type"]),
-                created_at=_str_to_datetime(row["created_at"]) or now_utc(),
+        relationships: list[Relationship] = []
+        for row in rows:
+            raw: str = row["rel_type"]
+            if raw in VESTIGIAL_REL_TYPES:
+                continue
+            try:
+                rel_type = RelationType(raw)
+            except ValueError as exc:
+                raise LegacyRelationTypeError(
+                    self.path, row["source_id"], row["target_id"], raw
+                ) from exc
+            relationships.append(
+                Relationship(
+                    source_id=row["source_id"],
+                    target_id=row["target_id"],
+                    rel_type=rel_type,
+                    created_at=_str_to_datetime(row["created_at"]) or now_utc(),
+                )
             )
-            for row in rows
-        ]
+        return relationships
+
+    def vestigial_relationship_keys(self) -> list[tuple[str, str, str]]:
+        """Every dropped row as ``(source_id, target_id, rel_type)``.
+
+        Identities rather than a count, because the same edge is usually
+        recorded in *both* legacy stores — the SQLite and the JSONL export of
+        it — and the converter reports how many edges it dropped, not how many
+        rows across how many files said so. The caller unions these with the
+        JSONL's and tallies once.
+
+        Read table-wide rather than accumulated during
+        :meth:`get_relationships`, which only ever visits rows naming a seed
+        that exists: a dead edge pointing at a deleted seed would go uncounted,
+        and an under-reported drop is the failure this exists to prevent.
+        """
+        if "relationships" not in self._tables():
+            return []
+        rows = self._get_conn().execute(
+            "SELECT source_id, target_id, rel_type FROM relationships "
+            f"WHERE rel_type IN ({','.join('?' * len(VESTIGIAL_REL_TYPES))}) "
+            "ORDER BY source_id, target_id, rel_type",
+            tuple(sorted(VESTIGIAL_REL_TYPES)),
+        )
+        return [(row[0], row[1], row[2]) for row in rows]
 
     def _get_config(self, key: str) -> str | None:
         if "config" not in self._tables():

@@ -320,6 +320,18 @@ member was left behind. Phase 2 removes `RelationType.ANSWERS` and the `answers`
 choice on `seeds link --type`. This does not touch `seeds answer`, which never
 depended on it.
 
+That "zero" was measured on this repo alone, and it does not hold everywhere.
+Re-measured 2026-09-01 across the 13 unconverted repos on titan: **5 `answers`
+rows survive in three of them** (code_set_catalog 3, code_collector 1,
+habituate 1) against 2,384 edges in total — someone did hand-run
+`seeds link --type answers`. Ruled the same day (@aguynamedryan): `seeds convert`
+**drops those rows and reports the count**, the way it already drops the legacy
+`questions` table. Translating them would preserve five edges by inventing a
+direction nobody chose, for a relation already ruled vestigial. Any *other*
+unreadable `rel_type` is a hard error naming the store, the edge and this
+section — not a silent drop, and never the bare `ValueError` that reading the
+old SQLite store used to raise.
+
 The symmetry rule `seeds check` enforces: for every edge in A naming B with type
 `T`, B's file contains an edge naming A with type `inverse(T)` and an identical
 `created_at`. `seeds check` additionally verifies that `target_id` names a file

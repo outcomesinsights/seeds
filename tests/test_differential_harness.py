@@ -234,12 +234,13 @@ def record(**overrides):
     return base
 
 
-def export(old, new, *, dropped=NONE, recovered=NONE):
+def export(old, new, *, dropped=NONE, recovered=NONE, dropped_edges=NONE):
     return dh.classify_export(
         {r["id"]: r for r in old},
         {r["id"]: r for r in new},
         dropped_fixtures=dropped,
         recovered=recovered,
+        dropped_edge_types=dropped_edges,
     )
 
 
@@ -314,6 +315,34 @@ def test_a_lost_edge_is_a_regression():
     findings = export([record(relationships=[edge("p-b", "relates-to")])], [record()])
     assert rules(findings) == (None,)
     assert "was lost" in findings[0].detail
+
+
+def test_a_lost_edge_the_converter_reported_dropping_is_allowlisted():
+    """The ruled `answers` drop is a declared difference, not a regression."""
+    findings = export(
+        [record(relationships=[edge("p-b", "answers")])],
+        [record()],
+        dropped_edges=frozenset({"answers"}),
+    )
+    assert rules(findings) == ("vestigial-answers-dropped",)
+
+
+def test_a_lost_edge_the_converter_never_mentioned_is_still_a_regression():
+    """The allowlist is the converter's own report, not the string 'answers'.
+
+    An `answers` edge that vanished from a run whose report claimed no dropped
+    edges is the silent loss this harness exists to catch.
+    """
+    assert rules(
+        export([record(relationships=[edge("p-b", "answers")])], [record()])
+    ) == (None,)
+    assert rules(
+        export(
+            [record(relationships=[edge("p-b", "relates-to")])],
+            [record()],
+            dropped_edges=frozenset({"answers"}),
+        )
+    ) == (None,)
 
 
 # --- classify_show ------------------------------------------------------------
