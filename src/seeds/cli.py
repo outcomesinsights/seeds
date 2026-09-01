@@ -20,6 +20,7 @@ from seeds.check import (
     format_findings,
 )
 from seeds.convert import ConversionError, convert, format_report
+from seeds.history import format_history, seed_history
 from seeds.jsonexport import ExportError, export_json
 from seeds.legacy import JSONL_FILE
 from seeds.models import (
@@ -816,6 +817,49 @@ def show(
             click.echo(f.name)
     else:
         click.echo(output)
+
+
+@main.command("history")
+@click.argument("seed_id")
+@pass_context
+def history_cmd(ctx: Context, seed_id: str) -> None:
+    """Show how a seed changed, commit by commit, across the conversion.
+
+    Each line is one commit in which this seed actually changed: the date, the
+    author, the fields that differ from the previous revision, and the commit
+    subject. Commits that touched the store without touching this seed are not
+    listed.
+
+    It structures and labels; it NEVER summarises. Naming which fields changed
+    is deterministic and every line is checkable against `git show`. Saying what
+    a change *meant* is judgment, and a rolling summary of a deliberation is the
+    decision log seeds exists not to be -- so that reading is yours to make.
+
+    A seed that predates conversion has its history in two places, and both are
+    walked as one chain: its own .seeds/seeds/<id>.md back to the conversion
+    commit, and .seeds/seeds.jsonl before it. That file stops being written on
+    conversion day, but its git history stays load-bearing forever -- never
+    filter it out of the repository as cleanup.
+    """
+    store = ctx.get_store()
+
+    record = store.get(seed_id)
+    if record is None:
+        click.echo(f"Error: Seed '{seed_id}' not found.", err=True)
+        sys.exit(1)
+
+    try:
+        history = seed_history(store.seeds_dir, record)
+    except (GitUnavailable, ValueError) as exc:
+        click.echo(
+            f"Error: cannot read history -- {exc}\n"
+            "A seed's evolution lives in git and nowhere else, so there is "
+            "nothing to fall back to.",
+            err=True,
+        )
+        sys.exit(1)
+
+    click.echo(format_history(history))
 
 
 @main.command()

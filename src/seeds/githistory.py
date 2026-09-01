@@ -26,16 +26,20 @@ from __future__ import annotations
 
 import subprocess
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
 from seeds.gitstage import _subprocess_env
 
 __all__ = [
+    "Commit",
     "GitUnavailable",
     "commit_counts",
+    "path_commits",
     "read_blobs",
     "repo_root",
     "rev_exists",
+    "show_file",
     "tree_files",
 ]
 
@@ -172,3 +176,86 @@ def read_blobs(root: Path, shas: list[str]) -> dict[str, str]:
         out[sha] = data[start : start + size].decode("utf-8", errors="replace")
         pos = start + size + 1  # the trailing newline cat-file adds
     return out
+
+
+# --- Per-path history (seeds history) ----------------------------------------
+
+# Field separator inside one log line. US (0x1f) rather than a printable
+# character because every one of the four fields is free text a commit author
+# chose -- an author name with a tab in it, or a subject with a pipe, would
+# otherwise silently shift the columns. git's own %x escape emits it, so no
+# quoting scheme is involved on either side.
+_LOG_SEP = "\x1f"
+
+_LOG_FORMAT = _LOG_SEP.join(("%H", "%ad", "%at", "%an", "%s"))
+
+
+@dataclass(frozen=True)
+class Commit:
+    """One commit, reduced to what a reader of a seed's history needs.
+
+    ``date`` is the *author* date rendered short, because that is when the
+    deliberation happened; ``timestamp`` is the same instant as a unix time, so
+    a caller can order or bound a list without re-parsing the rendering.
+    """
+
+    sha: str
+    date: str
+    timestamp: int
+    author: str
+    subject: str
+
+
+def path_commits(root: Path, relpath: str) -> list[Commit]:
+    """Every commit that touched ``relpath``, **oldest first**.
+
+    Oldest first because the caller is walking an evolution forward and diffing
+    each revision against the one before it; reversing afterwards would mean
+    holding the whole list twice for no gain.
+
+    An empty list means git could answer and the answer is "never committed" --
+    a seed jotted since the last commit, or a path that does not exist. That is
+    a real answer, not a failure, so it is not raised.
+    """
+    proc = _git_text(
+        root,
+        "log",
+        "--reverse",
+        f"--format={_LOG_FORMAT}",
+        "--date=short",
+        "--",
+        relpath,
+    )
+    if proc.returncode != 0:
+        return []
+    commits: list[Commit] = []
+    for line in proc.stdout.splitlines():
+        parts = line.split(_LOG_SEP)
+        if len(parts) != 5:
+            continue
+        sha, date, timestamp, author, subject = parts
+        commits.append(
+            Commit(
+                sha=sha,
+                date=date,
+                timestamp=int(timestamp),
+                author=author,
+                subject=subject,
+            )
+        )
+    return commits
+
+
+def show_file(root: Path, rev: str, relpath: str) -> str | None:
+    """``relpath``'s content at ``rev``, or ``None`` when it is not there.
+
+    ``None`` is the honest answer for "this path did not exist at that commit",
+    which is the ordinary case when walking back past a file's creation. Bytes
+    are decoded with replacement for the same reason :func:`read_blobs` does it:
+    a file that will not decode is a thing history can hold, and a crash here
+    would make the whole history unreadable over one bad revision.
+    """
+    proc = _git_bytes(root, "show", f"{rev}:{relpath}")
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.decode("utf-8", errors="replace")

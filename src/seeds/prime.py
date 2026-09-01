@@ -92,6 +92,7 @@ Seeds should capture the **journey**, not just conclusions. When investigating:
 - `seeds show <id>` - Detailed view; the body renders live content, with superseded text dropped and its heading + marker line kept
 - `seeds show <id> --full` - Detailed view including superseded text
 - `seeds tree <id>` - Hierarchy and relationships
+- `seeds history <id>` - How the seed changed, one line per commit: date, author, changed fields, subject. Structures and labels; never summarises, so the reading is yours
 - `seeds export --json` - The whole corpus as JSONL on stdout (for grep/DuckDB)
 
 ### Displaying Seeds to User

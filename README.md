@@ -73,6 +73,7 @@ seeds tree                               # Hierarchical view
 seeds ready                              # Seeds ready for attention
 seeds blocked                            # Seeds blocked by unresolved children
 seeds search "<regex>"                   # ripgrep over the seed files
+seeds history <id>                       # How this seed changed, commit by commit
 ```
 
 `seeds show` renders **live** content: text inside a superseded scope is
@@ -80,6 +81,19 @@ dropped, while the retired heading and its `> [!SUPERSEDED]` marker line stay,
 so you can see that a position was moved past and why. `--full` prints
 everything. Nothing is removed from the file either way — the render is what is
 selective.
+
+`seeds history` reads a seed's evolution out of git: one line per commit in
+which the seed actually changed, giving the date, the author, the fields that
+differ from the previous revision, and the commit subject. It **structures and
+labels; it never summarises** — naming which fields changed is deterministic and
+every line is checkable against `git show`, while saying what a change *meant*
+is a reading, and that one is yours to make.
+
+A seed older than the conversion to the seed-file store has its history in two
+places, and both are walked as one chain: its own `.seeds/seeds/<id>.md` back to
+the conversion commit, and `.seeds/seeds.jsonl` before it. **That file stops
+being written on conversion day, but its git history stays load-bearing forever
+— never filter it out of the repository as cleanup.**
 
 `seeds search` is a ripgrep pass over `.seeds/seeds/`, case-insensitive, with
 the resolved/abandoned filter inline (`--all` includes them). The query is an

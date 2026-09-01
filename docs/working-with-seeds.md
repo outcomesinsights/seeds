@@ -232,6 +232,7 @@ seeds show seeds-a1b2                           # one seed in detail
 seeds tree                                      # hierarchy view
 seeds prime                                     # context for an AI agent
 seeds search "<regex>"                          # ripgrep over the seed files
+seeds history seeds-a1b2                        # how it changed, commit by commit
 seeds check                                     # verify the seed files
 seeds doctor                                    # store and installation health
 seeds export --json                             # the corpus as JSONL on stdout
