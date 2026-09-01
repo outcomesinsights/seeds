@@ -342,6 +342,21 @@ unreadable `rel_type` is a hard error naming the store, the edge and this
 section — not a silent drop, and never the bare `ValueError` that reading the
 old SQLite store used to raise.
 
+**A store with no `relationships` table at all** converts with an empty edge set
+(@aguynamedryan, ruled 2026-09-01). Two repos on titan — `mani` and `beads` —
+stopped at a schema predating the table entirely, keeping edges in a `related_to`
+JSON column on the seed row, and `seeds convert` used to meet them with a bare
+`sqlite3.OperationalError: no such table: relationships`. Their seeds are intact
+and readable, so stranding them over a table that carries nothing would be the
+worse answer; measured the same day, no absent table anywhere on titan hides an
+edge (`related_to` holds 100 rows across all 15 stores and **zero** whose two
+ends both still exist). The rule is general, not a carve-out for
+`relationships`: `seeds` is the only legacy table the converter cannot do
+without, and `relationships`, `questions` and `config` each read as empty when
+absent and are named in the report. A missing `seeds` table is a
+`ConversionError` naming the store and the table — again, never a raw sqlite3
+error.
+
 The symmetry rule `seeds check` enforces: for every edge in A naming B with type
 `T`, B's file contains an edge naming A with type `inverse(T)` and an identical
 `created_at`. `seeds check` additionally verifies that `target_id` names a file

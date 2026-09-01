@@ -60,6 +60,40 @@ stages the removal wherever git can restore it. What is never deleted is its
 PREFIX_CONFIG_KEY = "prefix"
 """The ``config`` table key the project prefix lived under before §9."""
 
+REQUIRED_TABLES = frozenset({"seeds"})
+"""Legacy tables without which there is nothing to convert.
+
+``seeds`` alone, and the test is not "does the reader touch it" but "does it
+carry deliberation". A store missing this table holds no seed bodies, no
+titles and no ids, so there is no salvage to attempt and no honest way to
+proceed — the reader refuses, naming the store and the table.
+
+Everything else the reader touches is in :data:`OPTIONAL_TABLES`.
+"""
+
+OPTIONAL_TABLES = frozenset({"relationships", "questions", "config"})
+"""Legacy tables whose absence means "empty", not "broken".
+
+None of the three carries a seed. ``relationships`` carries edges *between*
+seeds, ``questions`` is debris the converter drops wholesale anyway, and
+``config`` carries one string the converter can derive from the ids when it is
+missing. Absent, each reads as empty and the conversion continues.
+
+This is the general rule, not a carve-out for ``relationships``. A pre-0.7
+store is whatever schema it happened to stop at: ``mani`` and ``beads`` on
+titan hold only ``seeds`` and ``questions``, a shape older than the
+relationships table itself, and ``seeds convert`` used to meet it with a bare
+``sqlite3.OperationalError``. Ruled 2026-09-01 (@aguynamedryan): a missing
+``relationships`` table is "no relationships" — the 14 seeds in ``mani`` are
+intact and readable, and stranding them over a table that carries nothing
+would be the worse answer. Measured the same day, all 15 legacy stores on
+titan agree: nowhere does an absent table hide an edge.
+
+The JSONL reader has always behaved this way — a record with no
+``relationships`` key reads as a record with no edges — so this brings the
+SQLite reader to the same rule rather than inventing one for it.
+"""
+
 VESTIGIAL_REL_TYPES = frozenset({"answers"})
 """Legacy ``rel_type`` values that are dropped rather than translated.
 
@@ -77,6 +111,25 @@ one by one; anything else outside :class:`~seeds.models.RelationType` raises
 :class:`LegacyRelationTypeError` so a future unknown cannot vanish into the
 same bucket.
 """
+
+
+class LegacyMissingTableError(LookupError):
+    """A legacy store lacks a table the reader cannot do without.
+
+    Carries the store and the missing names rather than a message alone, for
+    the same reason :class:`LegacyRelationTypeError` does: the converter
+    renders its own diagnostic naming which store and which table, instead of
+    letting SQLite's ``no such table: …`` reach the operator as a traceback
+    with no path in it.
+
+    Only :data:`REQUIRED_TABLES` can raise this. An absent
+    :data:`OPTIONAL_TABLES` member reads as empty and never gets here.
+    """
+
+    def __init__(self, path: Path, tables: tuple[str, ...]) -> None:
+        self.path = path
+        self.tables = tables
+        super().__init__(f"{path}: missing legacy table(s): {', '.join(tables)}")
 
 
 class LegacyRelationTypeError(ValueError):
@@ -101,6 +154,14 @@ class LegacyRelationTypeError(ValueError):
         )
 
 
+def _table_names(conn: sqlite3.Connection) -> set[str]:
+    """Every table name in an open legacy store."""
+    return {
+        row[0]
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+
+
 def _str_to_datetime(value: str | None) -> datetime | None:
     """An ISO timestamp string as a datetime, or ``None``."""
     if value is None:
@@ -114,6 +175,12 @@ class LegacyDatabase:
     Opened through a ``file:…?mode=ro`` URI, so SQLite itself refuses a write.
     The file must already exist; ``mode=ro`` does not create one, and the
     converter checks for it before constructing this.
+
+    The schema is checked once, when the connection opens: every
+    :data:`REQUIRED_TABLES` member must be there or nothing is read at all.
+    Checking at the door rather than inside each query means a store too old to
+    convert says so before it has half-converted, and says it the same way
+    whichever method the caller reached for first.
     """
 
     def __init__(self, path: Path) -> None:
@@ -124,6 +191,10 @@ class LegacyDatabase:
         if self._conn is None:
             conn = sqlite3.connect(f"file:{self.path.resolve()}?mode=ro", uri=True)
             conn.row_factory = sqlite3.Row
+            missing = REQUIRED_TABLES - _table_names(conn)
+            if missing:
+                conn.close()
+                raise LegacyMissingTableError(self.path, tuple(sorted(missing)))
             self._conn = conn
         return self._conn
 
@@ -134,12 +205,17 @@ class LegacyDatabase:
             self._conn = None
 
     def _tables(self) -> set[str]:
-        return {
-            row[0]
-            for row in self._get_conn().execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            )
-        }
+        return _table_names(self._get_conn())
+
+    def absent_tables(self) -> list[str]:
+        """Which :data:`OPTIONAL_TABLES` this store does not have, sorted.
+
+        Read as empty rather than refused — but reported, because an operator
+        looking at a converted tree with no edges in it should be able to see
+        that the store never had a place to keep one, rather than wonder what
+        the converter threw away.
+        """
+        return sorted(OPTIONAL_TABLES - self._tables())
 
     def _row_to_seed(self, row: sqlite3.Row) -> Seed:
         return Seed(
@@ -178,7 +254,12 @@ class LegacyDatabase:
         silent.
 
         Any *other* unreadable value raises :class:`LegacyRelationTypeError`.
+
+        A store with no ``relationships`` table at all has no edges, so this
+        returns nothing — see :data:`OPTIONAL_TABLES`.
         """
+        if "relationships" not in self._tables():
+            return []
         conn = self._get_conn()
         rows = conn.execute(
             "SELECT * FROM relationships WHERE source_id = ? OR target_id = ? "
