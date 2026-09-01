@@ -27,6 +27,7 @@ from seeds.export import (
     ImportResult,
     RefusedRecord,
 )
+from seeds.jsonexport import ExportError, export_json
 from seeds.models import (
     DEFAULT_PREFIX,
     RelationType,
@@ -2146,6 +2147,58 @@ def convert_cmd(keep_fixtures: bool) -> None:
         click.echo()
         click.echo(format_findings(report.check_findings), nl=False)
     if not report.clean:
+        sys.exit(1)
+
+
+@main.command("export")
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Emit the corpus as JSON (one object per line) on stdout.",
+)
+def export_cmd(as_json: bool) -> None:
+    """Write the whole corpus to stdout as JSON. Creates no file.
+
+    This is the machine-readable channel that replaces the tracked
+    `.seeds/seeds.jsonl` (docs/storage-format.md §11). Killing that file costs
+    availability, not speed: `grep` and DuckDB both answer questions about a
+    repo's seeds today with no parser written by the caller, and 13 repos of
+    cross-project query depend on it. A pipe restores that without restoring a
+    second store -- nothing tracked, nothing to diverge, nothing to destroy.
+
+    One JSON object per line, so a grep hit is a whole record and several
+    repos' output concatenates into one stream. For ad-hoc SQL, pipe it into
+    DuckDB on demand:
+
+        seeds export --json | duckdb -c "SELECT status, count(*)
+          FROM read_json_auto('/dev/stdin') GROUP BY 1"
+
+    Either the whole corpus is written or nothing is: a file the reader refuses
+    aborts before the first byte, because a stream that stops halfway looks
+    exactly like a repo with fewer seeds.
+    """
+    if not as_json:
+        # JSON is the only format, but a bare `seeds export` must not guess.
+        # The retired command of this name wrote a tracked file; anyone typing
+        # it from muscle memory should be told the shape changed, not handed a
+        # megabyte of stdout.
+        click.echo(
+            "Error: 'seeds export' needs a format. Pass --json to write the "
+            "corpus to stdout as JSON; it is the only format.",
+            err=True,
+        )
+        sys.exit(2)
+
+    seeds_dir = find_seeds_dir()
+    if seeds_dir is None:
+        click.echo("Error: seeds not initialized. Run 'seeds init' first.", err=True)
+        sys.exit(1)
+
+    try:
+        export_json(seeds_dir, sys.stdout)
+    except ExportError as exc:
+        click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
 
