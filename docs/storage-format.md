@@ -509,4 +509,8 @@ opposite reason — `.seeds/.gitignore` excludes `*.db`, so git holds no copy to
 restore from.
 
 Machine consumers are served by `seeds export --json`, a pipe to stdout, not a
-tracked file.
+tracked file — and it serves **structured extraction** (pipe it into DuckDB),
+not search. Full-text search across many repos is ripgrep's, and one glob:
+`rg -l "adjudicat" ~/projects/*/.seeds/seeds/`. That is an upgrade on grepping
+the JSONL, which returned a 120-character slice of one escaped line where rg
+puts the seed id in the path and gives real context.

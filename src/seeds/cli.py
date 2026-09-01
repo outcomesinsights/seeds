@@ -1897,19 +1897,29 @@ def convert_cmd(keep_fixtures: bool) -> None:
 def export_cmd(as_json: bool) -> None:
     """Write the whole corpus to stdout as JSON. Creates no file.
 
-    This is the machine-readable channel that replaces the tracked
-    `.seeds/seeds.jsonl` (docs/storage-format.md §11). Killing that file costs
-    availability, not speed: `grep` and DuckDB both answer questions about a
-    repo's seeds today with no parser written by the caller, and 13 repos of
-    cross-project query depend on it. A pipe restores that without restoring a
-    second store -- nothing tracked, nothing to diverge, nothing to destroy.
+    This serves STRUCTURED EXTRACTION: a consumer that wants fields, not
+    matches -- counts by status, a join against beads, anything you would write
+    SQL for. Pipe it into DuckDB on demand:
 
-    One JSON object per line, so a grep hit is a whole record and several
-    repos' output concatenates into one stream. For ad-hoc SQL, pipe it into
-    DuckDB on demand:
-
+    \b
         seeds export --json | duckdb -c "SELECT status, count(*)
           FROM read_json_auto('/dev/stdin') GROUP BY 1"
+
+    FULL-TEXT SEARCH ACROSS REPOS IS RIPGREP'S JOB, not this command's. A seed
+    is a markdown file, so it is one glob over the stores:
+
+    \b
+        rg -l "adjudicat" ~/projects/*/.seeds/seeds/
+        rg -i -C2 "immutable row" ~/projects/*/.seeds/seeds/
+
+    which is better than what it replaces -- the seed id is in the path and you
+    get real context lines, where grepping the retired `.seeds/seeds.jsonl`
+    returned a 120-character slice of one escaped line.
+
+    So this command exists because a pipe to stdout costs nothing -- no second
+    store, nothing to diverge, nothing to sync -- and NOT because searching
+    across repos needs it. One JSON object per line, so a grep hit is still a
+    whole record and several repos' output concatenates into one stream.
 
     Either the whole corpus is written or nothing is: a file the reader refuses
     aborts before the first byte, because a stream that stops halfway looks

@@ -103,6 +103,22 @@ Seeds should capture the **journey**, not just conclusions. When investigating:
 - `seeds recent [--since=7d]` - Recently touched (any status)
 - `seeds search '<regex>'` - ripgrep over the seed files (case-insensitive; no stemming, so search for the stem: `merg` finds both `merge` and `merging`)
 
+### Searching Across Repos (use ripgrep directly — there is no seeds verb)
+
+A seed is a markdown file, so searching *many* projects at once is one glob over
+their stores. Use this recipe; do not invent a shell loop, and do not read
+`.seeds/seeds.jsonl` — it is retired, and stale wherever it still exists.
+
+```
+rg -l "adjudicat" ~/projects/*/.seeds/seeds/          # which repos mention it
+rg -i -C2 "immutable row" ~/projects/*/.seeds/seeds/  # with context lines
+```
+
+The seed id is in the file path and you get real context, which is strictly
+better than the 120-character slice of one escaped line that grepping the
+retired JSONL used to return. Substitute the directory that holds the projects
+you mean (a habitat's root, `~/projects/<org>/`, or `..` from a sibling repo).
+
 ### Creating
 - `seeds create --title="..." --type=idea --tags=foo,bar` - Full creation
 - `seeds create --title="..." --parent=<id>` - Create child seed
@@ -125,7 +141,7 @@ Seeds should capture the **journey**, not just conclusions. When investigating:
 - `seeds show <id> --full` - Detailed view including superseded text
 - `seeds tree <id>` - Hierarchy and relationships
 - `seeds history <id>` - How the seed changed, one line per commit: date, author, changed fields, subject. Structures and labels; never summarises, so the reading is yours
-- `seeds export --json` - The whole corpus as JSONL on stdout (for grep/DuckDB)
+- `seeds export --json` - The whole corpus as JSONL on stdout, for STRUCTURED extraction (pipe it into DuckDB and query it as a table). For text search across repos, use the rg recipe above instead
 
 ### Displaying Seeds to User
 Claude Code CLI truncates bash output, so users can't see full seed content from `seeds show`.

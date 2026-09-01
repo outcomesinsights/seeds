@@ -1,11 +1,13 @@
 """Tests for ``seeds export --json`` (bead ``seeds-4co.12``).
 
 This is a *replacement channel*, not a feature: on conversion day
-`.seeds/seeds.jsonl` stops being written, and everything that reads a repo's
-seeds without seeds installed — ``grep``, DuckDB, 13 repos of cross-project
-query — has to move onto this pipe. So the assertions here are about the two
-properties that channel has to keep, and both of them fail *quietly* if they
-break:
+`.seeds/seeds.jsonl` stops being written, and everything that wants a repo's
+seeds as FIELDS without seeds installed — DuckDB, and anything else you would
+write SQL for — has to move onto this pipe. (Full-text search does not: that is
+ripgrep over ``*/.seeds/seeds/``, and it got better after conversion. The
+"13 repos of cross-project query" this file used to cite was re-measured for
+seeds-4co.20 and is false.) So the assertions here are about the two properties
+the channel has to keep, and both of them fail *quietly* if they break:
 
 * **Nothing is written to disk.** ``TestNothingIsWritten`` snapshots the whole
   tree before and after. A tracked file appearing again would reintroduce the
@@ -306,6 +308,32 @@ class TestCli:
         result = self._run(cli_runner, tmp_path, monkeypatch, ["export", "--json"])
         assert result.exit_code == 1
         assert "not initialized" in result.stderr
+
+    def test_help_no_longer_claims_cross_project_query_depends_on_it(self, cli_runner):
+        """Bead seeds-4co.20: the claim was re-measured and is false.
+
+        Roughly 2-3 of 26 real calls were structured extraction; the rest were
+        full-text search, which is rg's job and got *better* after conversion.
+        The command stays -- a pipe to stdout costs nothing -- but it must not
+        justify itself with work it does not do.
+        """
+        from seeds.cli import main
+
+        result = cli_runner.invoke(main, ["export", "--help"])
+
+        assert result.exit_code == 0
+        assert "13 repos" not in result.output
+        assert "cross-project query depend" not in result.output
+
+    def test_help_says_structured_extraction_and_points_search_at_rg(self, cli_runner):
+        from seeds.cli import main
+
+        result = cli_runner.invoke(main, ["export", "--help"])
+
+        assert "STRUCTURED EXTRACTION" in result.output
+        assert "duckdb" in result.output
+        assert "rg -l" in result.output
+        assert "/.seeds/seeds/" in result.output
 
 
 @pytest.mark.skipif(shutil.which("duckdb") is None, reason="duckdb CLI not installed")
