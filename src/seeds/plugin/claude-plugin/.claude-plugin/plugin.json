@@ -1,7 +1,7 @@
 {
   "name": "seeds",
   "description": "Deliberation workflow skills for the seeds CLI",
-  "version": "0.6.0",
+  "version": "0.7.0a1",
   "author": {
     "name": "Outcomes Insights"
   }

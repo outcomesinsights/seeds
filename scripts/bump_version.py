@@ -23,7 +23,10 @@ PLUGIN_JSON = REPO_ROOT / "src/seeds/plugin/claude-plugin/.claude-plugin/plugin.
 MARKETPLACE_JSON = REPO_ROOT / "src/seeds/plugin/.claude-plugin/marketplace.json"
 
 # Accepts X.Y.Z with an optional pre-release/build suffix (e.g. 1.2.3, 1.2.3rc1).
-VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.]+)?$")
+# PEP 440 allows a pre-release suffix with NO separator -- 0.7.0a1 is the
+# canonical spelling of an alpha, and 0.7.0-a1 normalizes to exactly it.
+# The separator was required here, which rejected the canonical form.
+VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-._]?[0-9A-Za-z][0-9A-Za-z.]*)?$")
 
 
 def _replace_once(path: Path, pattern: str, replacement: str) -> None:
