@@ -4,7 +4,7 @@ title: Files-as-truth puts the seed store inside every repo tool's default scope
 status: captured
 type: concern
 created_at: 2026-09-01T05:23:43.302048+00:00
-updated_at: 2026-09-01T15:56:09.112922+00:00
+updated_at: 2026-09-02T16:23:33.693220+00:00
 tags:
   - storage
   - files-as-truth
@@ -23,6 +23,9 @@ relationships:
   - target_id: seeds-29ar
     rel_type: relates-to
     created_at: 2026-09-01T15:56:09.109878+00:00
+  - target_id: seeds-rkt6
+    rel_type: relates-to
+    created_at: 2026-09-02T16:23:33.691447+00:00
 ---
 
 Found within minutes of converting the real store, 2026-09-01, by the post-conversion gate rather than by anyone predicting it.
