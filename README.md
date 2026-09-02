@@ -316,9 +316,13 @@ This registers the bundled marketplace and installs the `seeds` plugin under the
 
 ### Available skills
 
+- **`seeds:cutting`** — fires when you say "take a cutting", "set that aside" or "park that for later"; sets a live side-topic aside as a seed carrying the topic *plus* enough of the surrounding deliberation, excerpted into the body, that a later session can resume it cold.
 - **`seeds:feedback`** — frames the next user message as feedback on the agent's prior turn and invites the agent to follow up with its own questions, comments, or criticisms. Useful during deliberation when you want the agent to push back rather than just execute.
+- **`seeds:glean`** — fires at the end of a working session, or when you ask "what did we miss?"; runs `seeds glean` over the session transcript, judges which of its candidates are real deliberation, and offers the survivors for review one at a time.
+- **`seeds:resolve-seeds-from-beads`** — closes the seeds→beads loop after an implementation session: reconciles what actually shipped against the deliberation, captures learnings and an efficacy note back into the originating seeds, then resolves them. Every candidate is verified against shipped code before it is offered for resolution.
 - **`seeds:seeds-to-beads`** — frames the user's request as "convert these seeds into beads" and applies the agreed seeds-to-beads conversion principles (separating action from context, mechanically checkable acceptance criteria, etc.) for that one reply. By default it stops and asks you about decisions the deliberation left open before writing the bead that depends on them; pass `--autonomous` to convert in one pass, with each such call recorded in the bead as an explicit assumption.
 - **`seeds:trellis`** — fires when you say "trellis this" or "make this a trellis"; distills the seed's deliberation into one bounded principle and writes it into durable context via `seeds trellis`.
+- **`seeds:winnow`** — health-checks the *thinking* in the corpus rather than its files ("winnow the seeds", "is our deliberation still sound?") — resolved seeds that contradict each other, resolutions resting on a premise that has since moved, deferrals nobody came back to; runs `seeds winnow`, judges the candidates it scopes, and presents findings for you to rule on.
 
 Re-run `seeds skills install` after upgrading the seeds CLI to pick up updated skill content.
 
