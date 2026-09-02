@@ -1408,6 +1408,113 @@ class TestUpdateContentInput:
         assert "--content-file" in result.output
 
 
+class TestCreateContentInput:
+    """Tests for 'create --content-file' / '--content -' (see bead seeds-3mt).
+
+    ``create`` reaches the same ``_resolve_content`` helper as ``update``, so
+    these assert the symmetry rather than re-deriving the file/stdin semantics:
+    the same three spellings, the same refusal to combine two of them, and the
+    same one spelling for stdin. The asymmetry they replace was measurable --
+    two sub-agents assumed the flag existed on ``create``, found it did not,
+    and each documented a create-then-update workaround.
+    """
+
+    def _content_of(self, seed_id):
+        """The seed's body, minus the file's own terminating newline."""
+        return _store().get(seed_id).body.rstrip("\n")
+
+    def test_content_file_becomes_the_body(self, cli_runner, initialized_env):
+        body = initialized_env / "body.md"
+        body.write_text("line one\n\nline two\n")
+
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Filed seed", "--content-file", str(body)]
+        )
+        assert result.exit_code == 0, result.output
+        assert self._content_of(_extract_created_id(result.output)) == (
+            "line one\n\nline two"
+        )
+
+    def test_content_file_keeps_quotes_and_newlines_intact(
+        self, cli_runner, initialized_env
+    ):
+        """The whole point: a cutting's body never has to survive argv."""
+        awkward = 'it\'s "quoted" $HOME `backticks`\nand a second line'
+        body = initialized_env / "body.md"
+        body.write_text(awkward)
+
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Filed seed", "--content-file", str(body)]
+        )
+        assert result.exit_code == 0, result.output
+        assert self._content_of(_extract_created_id(result.output)) == awkward
+
+    def test_stdin_sentinel_becomes_the_body(self, cli_runner, initialized_env):
+        result = cli_runner.invoke(
+            main,
+            ["create", "-t", "Filed seed", "-c", "-"],
+            input="piped body\n\nsecond paragraph\n",
+        )
+        assert result.exit_code == 0, result.output
+        assert self._content_of(_extract_created_id(result.output)) == (
+            "piped body\n\nsecond paragraph"
+        )
+
+    def test_missing_content_file_is_refused(self, cli_runner, initialized_env):
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Filed seed", "--content-file", "no-such-file.md"]
+        )
+        assert result.exit_code == 1
+        assert "--content-file" in result.stderr
+        assert _store().list_seeds() == []
+
+    def test_content_file_dash_points_at_the_one_stdin_spelling(
+        self, cli_runner, initialized_env
+    ):
+        result = cli_runner.invoke(
+            main,
+            ["create", "-t", "Filed seed", "--content-file", "-"],
+            input="piped body\n",
+        )
+        assert result.exit_code == 1
+        assert "--content -" in result.stderr
+
+    def test_content_and_content_file_together_are_refused(
+        self, cli_runner, initialized_env
+    ):
+        body = initialized_env / "body.md"
+        body.write_text("from the file\n")
+
+        result = cli_runner.invoke(
+            main,
+            [
+                "create",
+                "-t",
+                "Filed seed",
+                "-c",
+                "from argv",
+                "--content-file",
+                str(body),
+            ],
+        )
+        assert result.exit_code == 1
+        assert "ambiguous" in result.stderr
+        assert _store().list_seeds() == []
+
+    def test_neither_option_still_creates_an_empty_body(
+        self, cli_runner, initialized_env
+    ):
+        """Existing behaviour: no --content at all is an empty body, not None."""
+        result = cli_runner.invoke(main, ["create", "-t", "Filed seed"])
+        assert result.exit_code == 0, result.output
+        assert _store().get(_extract_created_id(result.output)).body.strip() == ""
+
+    def test_both_routes_are_documented_in_help(self, cli_runner):
+        result = cli_runner.invoke(main, ["create", "--help"])
+        assert result.exit_code == 0
+        assert "--content-file" in result.output
+
+
 class TestUpdateTagEdits:
     """Tests for 'update --add-tag/--remove-tag' (see bead seeds-3ps).
 

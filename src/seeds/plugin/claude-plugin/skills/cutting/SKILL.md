@@ -45,10 +45,9 @@ Excerpt, do not transcribe. A cutting is a distillation — enough to root, not 
        **Open:** …
        EOF
 
-3. **Create the seed, then attach the body.** `seeds create` takes the title; `seeds update --content-file` reads the body from the file. This is safe immediately after creation — the replacement guard only fires on a seed that has accumulated deliberation:
+3. **Create the seed with that body.** `seeds create --content-file` reads the body straight from the file, so nothing multi-paragraph goes through argv:
 
-       seeds create -t "<the topic, stated to stand alone>" --type exploration --tags cutting
-       seeds update <id> --content-file "$BODY"
+       seeds create -t "<the topic, stated to stand alone>" --type exploration --tags cutting --content-file "$BODY"
 
    Tag it `cutting` so parked topics are findable as a set. Pass `--parent <id>` when the topic belongs under an existing deliberation, and `--type` whatever fits — `question` if the thing parked really is an open question.
 

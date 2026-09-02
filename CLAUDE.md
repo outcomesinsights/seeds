@@ -101,6 +101,7 @@ uv run seeds trellis <id> --to <file> --as "<principle>"   # Record a matured se
 uv run seeds ask "?" --seed=<id>     # Attach question
 uv run seeds answer <q-id> "answer"  # Answer question
 uv run seeds update <id> --type <t>  # Change a seed's type (any string)
+uv run seeds create -t "Title" --content-file <f>   # Create with a body from a file (or --content - for stdin)
 uv run seeds update <id> --content-file <f>   # Replace a body from a file (or --content - for stdin)
 uv run seeds retype --from X --to Y  # Bulk-remap one type to another
 uv run seeds search "<regex>"        # ripgrep over the seed files

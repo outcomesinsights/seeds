@@ -100,13 +100,12 @@ single yes is not a review.
 `seeds jot "<the thought>"` is right for a one-liner — a title-only seed is a legitimate
 shape, not an unfinished one. For anything with a body:
 
-    seeds create -t "<title>" --type <decision|question|exploration|concern|idea>
-    seeds update <id> --content-file <path>
+    seeds create -t "<title>" --type <decision|question|exploration|concern|idea> --content-file <path>
 
-The second step keeps a multi-paragraph body out of argv (`seeds create` takes only `-c`,
-which is fine for a short one). Write the turn reference into the body, and **quote the user
-verbatim** wherever the wording is the point — glean exists because paraphrase loses exactly
-that.
+`--content-file` keeps a multi-paragraph body out of argv (`-c TEXT` is fine for a short
+one, and `--content -` reads stdin). Write the turn reference into the body, and **quote the
+user verbatim** wherever the wording is the point — glean exists because paraphrase loses
+exactly that.
 
 Close by naming what you filed and what you dropped. A candidate that was judged and
 discarded should be visibly discarded, not silently missing.
