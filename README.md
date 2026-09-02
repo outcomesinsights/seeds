@@ -61,7 +61,13 @@ seeds init                              # Creates .seeds/ directory
 seeds jot "Quick thought"               # Minimal friction capture
 seeds create -t "Title" --type idea      # Full seed creation with metadata
 seeds create -t "Sub-idea" --parent <id> # Create a child seed
+seeds create -t "Title" --content-file <path>  # Body from a file, not argv
+cmd | seeds create -t "Title" --content -      # Body from stdin
 ```
+
+`create` and `update` spell the three routes to a body identically: `-c TEXT`,
+`--content-file PATH`, and `--content -` for stdin. See [Evolve](#evolve) for
+why a long body should not travel through argv.
 
 ### Track
 
@@ -116,8 +122,9 @@ cmd | seeds update <id> --content -      # Replace the body from stdin
 A body can get long, and passing one through `-c TEXT` means quoting a
 multi-paragraph string on the command line — easy to truncate or mangle, and
 expensive for an agent, which has to re-emit the whole body verbatim as a shell
-argument. `--content-file` and `--content -` take the same body without argv.
-All three are mutually exclusive, and all three respect the guard that refuses
+argument. `--content-file` and `--content -` take the same body without argv,
+on `create` as well as on `update`.
+All three are mutually exclusive, and on `update` all three respect the guard that refuses
 to replace a body that has been edited since it was created (`--replace`
 overrides it).
 

@@ -332,6 +332,12 @@ STDIN_SENTINEL = "-"
 def _resolve_content(content: str | None, content_file: str | None) -> str | None:
     """Collapse ``--content``/``--content-file`` into the single body to store.
 
+    Shared by ``create`` and ``update``, which spell the three routes to a body
+    identically on purpose: an agent that learned ``--content-file`` on one
+    should not discover the other refuses it (seeds-3mt -- two sub-agents
+    assumed ``create`` had it within the same hour, and both shipped a
+    create-then-update workaround).
+
     A body worth protecting is a body nobody wants in argv. Folding a
     divergence means reproducing the whole existing text verbatim as one shell
     word -- for an agent, reading it into context and re-emitting it, roughly
@@ -351,8 +357,9 @@ def _resolve_content(content: str | None, content_file: str | None) -> str | Non
     A trailing newline is dropped, because every editor and ``>`` redirect adds
     one and ``-c TEXT`` never carries one -- keeping it would make the same
     body differ by its delivery route. Returns ``None`` when neither option was
-    passed (body untouched); an empty file or empty stdin returns ``""``, a
-    deliberate blanking that still has to clear the guard.
+    passed -- which ``update`` reads as "leave the body alone" and ``create``
+    as an empty body; an empty file or empty stdin returns ``""``, a deliberate
+    blanking that on ``update`` still has to clear the guard.
     """
     if content is not None and content_file is not None:
         click.echo(
@@ -512,7 +519,20 @@ SEED_TYPES = [t.value for t in SeedType]
 
 @main.command()
 @click.option("--title", "-t", required=True, help="Title of the seed")
-@click.option("--content", "-c", default="", help="Full content/description")
+@click.option(
+    "--content",
+    "-c",
+    metavar="TEXT",
+    help="Full content/description. Pass - to read the body from stdin.",
+)
+@click.option(
+    "--content-file",
+    metavar="PATH",
+    help=(
+        "Read the content from a file instead of argv (same body as "
+        "--content; cannot be combined with it)"
+    ),
+)
 @click.option(
     "--type",
     "seed_type",
@@ -530,14 +550,27 @@ SEED_TYPES = [t.value for t in SeedType]
 def create(
     ctx: Context,
     title: str,
-    content: str,
+    content: str | None,
+    content_file: str | None,
     seed_type: str,
     tags: str | None,
     parent_id: str | None,
     allow_unknown_refs: bool,
 ) -> None:
-    """Create a new seed."""
+    """Create a new seed.
+
+    The body does not have to travel through argv: --content-file PATH reads it
+    from a file and --content - reads it from stdin, exactly as on `seeds
+    update`. Passing both is refused rather than ranked. A seed worth a
+    multi-paragraph body -- a cutting, say -- is precisely the one that should
+    not be pushed through a shell word, and before this existed the only route
+    was `create` followed by `update --content-file`.
+    """
     store = ctx.get_store()
+
+    body = _resolve_content(content, content_file)
+    if body is None:
+        body = ""
 
     # Generate ID (child ID if parent specified)
     if parent_id:
@@ -549,7 +582,7 @@ def create(
     else:
         seed_id = store.next_id(seed_text=title)
 
-    _validate_id_refs(store, [title, content], allow_unknown_refs)
+    _validate_id_refs(store, [title, body], allow_unknown_refs)
 
     # Parse tags
     tag_list = [t.strip() for t in tags.split(",")] if tags else []
@@ -558,7 +591,7 @@ def create(
         new_record(
             seed_id,
             title,
-            body=content,
+            body=body,
             seed_type=seed_type,
             tags=tag_list,
         )
