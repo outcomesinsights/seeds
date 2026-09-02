@@ -25,7 +25,21 @@ from seeds.check import (
     check_violations,
     format_findings,
 )
-from seeds.convert import ConversionError, convert, format_report
+from seeds.convert import ConversionError, convert
+from seeds.convert import format_report as format_conversion_report
+from seeds.glean import (
+    AUTO_TAG,
+    GleanError,
+    auto_create,
+    format_report,
+    glean_transcript,
+    list_transcripts,
+    mark_gleaned,
+    read_gleaned,
+    resolve_session_id,
+    transcript_path,
+    transcripts_dir,
+)
 from seeds.history import format_history, seed_history
 from seeds.jsonexport import ExportError, export_json
 from seeds.legacy import JSONL_FILE
@@ -1870,6 +1884,153 @@ def check_cmd(smells: bool, against_git: bool) -> None:
         sys.exit(1)
 
 
+@main.command("glean")
+@click.option(
+    "--session",
+    "session_id",
+    help="Glean this session id instead of the current one.",
+)
+@click.option(
+    "--all",
+    "all_sessions",
+    is_flag=True,
+    help="Glean every transcript this project has (a historical pass).",
+)
+@click.option(
+    "--auto",
+    is_flag=True,
+    help=(
+        f"File every candidate as a seed without review, tagged "
+        f"{AUTO_TAG!r} so the pass can be audited or reverted. Opt-in, for "
+        f"bulk historical passes only."
+    ),
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Re-glean a transcript already recorded as gleaned.",
+)
+@click.option(
+    "--since",
+    "since_value",
+    help=(
+        "Bound a --all pass to transcripts modified since this point. ISO date "
+        "(2026-05-08), relative (7d, 2w, 3m, 1y), or 'today'/'yesterday'."
+    ),
+)
+@pass_context
+def glean_cmd(
+    ctx: Context,
+    session_id: str | None,
+    all_sessions: bool,
+    auto: bool,
+    force: bool,
+    since_value: str | None,
+) -> None:
+    """Offer what a session worked out that the corpus does not already hold.
+
+    Reads the Claude Code transcript for a session, extracts questions raised,
+    decisions with their rationale, figures somebody measured, corrections the
+    user made, and question→answer→decision chains — then removes everything a
+    seed already says, and prints what is left.
+
+    The filtering is the point. One ordinary session's transcript is 502KB
+    across 256 turns, most of it tool output; the caller gets a candidate list,
+    never the transcript.
+
+    The session is resolved from $CLAUDE_CODE_SESSION_ID, which Claude Code
+    sets. There is no most-recently-modified guessing: on a host running
+    several agents the newest transcript is routinely somebody else's, and
+    gleaning the wrong session fails silently.
+
+    Nothing here judges a candidate — that is the reviewing skill's job, and
+    this command calls no model. Gleaned transcripts are recorded in
+    .seeds/gleaned.jsonl and skipped on a repeat run unless --force.
+    """
+    store = ctx.get_store()
+    if session_id and all_sessions:
+        click.echo("Error: --session and --all are mutually exclusive.", err=True)
+        sys.exit(1)
+
+    since_dt = None
+    if since_value:
+        try:
+            since_dt = parse_since(since_value)
+        except ValueError as exc:
+            click.echo(f"Error: {exc}", err=True)
+            sys.exit(1)
+
+    # The project root, not the process's cwd: seeds may be invoked from any
+    # directory beneath it, and the transcript directory is named after the
+    # directory Claude Code was started in.
+    project_root = store.seeds_dir.parent
+
+    try:
+        if all_sessions:
+            paths = list_transcripts(project_root, since=since_dt)
+            if not paths:
+                click.echo(
+                    f"No transcripts for this project under "
+                    f"{transcripts_dir(project_root)}."
+                )
+                return
+        elif session_id:
+            paths = [transcript_path(session_id, project_root)]
+        else:
+            paths = [transcript_path(resolve_session_id(), project_root)]
+    except GleanError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    gleaned = read_gleaned(store.seeds_dir)
+    records = store.all()
+
+    reports = 0
+    skipped = 0
+    for path in paths:
+        session = path.stem
+        if session in gleaned and not force:
+            skipped += 1
+            if not all_sessions:
+                click.echo(
+                    f"Session {session} was gleaned "
+                    f"{gleaned[session].date().isoformat()}. Nothing to do; "
+                    f"pass --force to glean it again."
+                )
+            continue
+        try:
+            report = glean_transcript(path, records, session=session)
+        except GleanError as exc:
+            click.echo(f"Error: {exc}", err=True)
+            sys.exit(1)
+        if auto and report.candidates:
+            auto_create(store, report)
+            records = store.all()
+        mark_gleaned(
+            store.seeds_dir,
+            session,
+            candidates=len(report.candidates),
+            created=len(report.created),
+        )
+        if reports:
+            click.echo()
+        click.echo(format_report(report))
+        reports += 1
+
+    if all_sessions:
+        click.echo()
+        click.echo(
+            f"seeds glean --all: {reports} transcript(s) gleaned, "
+            f"{skipped} already recorded."
+        )
+    elif reports and not auto:
+        click.echo()
+        click.echo(
+            "Review these and capture what is worth keeping with `seeds jot` "
+            "or `seeds create`. Nothing above has been written."
+        )
+
+
 @main.command("convert")
 @click.option(
     "--keep-fixtures",
@@ -1917,7 +2078,7 @@ def convert_cmd(keep_fixtures: bool) -> None:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
-    click.echo(format_report(report))
+    click.echo(format_conversion_report(report))
     if report.check_findings:
         click.echo()
         click.echo(format_findings(report.check_findings), nl=False)

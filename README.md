@@ -158,6 +158,35 @@ seeds questions                          # List open questions
 seeds link <id1> <id2>                   # Create bidirectional relationship
 ```
 
+### Glean a session
+
+`seeds glean` reads the Claude Code transcript for a session and offers what was
+worked out in it that the corpus does not already hold: questions raised,
+decisions with their rationale, figures somebody measured, corrections you made,
+and question→answer→decision chains.
+
+```bash
+seeds glean                          # the current session ($CLAUDE_CODE_SESSION_ID)
+seeds glean --session <id>           # a specific one
+seeds glean --all --since 30d        # a bounded historical pass
+seeds glean --force                  # re-glean one already recorded
+```
+
+**The filtering is the point.** Measured on this project's own transcript:
+5.3MB and 251 turns in, 96 candidates and 13KB out. The caller gets a candidate
+list, never the transcript — which is why this is a command and not a prompt.
+Nothing here judges a candidate or calls a model; you decide what is worth a
+seed, and `seeds jot` it.
+
+The session is resolved from `$CLAUDE_CODE_SESSION_ID`, never by picking the
+most recently modified file — on a host running several agents that is
+routinely somebody else's session. Gleaned transcripts are recorded in
+`.seeds/gleaned.jsonl` and skipped on a repeat run unless `--force`.
+
+`--auto` files every candidate without review, tagged `auto-gleaned` so a bulk
+pass can be audited with `seeds list --tag auto-gleaned` or reverted wholesale.
+It is for historical sweeps; the default is suggest-and-review.
+
 ### Storage
 
 **A seed is a file.** Each one lives at `.seeds/seeds/<id>.md` — YAML
