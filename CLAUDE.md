@@ -105,7 +105,9 @@ uv run seeds update <id> --content-file <f>   # Replace a body from a file (or -
 uv run seeds retype --from X --to Y  # Bulk-remap one type to another
 uv run seeds search "<regex>"        # ripgrep over the seed files
 uv run seeds history <id>            # How a seed changed, commit by commit, across the conversion
+uv run seeds glean                   # Candidates for capture from this session's transcript
 uv run seeds check                   # Verify the files; exits non-zero on a violation
+uv run seeds winnow                  # Audit the thinking: neglect, contradiction, staleness
 uv run seeds doctor                  # Store and installation health
 uv run seeds export --json           # The whole corpus as JSONL on stdout
 uv run seeds convert                 # One-time: pre-0.7 SQLite + JSONL -> .seeds/seeds/
