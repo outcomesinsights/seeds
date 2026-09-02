@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import json
 import shlex
 import sys
 from collections.abc import Callable, Sequence
@@ -68,6 +69,12 @@ from seeds.store import (
     questions_asked_about,
     relates_to,
 )
+from seeds.winnow import (
+    FLAVORS,
+    report_as_dict,
+    winnow,
+)
+from seeds.winnow import format_report as format_winnow_report
 
 
 def _uninitialized_error(seeds_dir: Path) -> str:
@@ -2029,6 +2036,73 @@ def glean_cmd(
             "Review these and capture what is worth keeping with `seeds jot` "
             "or `seeds create`. Nothing above has been written."
         )
+
+
+@main.command("winnow")
+@click.option(
+    "--flavor",
+    "flavors",
+    multiple=True,
+    type=click.Choice(FLAVORS),
+    help="Run only these flavors (repeatable). Default: all of them.",
+)
+@click.option(
+    "--since",
+    "since_value",
+    help=(
+        "Replace every age cutoff with one point. ISO date (2026-05-08), "
+        "relative (7d, 2w, 3m, 1y), or 'today'/'yesterday'."
+    ),
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit the report as JSON.")
+@pass_context
+def winnow_cmd(
+    ctx: Context, flavors: tuple[str, ...], since_value: str | None, as_json: bool
+) -> None:
+    """Audit the corpus for unhealthy THINKING, not unhealthy files.
+
+    `seeds check` asks whether the files are valid and `seeds doctor` whether
+    the store is healthy. This asks the third question: is the deliberation
+    still sound? It reports two tiers, and keeps them apart on purpose.
+
+    FACTS need no judgment and are simply true: a deferral nobody came back to,
+    a seed whose every blocker has closed while it stayed open, a seed exploring
+    for half a year.
+
+    CANDIDATES are the verb narrowing and stopping. A contradiction candidate is
+    an edge whose two endpoints assert opposite things about one subject —
+    contradictions live inside clusters, so the search walks the 692-edge graph
+    rather than 49,000 pairs. A staleness candidate is a resolved seed resting
+    on a checkable premise, a version or a measurement; age alone is never
+    evidence and never raises one. An outcome candidate is a resolved seed with
+    downstream beads, where whether it worked cannot be read out of the corpus
+    at all.
+
+    Nothing here judges a candidate and nothing here calls a model. The command
+    is READ-ONLY and always exits 0 — a semantic finding that can fail a build
+    is one people learn to bypass.
+    """
+    store = ctx.get_store()
+
+    since_dt = None
+    if since_value:
+        try:
+            since_dt = parse_since(since_value)
+        except ValueError as exc:
+            click.echo(f"Error: {exc}", err=True)
+            sys.exit(1)
+
+    report = winnow(
+        store.all(),
+        flavors=flavors or FLAVORS,
+        since=since_dt,
+        seeds_dir=store.seeds_dir,
+        prefix=store.get_prefix(),
+    )
+    if as_json:
+        click.echo(json.dumps(report_as_dict(report), indent=2, sort_keys=True))
+        return
+    click.echo(format_winnow_report(report), nl=False)
 
 
 @main.command("convert")

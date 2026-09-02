@@ -56,6 +56,7 @@ from pathlib import Path
 from seeds.models import SeedStatus, now_utc
 from seeds.seedfile import SeedRecord
 from seeds.store import Store, new_record
+from seeds.textmatch import containment, content_tokens
 
 __all__ = [
     "AUTO_TAG",
@@ -357,7 +358,7 @@ _DECISION_RE = re.compile(
 #: verb saying somebody went and looked. Both are shapes a report of routine
 #: work does not have.
 _COMPARISON_RE = re.compile(
-    r"\b\d[\d,.]*\s*(?:of|/|out of|vs\.?|->|→|to)\s*\d",
+    r"\b\d[\d,]*(?:\.\d+)?\s*(?:of|/|out of|vs\.?|->|→|to)\s*\d",
     re.IGNORECASE,
 )
 
@@ -368,7 +369,7 @@ _MEASURED_RE = re.compile(
 )
 
 _FIGURE_RE = re.compile(
-    r"\b\d[\d,.]*\s*(?:%|[KMG]B|ms|sec|seconds?|minutes?|hours?|days?|"
+    r"\b\d[\d,]*(?:\.\d+)?\s*(?:%|[KMG]B|ms|sec|seconds?|minutes?|hours?|days?|"
     r"files?|seeds?|beads?|turns?|rows?|lines?|edges?|commits?|records?|"
     r"tests?|entries|comparisons?)\b",
     re.IGNORECASE,
@@ -477,133 +478,6 @@ def _classify(
     return None
 
 
-_STOPWORDS = frozenset(
-    {
-        "a",
-        "an",
-        "and",
-        "are",
-        "aren't",
-        "as",
-        "at",
-        "be",
-        "been",
-        "but",
-        "by",
-        "can",
-        "could",
-        "did",
-        "didn't",
-        "do",
-        "does",
-        "doesn't",
-        "don",
-        "for",
-        "from",
-        "get",
-        "had",
-        "has",
-        "have",
-        "here",
-        "how",
-        "i",
-        "i'm",
-        "if",
-        "in",
-        "into",
-        "is",
-        "isn't",
-        "it",
-        "it's",
-        "its",
-        "just",
-        "like",
-        "make",
-        "may",
-        "me",
-        "more",
-        "most",
-        "much",
-        "must",
-        "my",
-        "no",
-        "not",
-        "now",
-        "of",
-        "on",
-        "once",
-        "one",
-        "only",
-        "or",
-        "other",
-        "our",
-        "out",
-        "over",
-        "own",
-        "she",
-        "should",
-        "so",
-        "some",
-        "such",
-        "than",
-        "that",
-        "that's",
-        "the",
-        "their",
-        "them",
-        "then",
-        "there",
-        "there's",
-        "these",
-        "they",
-        "this",
-        "those",
-        "through",
-        "to",
-        "too",
-        "under",
-        "until",
-        "up",
-        "use",
-        "used",
-        "very",
-        "was",
-        "wasn't",
-        "we",
-        "we're",
-        "were",
-        "weren't",
-        "what",
-        "what's",
-        "when",
-        "where",
-        "which",
-        "while",
-        "who",
-        "why",
-        "will",
-        "with",
-        "would",
-        "you",
-        "your",
-    }
-)
-
-
-def _tokens(text: str) -> set[str]:
-    """The content words of a phrase, for overlap comparison.
-
-    Interior dots, hyphens and underscores are kept — ``seeds-74.2`` and
-    ``storage-format.md`` are single words here — but trailing ones are
-    stripped. Sentence-final punctuation is otherwise carried into the token,
-    and ``transcript.`` then fails to match ``transcript``, which silently
-    costs an overlap the comparison was counting on.
-    """
-    raw = re.findall(r"[a-z0-9][a-z0-9_.-]*", text.lower())
-    words = (word.strip("._-") for word in raw)
-    return {word for word in words if len(word) >= 3 and word not in _STOPWORDS}
-
-
 #: How far ahead of a question an answer-and-decision may sit and still be read
 #: as the same thread. Six turns is three exchanges.
 _CHAIN_WINDOW = 6
@@ -626,14 +500,14 @@ def _build_chains(candidates: Sequence[Candidate]) -> list[Candidate]:
     consumed: set[int] = set()
     chains: list[Candidate] = []
     for question in questions:
-        q_tokens = _tokens(question.text)
+        q_tokens = content_tokens(question.text)
         for decision in decisions:
             if id(decision) in consumed:
                 continue
             gap = decision.turn - question.turn
             if not 0 <= gap <= _CHAIN_WINDOW:
                 continue
-            if len(q_tokens & _tokens(decision.text)) < _CHAIN_OVERLAP:
+            if len(q_tokens & content_tokens(decision.text)) < _CHAIN_OVERLAP:
                 continue
             consumed.add(id(question))
             consumed.add(id(decision))
@@ -724,21 +598,20 @@ def suppress_captured(
 ) -> tuple[list[Candidate], list[Suppressed]]:
     """Split candidates into what is new and what the corpus already holds."""
     corpus = [
-        (record.id, [_tokens(line) for line in _record_lines(record)])
+        (record.id, [content_tokens(line) for line in _record_lines(record)])
         for record in records
     ]
     kept: list[Candidate] = []
     already: list[Suppressed] = []
     for candidate in candidates:
-        tokens = _tokens(candidate.text)
+        tokens = content_tokens(candidate.text)
         match: str | None = None
         if len(tokens) >= _CAPTURED_MIN_TOKENS:
             for seed_id, line_tokens in corpus:
                 for line in line_tokens:
                     if not line:
                         continue
-                    shared = len(tokens & line)
-                    if shared / len(tokens) >= _CAPTURED_CONTAINMENT:
+                    if containment(tokens, line) >= _CAPTURED_CONTAINMENT:
                         match = seed_id
                         break
                 if match:

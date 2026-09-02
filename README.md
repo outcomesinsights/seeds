@@ -158,6 +158,33 @@ seeds questions                          # List open questions
 seeds link <id1> <id2>                   # Create bidirectional relationship
 ```
 
+### Audit the thinking
+
+`seeds check` asks whether the files are valid and `seeds doctor` whether the
+store is healthy. `seeds winnow` asks the third question: is the *deliberation*
+still sound?
+
+```bash
+seeds winnow                             # every flavor
+seeds winnow --flavor neglect            # just one (repeatable)
+seeds winnow --since 6m                  # move every age cutoff to one point
+seeds winnow --json                      # for a reviewing skill to consume
+```
+
+It reports two tiers and never mixes them. **Facts** need no judgment: a
+deferral nobody came back to, a seed whose every blocker has closed while it
+stayed open, a seed exploring for half a year. **Candidates** are the command
+narrowing and then stopping — a pair of linked seeds that assert opposite
+things, a resolved seed resting on a version or a measurement somebody could go
+and re-check, a resolved seed with downstream beads worth asking about. Every
+candidate line names the judgment still to be made, because the command does not
+make it.
+
+Contradictions live inside clusters, so the search walks **the edge set, not the
+cross product**: on this project's store that is 427 edges rather than 49,141
+pairs. `winnow` is read-only, calls no model, and always exits 0 — a semantic
+finding that can fail a build is one people learn to bypass.
+
 ### Glean a session
 
 `seeds glean` reads the Claude Code transcript for a session and offers what was
