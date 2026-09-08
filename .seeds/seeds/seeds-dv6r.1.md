@@ -5,7 +5,7 @@ status: captured
 type: concern
 parent: seeds-dv6r
 created_at: 2026-09-08T21:02:17.201968+00:00
-updated_at: 2026-09-08T21:02:28.169534+00:00
+updated_at: 2026-09-08T21:14:01.921837+00:00
 tags:
   - storage
   - format
@@ -136,3 +136,57 @@ correction) is for.
 A `.prettierignore` excluding `.seeds/` was added to oimnibus and then reverted on
 @aguynamedryan's instruction: its justification was 1-3, which do not stand, and
 excluding the store would only have preserved the badly-written bodies.
+
+## VERIFIED (2026-09-08): both fixes together make the FORMAT a complete fixed point
+
+@aguynamedryan ruled: chase class B. Simulated it — re-rendered all 1,324 files
+with `_encode_scalar` carrying the escape-minimizing quote rule and with a
+body-less file ending at `---\n`, then ran `prettier --write` over the result:
+
+**0 of 1,324 files changed in the frontmatter or the separator.** Not one. So the
+goal *"a seed file is left unchurned and undamaged by prettier"* is achievable and
+these two writer changes achieve it — at the format layer, which is the layer
+seeds owns and the only layer where prettier can break a *parse*.
+
+No migration is needed for the files already on disk. An old `---\n\n` body-less
+file still parses under the new reader (trailing blank lines are normalized, §2),
+and an old `"...\"..."` scalar still parses too, so nothing breaks and nothing has
+to be rewritten on a schedule: the next `seeds` write renders the file canonical,
+and a prettier run gets there by itself. The only cost of leaving them is that
+`check --smells` reports `non-canonical-bytes` on 44 files until they are touched,
+which is a reason to run one read-and-rewrite pass, not a correctness need.
+
+## The limit: the BODY is not a fixed point and cannot be made one
+
+Same measurement, body layer: **961 of 1,324 bodies are rewritten** by one
+prettier pass.
+
+- **868** are pure re-spelling — `*em*` -> `_em_`, `+` list markers -> `-`,
+  defensive `\_` escapes. Identical rendered markdown.
+- **85** differ only by list-marker respelling under a looser comparison.
+- **82** have 1-3-space-indented non-list lines flattened, which is where the real
+  damage lives.
+- **26 oscillate**: a second prettier pass changes them again. That is *perpetual*
+  churn, unlike the format-layer churn the writer fix removes.
+
+Confirmed damage, seeds-183: a 2-space-indented SQL block — indented, never
+fenced, so CommonMark reads it as a paragraph — was flattened to column 0 and its
+literal asterisks re-spelled as underscores. `count(*)` became `count(_)`;
+`/home/ryan/projects/outins/*/.seeds/seeds.jsonl` became `outins/_/`. The SQL is
+now wrong. seeds-147.3 shows the oscillation mechanism: pass 1 writes `_human_`,
+pass 2 re-parses that against the underscores in `code_set_catalog` and emits
+`code*set_catalog's ... \_human*`.
+
+This is the same root cause as the withdrawn findings 1-3 — a body written in a
+way that leans on CommonMark's ambiguities, which a fence would have settled — but
+unlike them it is genuine corruption rather than a re-spelling, so it cannot be
+waved off. **Seeds cannot fix it in the writer.** The body is arbitrary prose
+stored opaquely; making it a prettier fixed point would mean adopting prettier's
+markdown normalization as part of the format, i.e. a node dependency in the
+writer, which is not on the table.
+
+So the exclusion tier is not obsolete after all — it just changes meaning.
+`tool-config-includes-store` stops being the defence for the *format* (the writer
+fix is) and becomes the defence for *body content*, which is exactly the third
+rule dv6r's correction identified as missing and unbuilt
+(`content-rewritten-without-a-timestamp-bump`).
