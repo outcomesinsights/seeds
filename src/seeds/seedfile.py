@@ -541,7 +541,7 @@ def parse_seed_file(path: Path, text: str) -> SeedRecord:
     lines = head.split("\n") if head else []
     values = _parse_frontmatter(path, lines, offset=2)
 
-    if not tail.startswith("\n\n"):
+    if tail != "\n" and not tail.startswith("\n\n"):
         raise _fail(
             path,
             "no blank line between the closing '---' and the body; exactly one "
@@ -861,7 +861,13 @@ def render_seed_file(record: SeedRecord) -> str:
         out.append(f"converted_at: {_encode_timestamp(record.converted_at)}")
     out.append("---")
     body = record.body.strip("\n")
-    return "\n".join(out) + "\n\n" + (body + "\n" if body else "")
+    if not body:
+        # A body-less file ends at the closing delimiter's newline (§2). The
+        # trailing blank line this used to carry is what every markdown
+        # formatter strips, and a store whose canonical form disagrees with the
+        # ecosystem's default formatter re-dirties itself on every run.
+        return "\n".join(out) + "\n"
+    return "\n".join(out) + "\n\n" + body + "\n"
 
 
 def _validate_for_write(record: SeedRecord) -> None:

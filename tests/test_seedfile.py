@@ -189,7 +189,6 @@ class TestRender:
             "created_at: 2026-08-28T14:02:11.481293+00:00\n"
             "updated_at: 2026-08-28T14:02:11.481293+00:00\n"
             "---\n"
-            "\n"
         )
         for absent in ("tags:", "resolution:", "relationships:", "parent:"):
             assert absent not in text
@@ -288,7 +287,16 @@ class TestRoundTrip:
         """31 of this repo's seeds have no body; it must not become a parse error."""
         record = minimal_record()
         path = write_seed(tmp_path, record)
-        assert path.read_text().endswith("---\n\n")
+        assert path.read_text().endswith("---\n")
+        assert not path.read_text().endswith("---\n\n")
+        assert read_seed_file(path).body == ""
+
+    def test_the_old_body_less_form_still_parses(self, tmp_path):
+        """`---\n\n` is what the writer emitted before; it is a smell, not a
+        violation, so files written by an older seeds must still read."""
+        record = minimal_record()
+        path = write_seed(tmp_path, record)
+        path.write_text(path.read_text() + "\n", encoding="utf-8")
         assert read_seed_file(path).body == ""
 
     def test_body_whitespace_is_normalized(self, tmp_path):

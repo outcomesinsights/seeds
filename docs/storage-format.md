@@ -87,8 +87,12 @@ Mechanically:
   line, no comment, no shebang.
 - The frontmatter is delimited by a line containing exactly `---` to open and a
   line containing exactly `---` to close. No `...` document terminator.
-- Exactly one blank line separates the closing `---` from the body. A file whose
-  body is empty ends after that blank line's newline.
+- Exactly one blank line separates the closing `---` from the body. **A file
+  whose body is empty ends at the closing `---` line's newline** — there is no
+  trailing blank line, because every markdown formatter strips one and a store
+  whose canonical form disagrees with the ecosystem's default formatter
+  re-dirties itself on every run. The earlier `---\n\n` spelling still parses,
+  and is reported as `non-canonical-bytes`.
 - Everything after that blank line, verbatim, is the body.
 - **The body carries no leading and no trailing blank lines.** One blank line
   separates the frontmatter from the body and the file ends in exactly one
