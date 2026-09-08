@@ -5,7 +5,7 @@ status: captured
 type: concern
 parent: seeds-dv6r
 created_at: 2026-09-08T21:02:17.201968+00:00
-updated_at: 2026-09-08T21:57:46.531954+00:00
+updated_at: 2026-09-08T22:07:15.311968+00:00
 tags:
   - storage
   - format
@@ -310,3 +310,41 @@ Both objections dissolve if the formatter is applied to **incoming content** —
 mdformat is at 1.0.0 and treats its output style as part of its API, but the
 version should be pinned regardless, and `wrap="keep"` and `number=True` set
 explicitly rather than inherited as defaults.
+
+## Settled: the formatter goes in the WRITER, and it must use mdformat's defaults
+
+@aguynamedryan, 2026-09-08: *"if seeds writes each seed properly formatted, and
+the formatter is idempotent, then we don't have diff churn and if someone runs
+prettify on a repo (using mdformat), seeds will be prettified but remain
+unchanged."* Correct, and the format-on-input scoping proposed above is wrong —
+withdrawn.
+
+It fails the actual goal. Files-as-truth invites editing a seed file directly, and
+a body that never travelled through `create`/`update --content` would never be
+formatted, so it stays unformatted forever and churns on the next `prettify`.
+Formatting in `render_seed_file` guarantees the invariant **by construction**:
+every file seeds writes is already a fixed point, whatever the body's provenance —
+converter, direct edit, legacy import. `render_seed_file` stays the single
+definition of canonical, and `non-canonical-bytes` becomes exactly the detector
+for "something unformatted got in".
+
+The re-render-on-metadata-write objection collapses too: formatting is idempotent,
+so after the one-time normalize pass a `seeds resolve` produces no body diff.
+
+**Verified end to end.** All 1,324 corpus files re-rendered with the two writer
+fixes plus `mdformat.text(body, extensions={"gfm"})`, then `mdformat` run over the
+result: **0 files changed.**
+
+**The constraint that measurement surfaced.** The first run left **386 files
+churning**, because the writer used `number=True` (preserving `1. 2. 3.`) while
+the mdformat CLI's default renumbers to `1. 1. 1.`. The store is only a fixed
+point of the formatter *as the repo invokes it*, so **seeds must adopt mdformat's
+stock defaults rather than its own preferences**. The price is that verbatim
+ordered-list numbering is renumbered — renders identically, stored characters
+change.
+
+What remains is ordinary version coupling: canonical bytes become a function of
+the pinned mdformat version, so a bump means one deliberate normalize commit, and
+hosts must not skew. Both are handled by the lockfile.
+
+The one residual harm — unfenced literal text — is answered by seeds-dv6r.1.1.
