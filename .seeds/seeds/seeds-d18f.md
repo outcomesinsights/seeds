@@ -29,6 +29,7 @@ WHY IT MATTERS NOW. A Go rewrite for embedded Dolt would erase the language diff
 But note the question does NOT depend on the rewrite happening. If the per-seed-files direction wins instead (seeds-lcfa.4 option C), the same convergence argument applies to beads — issues could just as well be files that git merges — and the shared thing would be a sync/merge convention rather than a linked library.
 
 THE FORMS AN ANSWER COULD TAKE:
+
 - Stay separate, accept the duplication. Cheapest, and it keeps seeds free to change its storage without negotiating with beads.
 - Share a storage/sync layer as a library, two CLIs on top. Requires the same language, or a stable file-format contract instead of a linked library.
 - One engine, two front doors — beads and seeds as modes of the same tool. Maximum reuse, but it couples the deliberation lifecycle to the task lifecycle, and the whole positioning argument for seeds is that deliberation is NOT task tracking (see seeds-189 on the naming and category hazard).

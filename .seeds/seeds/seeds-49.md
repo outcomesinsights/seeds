@@ -19,6 +19,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
 Current model has:
+
 1. SeedType.QUESTION - a seed whose type is 'question'
 2. Question object - attached to seeds via 'seeds ask', has its own id and status
 
@@ -26,20 +27,21 @@ This is confusing. Are they the same concept? Different? When use which?
 
 May relate to seed-29c0 (question vs exploration difference).
 
+______________________________________________________________________
 
-
----
 **Consolidated from seed-d6e2, seed-8920, seed-29c0:**
 
 **Why this matters (from seed-d6e2):**
 Questions embedded as prose in seed content lose lifecycle tracking. We can't mark Q1 answered and Q2 deferred. They need formal status tracking.
 
 **Possible resolutions:**
+
 1. Question objects attached via 'seeds ask' (have their own id/status) - current MVP approach
 2. Seeds of type=question, linked to parent topic
 3. Hybrid: only use Question objects, deprecate question as seed type
 
 **Open sub-questions:**
+
 - How are answers recorded? (In Question.answer field? Separate seed?)
 - What's the difference between question and exploration seed types?
 - When should user create seed type=question vs use 'seeds ask'?

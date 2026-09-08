@@ -25,7 +25,6 @@ If relationships become central to how seeds work (options, answers, parents, re
 
 Defer until we understand relationship patterns better. SQLite is fine for MVP.
 
-
 --- SURVEYED AND EFFECTIVELY ANSWERED (2026-08-25) ---
 
 This seed deferred the storage-engine question until relationship patterns were understood. A full engine survey ran in the Dolt deliberation (seeds-lcfa and its children) and the answer it produced is: no engine change. Not a graph database, not Dolt, not DuckDB.

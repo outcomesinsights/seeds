@@ -32,17 +32,18 @@ relationships:
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
-Split out of [[seeds-1x6b]] (@markdanese's report) so the detection fixes could ship without waiting on this.
+Split out of \[[seeds-1x6b]\] (@markdanese's report) so the detection fixes could ship without waiting on this.
 
 `.seeds/seeds.jsonl` is a plain text file in a repo agents edit directly. That is how a `context` seed_type got in — the CLI itself rejects it. Opening the type vocabulary removes that specific poison, but not the general one: an agent can still write a record with a missing required field, a malformed timestamp, or a broken relationship, and the first time anyone finds out is when something downstream trips over it.
 
 Options, unexamined:
+
 - A `seeds validate` / `seeds import --check` that a pre-commit hook can run, so a poisoned JSONL never gets committed.
 - Schema validation on read, with a repair suggestion rather than a crash.
 - Teach agents the format through the plugin/prime output, so fewer bad writes happen in the first place.
 - Nothing: accept that hand-edited JSONL can be malformed, and rely on doctor to surface it after the fact.
 
-Note the tension with what was just decided: doctor became the place divergence and vocabulary drift surface, which is detection *after* the write. This question is whether prevention *before* the write is worth its complexity. Related: [[seeds-hao9]] (should import be transactional) is the same question from the read side.
+Note the tension with what was just decided: doctor became the place divergence and vocabulary drift surface, which is detection *after* the write. This question is whether prevention *before* the write is worth its complexity. Related: \[[seeds-hao9]\] (should import be transactional) is the same question from the read side.
 
 ## RULED (@aguynamedryan, 2026-08-28): defer to 0.7, built once as `seeds check`
 

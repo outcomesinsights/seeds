@@ -29,9 +29,11 @@ Discovered by the implementing agent while shipping seeds-cb6r, 2026-08-26, and 
 
 WHAT HAPPENS. `seeds answer` now correctly refuses a re-answer by calling `_guard_content_replacement` (src/seeds/cli.py:121-161) — the existing, tested helper, exactly as the bead specified. But that helper hardcodes its message and its remediation for the `update` command:
 
-    Error: <id> has been edited since it was created -- --content would discard N characters...
-      Add to it instead:      seeds update <id> --append "..."
-      Discard it on purpose:  seeds update <id> --content "..." --replace
+```
+Error: <id> has been edited since it was created -- --content would discard N characters...
+  Add to it instead:      seeds update <id> --append "..."
+  Discard it on purpose:  seeds update <id> --content "..." --replace
+```
 
 So a user who trips the guard by running `seeds answer` is told about a `--content` flag that `answer` does not have, and is pointed at `seeds update` rather than at `seeds answer <id> "..." --append` / `--replace`, which is what they actually want and what now exists.
 
@@ -40,12 +42,11 @@ THE PART WORTH NOTICING. This is the SAME defect class as the one just fixed in 
 NOT THE AGENT'S MISS. The bead said, in as many words, to reuse the helper and not invent a second guard, and it was right to — inventing a parallel guard is how the two would drift. The agent flagged this rather than silently widening its scope, which is the correct behaviour. The bead simply did not anticipate that a shared helper carries caller-specific prose.
 
 THE DESIGN CHOICE, and it is genuinely open:
-  a) Parameterise the helper — pass the calling command's name and its flag spellings, so one guard renders correct advice for each caller. Most direct, and it scales if a third caller ever appears.
-  b) Keep the helper generic — strip the command-specific lines down to what is true for every caller ("this would discard N characters; use the append or replace form of the command you just ran") and lose the copy-pasteable one-liners. Simpler, weaker guidance.
-  c) Have the helper return a decision and let each caller print its own remediation. Most flexible, most duplication, and the duplication is precisely the drift risk (a) avoids.
+a) Parameterise the helper — pass the calling command's name and its flag spellings, so one guard renders correct advice for each caller. Most direct, and it scales if a third caller ever appears.
+b) Keep the helper generic — strip the command-specific lines down to what is true for every caller ("this would discard N characters; use the append or replace form of the command you just ran") and lose the copy-pasteable one-liners. Simpler, weaker guidance.
+c) Have the helper return a decision and let each caller print its own remediation. Most flexible, most duplication, and the duplication is precisely the drift risk (a) avoids.
 
 Leaning (a). Whichever wins, the test from seeds-faxd is the model: assert that the remediation a command prints is a command that actually works for THAT command. That property is what neither of these two bugs had, and it is cheap to assert once the shape exists.
-
 
 --- SHIPPED (2026-08-26, commit 7b1fddd, bead seeds-ijk) ---
 

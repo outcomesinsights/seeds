@@ -27,13 +27,14 @@ tests could mock the git interaction rather than sandbox it. They should not,
 and the reason is structural rather than stylistic: a mock encodes what we
 PREDICT git does, and every bug in this family has been git doing something we
 did not predict -
+
 - GIT_DIR overriding cwd-based discovery entirely;
 - core.bare making `git init` re-initialize an existing real repo as bare;
-- GIT_AUTHOR_*/GIT_COMMITTER_* outranking config, so test commits were
+- GIT_AUTHOR\_*/GIT_COMMITTER\_* outranking config, so test commits were
   authored as the real user, but only under a pre-commit hook.
-A mocked suite would have been green through all three. The third was caught
-precisely BECAUSE a real commit ran and the author came back wrong. Mocking is
-blind to exactly the bug class these tests exist to catch.
+  A mocked suite would have been green through all three. The third was caught
+  precisely BECAUSE a real commit ran and the author came back wrong. Mocking is
+  blind to exactly the bug class these tests exist to catch.
 
 Worth recording that the pyramid ALREADY exists here and did not need
 inventing: tests/test_gitstage.py mixes mocked-subprocess tests (the parse and
@@ -45,10 +46,10 @@ about not moving that line, not about drawing it.
 
 GAP 1: THE SINGLE DOOR IS A CONVENTION, NOT AN INVARIANT. tests/githelpers.py
 is currently the only path to real git, but nothing enforces that. Two
-previous agents independently wrote their OWN copy of _git/_git_init - that
+previous agents independently wrote their OWN copy of \_git/\_git_init - that
 duplication is precisely how one copy came to poison the real repo, and
 deduplicating it was half of 3919c00. Nothing stops a third copy appearing in
-the next bead. Fix: a test that scans tests/*.py and fails if any file other
+the next bead. Fix: a test that scans tests/\*.py and fails if any file other
 than githelpers.py invokes real git. Cheap, and it converts today's
 cleanliness into something that stays true.
 
@@ -69,9 +70,7 @@ BOTH ARE SMALL. Neither changes the containment design; they harden it. The
 alternative considered and rejected for gap 1 was a ruff lint rule, which
 cannot express "except in this one file" cleanly enough to be worth it.
 
-
 TRACKED AS: bead seeds-3xs (P2 task).
-
 
 --- IMPLEMENTED (2026-08-26, commit 1cde6d2) ---
 

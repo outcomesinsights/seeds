@@ -22,6 +22,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Why `lodestone` "for now" rather than a garden-native term.** @aguynamedryan's instinct was sound: "lodestone" is a navigation/rock metaphor that clashes with the seeds/garden vocabulary (seeds, jot, prime, prune). We explored garden alternatives to make the theme cohere — but each fell short, and @aguynamedryan parked at lodestone to stop blocking the release. It survives because it is *agent-legible*: an agent reads "lodestone" as "guiding principle" for free (the original reason @aguynamedryan chose it).
 
 **The garden-term exploration — deferred, genuinely worth revisiting:**
+
 - **taproot** and **rootstock** — rejected. *Rootstock* implies **grafting** (a scion of a different variety joined on top) — the wrong mechanism. *Taproot* implies **permanence / anchoring**, but not the key quality below.
 - **The sharpened criterion (@aguynamedryan):** the term should evoke an idea that is **important, enduring, AND a guiding voice** — not merely permanent. That's a "wise-elder" quality, which every permanence-word (taproot, rootstock, evergreen, perennial) misses.
 - **Best garden candidates for the "guiding voice" quality:** **sage** — a sown herb *and* a source of wise, guiding counsel ("sage advice"); hits all three at once — and **elder** — the elder shrub *and* a community's respected, enduring, guiding voice. (Runners-up: *mother tree* — purest meaning but two words; *sentinel* — leans "guardian" over "counsel".)
@@ -30,13 +31,12 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 
 Relates to seeds-147.3 (the promote-verb decision, whose naming this supersedes) and seeds-197 (the prime-discovery decision). A lifecycle diagram illustrating where this sits was produced alongside this session.
 
-
-
----
+______________________________________________________________________
 
 **Horticultural sweep (2026-07-16).** Ran a four-way terminology sweep — trees/forests, root/stem morphology, symbolism/folklore, garden-design — ~50 candidates scored against *important / enduring / guiding-voice*. Full scored comparison artifact: https://claude.ai/code/artifact/ae996e82-3bae-4d1b-8e07-2d9b9a8e5610
 
 **Genuine finalists that beat taproot/rootstock:**
+
 - **leader** — the tree's central stem that steers all growth via apical dominance; the tightest literal fit (three of four sweeps converged on it), but reads corporate/plain.
 - **hazel** — the Celtic tree of wisdom AND the forked divining rod you orient by; the freshest find — fuses "wise" with "guides" and patterns like sage/elder; the wisdom lore is a touch niche (most think hazelnut).
 - **oak** — council/gospel/charter oaks, where communities gathered to decide; the most legible and warm; its "voice" comes from heritage, not mechanism.
@@ -48,11 +48,10 @@ Relates to seeds-147.3 (the promote-verb decision, whose naming this supersedes)
 
 **Honest read:** no single word is at once maximally legible, richly evocative, all-three, AND garden-native — each finalist trades one thing. Closest to clearing the bar: **hazel** and **oak**. The field now feels genuinely exhausted; the future call is a taste pick among these finalists, not more searching.
 
-
-
----
+______________________________________________________________________
 
 **Correction (2026-07-16, per @aguynamedryan): hyphenate the compounds.** Multi-word terms are NOT disqualified — `seeds mother-tree` / `seeds compass-plant` are valid command names (cf. `git cherry-pick`). The earlier "perfect concept, unusable word" tier was miscategorized; re-judged on meaning alone:
+
 - **mother-tree** — jumps to TOP tier: the hub tree that nurtures and "teaches" its seedlings = genuine living counsel; hits all three axes cleanly (only ding: "mother" leans nurturing-source over authority).
 - **council-oak** — real contender: oak's warmth + legibility plus an explicit "the tree decisions gather around," which fixes oak's one weak axis (its voice was heritage, not mechanism).
 - **compass-plant** — viable; the most literal "garden translation of lodestone," but keeps lodestone's own trait — it orients rather than counsels, and reads directional more than foundational.
@@ -60,9 +59,7 @@ Relates to seeds-147.3 (the promote-verb decision, whose naming this supersedes)
 
 Revised finalist shortlist (single- and multi-word): **mother-tree, hazel, oak / council-oak, sage / elder, compass-plant, leader.**
 
-
-
----
+______________________________________________________________________
 
 **Reframe (2026-07-16, per @aguynamedryan) — name the tool that guides growth, not the promoted plant.** The key shift in the whole search: a principle isn't an important *plant* (elder / specimen / mother-tree) — it's the gentle structure future growth is *trained along*. Tone matters: seeds is gentle software; nurturing is valid, and authority is NOT the overarching idea. This moves the search onto the grower's **guiding tools/techniques**:
 
@@ -74,8 +71,6 @@ Revised finalist shortlist (single- and multi-word): **mother-tree, hazel, oak /
 
 The plant-noun picks (oak / sage / hazel / mother-tree / leader) recede under this reframe — they name an important plant, not the thing that shapes growth. **mother-tree** and **nurse-plant** stay valid if the desired flavor is *living / nurturing* rather than *structural*. Full comparison artifact (reframe-led): https://claude.ai/code/artifact/ae996e82-3bae-4d1b-8e07-2d9b9a8e5610
 
-
-
----
+______________________________________________________________________
 
 **DECIDED (2026-07-16): `trellis`.** @aguynamedryan chose it — the reframe's answer, and the best word the whole search produced. Command `seeds trellis`, skill `seeds:trellis`, tag `trellis`, section `## Trellises`; the SKILL.md and README were reframed to the train-along / gentle metaphor ("a trellis is the structure future work is trained along — weighted guidance you can still grow off of," which is exactly the seeds-147 "not a hard guardrail" intent). Ships in v0.3.4. Naming supersedes seeds-147.3's original `promote` and the interim `lodestone`. The exploration above stands as the record of how we got here (promote → lodestone → the garden-term sweep → the "name the guide, not the plant" reframe → trellis).

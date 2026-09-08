@@ -8,7 +8,8 @@ updated_at: 2026-01-28T23:10:04.033548+00:00
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
----
+______________________________________________________________________
+
 **Related (consolidated from seed-994b):**
 Triage view should show one-liner summaries, not just titles - helps decision-making.
 

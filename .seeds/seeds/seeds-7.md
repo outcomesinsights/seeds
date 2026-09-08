@@ -19,6 +19,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
 From spec_first_pass.md: AI can:
+
 - Research and answer questions
 - Propose relationships between seeds
 - Suggest closure for questions
@@ -28,20 +29,21 @@ From spec_first_pass.md: AI can:
 From the 'what language' example: 'AI had made a decision. Decision was made.' - AI appears to be a legitimate decision-maker in some contexts.
 
 Key tension: seeds differs from Beads in audience:
+
 - Beads: Primarily for AI internal bookkeeping, somewhat user-facing
 - seeds: For humans to use in their bookkeeping, assisted by AI which also uses it for its bookkeeping
 
 This dual nature creates design tension: tool must be intuitive for humans AND easily adopted by AI agents.
 
+______________________________________________________________________
 
-
----
 **Specific AI behaviors observed/desired (consolidated from seed-757a, seed-1c5e, seed-033a):**
 
 **Positive pattern (from seed-757a):**
 AI suggesting status changes during conversation feels like natural collaboration - draws attention to next steps.
 
 **Design ideas (from seed-1c5e, seed-033a):**
+
 - Conversational feedback should flow into seeds - AI should recognize when to capture insights
 - AI should propose triage/organization rather than asking user to do it - reduces cognitive load
 

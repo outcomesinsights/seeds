@@ -18,6 +18,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 From discussion.md: 'The terrifying thing is AI seems really happy to just generate the initial document and then change it upon feedback without recording why there was a change. We are actually scared to bring feedback to AI because it's going to overwrite the original thinking.'
 
 Current workaround: Commit early and often. But this produces history that's:
+
 - Thorough but not accessible
 - Not natively useful for AI to review
 - Doesn't show the evolution of individual ideas

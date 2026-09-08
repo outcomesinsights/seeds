@@ -19,6 +19,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 During session, I kept summarizing and asking 'should I capture this?' rather than just creating seeds. User had to prompt me to record more aggressively.
 
 Possible causes:
+
 - Uncertainty about when something deserves its own seed
 - Habit of seeking confirmation
 - Unclear guidance on capture threshold

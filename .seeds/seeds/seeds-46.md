@@ -17,6 +17,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
 If exponential growth is a problem, possible convergence mechanisms:
+
 - Collapse: merge multiple seeds into one summary seed
 - Supersede: mark seed as 'replaced by X'
 - Good enough: explicit 'resolved with uncertainty' status

@@ -36,11 +36,13 @@ waiting for had quietly arrived. Nobody was careless; nothing re-measured it, be
 **Content inside one seed has wildly different half-lives, and the format does not distinguish
 them:**
 
-    a ruling        "@aguynamedryan chose interval-valued over per-edition"   permanent — a fact about a choice
-    reasoning       "because per-edition forces a read-time         long — survives its own numbers
-                     re-derivation"
-    a measurement   "concept_ancestor holds 0 ICD10CM edges"        perishable, and SILENTLY
-    another system  "upstream ships an icd10cm_flag table"          perishable fastest of all
+```
+a ruling        "@aguynamedryan chose interval-valued over per-edition"   permanent — a fact about a choice
+reasoning       "because per-edition forces a read-time         long — survives its own numbers
+                 re-derivation"
+a measurement   "concept_ancestor holds 0 ICD10CM edges"        perishable, and SILENTLY
+another system  "upstream ships an icd10cm_flag table"          perishable fastest of all
+```
 
 One seed in that project (csc-4yq6) contains all four. Its rulings are as valid today as when
 written. Its row counts were wrong within a week. A reader has no way to tell which is which except

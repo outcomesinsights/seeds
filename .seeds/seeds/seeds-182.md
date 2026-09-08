@@ -43,4 +43,5 @@ The ranking intuition: when @aguynamedryan mentions a project, he is usually tal
 So the summary should foreground recency and popularity/commonality, not just a flat dump. This is a refinement of dynamic prime (seeds-87) and the compressed project-context representation explored in project-aware gleaning (seeds-130), with a new framing: the consumer is an external cross-project tool, and recent + popular are explicit ranking signals.
 
 ## Related
+
 seeds-87, seeds-130

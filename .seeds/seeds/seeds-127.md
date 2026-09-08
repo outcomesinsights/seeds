@@ -27,6 +27,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
 **The problem:** Seeds is developed in public. Source documents (transcripts, articles, research) may contain:
+
 - Proprietary/confidential business information
 - Personal information (names, employers, internal projects)
 - Copyrighted material (articles, papers)
@@ -35,12 +36,14 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 Including full source documents in the .seeds/ directory means they get committed to a public repo.
 
 **Tensions identified:**
+
 1. Data hoarder vs public project: Want to preserve original nuance and words, but can't safely publish everything
 2. AI summarization/rewording: Could strip sensitive content, but raises its own copyright questions (is AI-reworded copyrighted text still infringement?) and may miss sensitive data
 3. Clipping/excerpting: Captures only relevant portions, but future re-ingestion may need parts that were clipped away
 4. References (URLs, file paths): Even metadata can reveal sensitive info (file paths with usernames, internal URLs)
 
 **Open questions:**
+
 - Is AI summarization of copyrighted material legally defensible for inclusion in a public database?
 - Can redaction ever be thorough enough for meeting transcripts with proprietary discussions?
 - Should there be a .seeds/sources-private/ that's .gitignored by default?

@@ -32,6 +32,7 @@ Question: what ID format best serves a deliberation tool?
 ## Options
 
 ### 1. Sequential integer (seed-1, seed-2, seed-47)
+
 - **Pro**: dead simple, easy to type, easy to remember, natural ordering, instantly tells you relative age
 - **Pro**: conversation-friendly — "let's look at seed 12" vs "let's look at seed-086a609d"
 - **Con**: merge conflicts if multiple people create seeds concurrently (but seeds is currently single-user)
@@ -39,31 +40,37 @@ Question: what ID format best serves a deliberation tool?
 - **Con**: IDs are short but unbounded (seed-9999 eventually)
 
 ### 2. Sequential with zero-padding (seed-001, seed-042)
+
 - **Pro**: sorts lexicographically, looks tidy in lists
 - **Con**: have to pick a width — 3 digits? 4? What happens at overflow?
 - **Con**: same concurrency issues as plain sequential
 
 ### 3. Timestamp-based (seed-20260320a, seed-20260320b, or seed-2603201)
+
 - **Pro**: encodes when the seed was created, which is meaningful for deliberation
 - **Pro**: no coordination needed — timestamp is inherently unique (with suffix for same-day)
 - **Con**: verbose, harder to type and remember than sequential
 - **Con**: daily counter suffix adds complexity
 
 ### 4. ULID-style (sortable, timestamp-embedded, base32)
+
 - **Pro**: globally unique, sortable by creation time, no coordination needed
 - **Con**: just as opaque as hex hashes — doesn't solve the readability problem
 - **Con**: over-engineered for a single-user tool
 
 ### 5. Keep hex hashes but standardize length
+
 - **Pro**: no migration needed, already working
 - **Con**: doesn't solve any of the readability/memorability problems
 
 ### 6. Short sequential with project prefix (seeds-1, seeds-2)
+
 - **Pro**: combines the prefix convention (seed-3359) with simple sequential numbering
 - **Pro**: if prefix is the project name per existing convention, seeds-42 is unambiguous across projects
 - **Con**: still has concurrency limitations
 
 ## Considerations
+
 - Seeds is currently single-user, so concurrency concerns are theoretical
 - Child IDs use parent.N format (seed-81a4.1) — sequential parents make children even simpler (seed-12.1)
 - Migration: existing seeds would need ID remapping or grandfathering

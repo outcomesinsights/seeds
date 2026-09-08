@@ -25,6 +25,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 From discussion.md: 'How fine-grained should any seed be? Is it easier to reconstruct many small seeds or is it better to have one big seed with related ideas all living under one seed?'
 
 Considerations:
+
 - Fine-grained (many small): More precise, easier to resolve individual pieces. Con: harder to reconstruct the whole, more relationships to manage
 - Coarse-grained (fewer large): Topic stays coherent, less reconstruction. Con: harder to track state of individual sub-ideas
 - Context window usage is a concern (though improving)
@@ -32,11 +33,10 @@ Considerations:
 
 Key tension: The more detailed we are, the quicker we fill context windows. But context windows are improving over time - we might be optimizing for a temporary constraint.
 
-
-
 DECISION: Favor smaller, focused seeds (more seeds) over fewer large seeds.
 
 Rationale:
+
 1. 'Lost in the Middle' research shows LLMs have 20%+ accuracy drops for info buried in long contexts
 2. Optimal chunk size is 500-1800 chars - smaller focused seeds align with this
 3. Chunking strategy matters more than model quality
@@ -45,6 +45,7 @@ Rationale:
 Format decision: Use Markdown with conventions (not YAML or JSON) for seed content.
 
 Rationale:
+
 1. Seed content is primarily prose with occasional structure - markdown's sweet spot
 2. YAML indentation sensitivity is dangerous for AI edits
 3. Markdown is what AI naturally produces

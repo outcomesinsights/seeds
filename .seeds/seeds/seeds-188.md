@@ -33,6 +33,7 @@ Decided 2026-06-24 (@aguynamedryan, narrowing the post after the first draft "fe
 THE DECISION: the journey post (seeds-176) carries ONE assertion — the field undervalues the deliberation, the messy muck that intent/decisions/plans are derived from; keep it, and intent falls out of it (seeds-176.9, seeds-176.10). The "what you can DO with the kept journey" material is SPUN OFF into a separate future post (#4) because it's still speculative ("available, not lived") and was diluting the thesis.
 
 WHAT GOES TO POST #4:
+
 - The feedback loop (seeds-177): thread review feedback back to revise the originating deliberation; build -> evaluate -> revise -> build as a live loop.
 - The could-do / introspection program: drift + contradiction audits (seeds-158, seeds-159), feed learnings back (seeds-161), metrics on deliberation / first-hunch hit rate (seeds-160, seeds-174), surface open decisions, seeds->beads translation quality, re-ingestion (seeds-131).
 - The honesty turn that anchors #4: "I don't have quantitative data about any of this, nor qualitative data, because I'm not doing it."
@@ -40,4 +41,5 @@ WHAT GOES TO POST #4:
 WHY: retracing the argument from the gut kept returning the same narrow spine — a signal that the deliberation-is-undervalued thesis is the part worth digging into now. The speculative program earns its own piece rather than weakening this one. (Refines the scope of seeds-176.3, which had folded the could-do list into the spine.)
 
 ## Related
+
 seeds-176 (the post this splits from), seeds-176.3 (spine it refines), seeds-177 (feedback loop -> #4), seeds-160 (metrics -> #4), seeds-131 (re-ingestion -> #4).

@@ -39,6 +39,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 From discussion.md: 'How can we get AI to be able to know what is in a given seed or set of seeds easily without overloading its context window?'
 
 Possible approaches identified:
+
 - Tags: Limited predefined set per project for consistency
 - Summaries: Auto-generated one-liners for each seed
 - Manifests: Index of all seeds with metadata
@@ -46,9 +47,7 @@ Possible approaches identified:
 
 Tag strategy: A limited predefined set could ensure consistency, make it easier to find interrelated seeds, and help AI categorize without inventing new tags.
 
-
-
----
+______________________________________________________________________
 
 **Concrete answer emerging from CSC production usage (2026-04 to 2026-05) — see seeds-142 for the use-case evidence:**
 

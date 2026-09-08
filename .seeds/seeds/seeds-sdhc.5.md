@@ -49,10 +49,12 @@ seeds-bp0s concluded that per-seed history "is not cleanly extractable" under to
 
 That is true of the raw diffs and false of the history. A seed is one line, so materialising `.seeds/seeds.jsonl` at each commit and pulling the record by id yields a clean per-seed revision list with real dates and authors. **Measured 2026-08-31: 113 commits walked for one seed in 1.3 s**, producing exactly the render seeds-bp0s asked for:
 
-    2026-08-25  Ryan Duryea   content,created_at,id,relationships   chore(seeds): capture seeds-lcfa — Dolt as s
-    2026-08-26  Ryan Duryea   content,updated_at                    docs(seeds): correct the beads-has-no-Dolt-r
-    2026-08-31  Ryan Duryea   content,title,updated_at              chore(seeds): attribute Ryan as @aguynamedry
-    2026-08-31  Ryan Duryea   title,updated_at                      fix(seeds): restore the 83 titles clobbered
+```
+2026-08-25  Ryan Duryea   content,created_at,id,relationships   chore(seeds): capture seeds-lcfa — Dolt as s
+2026-08-26  Ryan Duryea   content,updated_at                    docs(seeds): correct the beads-has-no-Dolt-r
+2026-08-31  Ryan Duryea   content,title,updated_at              chore(seeds): attribute Ryan as @aguynamedry
+2026-08-31  Ryan Duryea   title,updated_at                      fix(seeds): restore the 83 titles clobbered
+```
 
 The last two rows are the title incident (seeds-wurl) and its repair, surfaced automatically.
 

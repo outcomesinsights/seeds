@@ -35,6 +35,7 @@ WHAT IS THERE. `.seeds/seeds.db` still has a `questions` table holding 36 rows, 
 IT IS NOT DATA LOSS — checked before raising it. Sampling three of the rows and grepping their text against the tracked JSONL found all three present: the question CONTENT was migrated into first-class question-seeds under the v2 format, which is why `seeds ask` today produces a normal seed id (seeds-44ht, for instance) rather than a `q-` id. What remains in the table is the pre-migration representation, orphaned.
 
 WHY IT IS WORTH DOING ANYWAY:
+
 - It is a trap for the next person reading the schema. The obvious inference from "36 rows in `questions`, zero `q-` ids in the JSONL" is that questions are silently not being exported — which is alarming, wrong, and costs someone an hour to disprove. It cost one today.
 - export.py still carries the v1 import path for embedded questions (around export.py:417-447, converting embedded questions to question-seeds plus relationships). Whether that stays is a separate call — it is the migration path for old data from elsewhere — but the TABLE it fed is dead.
 - Any storage rework (per-seed files, or an engine change) has to decide what to do with this table anyway. Better to delete it deliberately now than to port dead rows into a new format.

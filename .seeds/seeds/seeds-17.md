@@ -18,12 +18,14 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 From spec_first_pass.md: 'Capture fast, refine later. Get the idea into the system as quickly as possible.'
 
 Review later to:
+
 - Tag and refine
 - Establish relationships
 - Put in right categories
 - Achieve 'inbox zero'
 
 This pattern is embodied in:
+
 - 'jot' command for quick capture
 - 'captured' status for unexplored seeds
 - 'deferred' status for backlogged seeds

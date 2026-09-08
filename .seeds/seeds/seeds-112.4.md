@@ -37,6 +37,7 @@ Clancey's just-in-time nudge works by regex-scanning Bash commands in a PostTool
 **Implication: seeds needs the same two-pronged capture Clancey has, but the "live" prong fires on different triggers.**
 
 Live prong — triggers seeds CAN hook (tool-visible):
+
 - Seeds' own lifecycle commands (resolve / explore / abandon). A resolve means a rationale just crystallized — nudge to capture the *why*, not merely flip status.
 - AskUserQuestion (a real Claude Code tool, so PostToolUse-matchable): "the user just chose X — record why." Makes seeds-141 concrete.
 - A Stop / SessionEnd sweep: "did an open question surface this turn that isn't in seeds?" — the "question sweep at natural breakpoints" mused in seeds-112.3.

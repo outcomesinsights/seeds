@@ -30,12 +30,14 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Context / motivating use case:** @aguynamedryan and @markdanese are doing overlapping work on defining code sets within vocabularies (SNOMED, ICD-10, mappings, embeddings, LLM-evaluated code sets). @markdanese has a mature pipeline that turns a few words ("dementia") into a swath of vocabulary codes; @aguynamedryan comes at it from published code sets and finding related ones. They want one shared seeds DB holding both bodies of investigation so a collaboration-aware agent can cross-reference, challenge, and answer across the boundary. Question raised: do we track who suggested an idea (@markdanese vs @aguynamedryan vs AI collaborator)?
 
 **Rationale:**
+
 - The value of a seed is its *current synthesized state*, not a forensic log of who typed what.
 - Per-update attribution would force the single-markdown body into attributed chunks (a comment-thread model) — a heavier, fundamentally different data model. Not worth breaking the schema.
 - git blame already gives commit-level attribution for free, at exactly the useful granularity: a "@markdanese stream" vs a "@aguynamedryan stream", each inclusive of its agent's work (the agent commits under whoever drives it). AI authorship is real, but it folds into the human stream rather than needing its own axis.
 - The collaboration value @aguynamedryan described ("his work answers my questions; my work challenges his assumptions; my work operationalizes his from another angle") is better carried by typed links + questions between seeds than by author tags — but that is a separate strand (seeds-117, seeds-121), not blocked by this decision.
 
 **Preconditions for this to work:**
+
 - A shared git repo.
 - Each contributor commits as themselves (correct git user.name/email per person/machine), or blame lumps everyone under one identity.
 

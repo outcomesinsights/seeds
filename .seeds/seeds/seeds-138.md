@@ -30,8 +30,7 @@ relationships:
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
-Question
---------
+## Question
 
 Claude Code folds long tool output (Bash, Read) so the user has to hit
 Ctrl+O to expand it. Is there a way to:
@@ -40,8 +39,7 @@ Ctrl+O to expand it. Is there a way to:
 2. Configure it per-command or per-tool?
 3. Mark certain output as "always show in full"?
 
-Why it matters
---------------
+## Why it matters
 
 'seeds show' produces 40-70 lines of output, which routinely crosses the
 fold threshold. We currently work around it via the '--output-file' flag
@@ -54,8 +52,7 @@ This question is downstream of seeds-137 — once we knew bd has no
 special rendering technique, the next question is whether the
 constraint can be tuned upstream in Claude Code itself.
 
-Findings (as of investigation)
-------------------------------
+## Findings (as of investigation)
 
 - **No built-in fold-limit configuration exists.** No settings.json
   key, environment variable, or CLI flag controls the fold threshold.
@@ -69,8 +66,7 @@ Findings (as of investigation)
   - Hook-based output post-processing (not officially documented).
   - File a feature request via '/feedback' in Claude Code.
 
-Implications for seeds
-----------------------
+## Implications for seeds
 
 - The current '--output-file' workaround IS the documented path; it
   isn't going away via upstream improvement in the near term.

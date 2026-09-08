@@ -22,7 +22,9 @@ Surfaced during the v0.6.0 deploy, 2026-08-31. Not hypothetical — it happened 
 
 `~/.config/home-manager/flake.nix` declares the input with no `ref` or `tag`:
 
-    seeds = { url = "github:outcomesinsights/seeds"; inputs.nixpkgs.follows = "nixpkgs"; };
+```
+seeds = { url = "github:outcomesinsights/seeds"; inputs.nixpkgs.follows = "nixpkgs"; };
+```
 
 so it tracks the **default branch**. Between pushing v0.6.0 and running `just update-seeds`, `main` moved one commit past the tag — a Dependabot merge (`e789ac8`, mypy floor `>=2.3.0` -> `>=2.3.1`, PR #30) landed in the window.
 

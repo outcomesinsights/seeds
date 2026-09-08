@@ -16,4 +16,4 @@ tags:
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
-Prose no longer says journey/destination, but the FILENAME still does: _posts/2026-06-18-the-journey-not-the-destination.markdown means the URL would be .../the-journey-not-the-destination.html, contradicting the 'Where to Plant seeds' title. Rename to a matching slug (e.g. 2026-06-18-where-to-plant-seeds.markdown). The post_url tag in this post points to introducing-seeds (not itself), so renaming is safe. Exact slug TBD.
+Prose no longer says journey/destination, but the FILENAME still does: \_posts/2026-06-18-the-journey-not-the-destination.markdown means the URL would be .../the-journey-not-the-destination.html, contradicting the 'Where to Plant seeds' title. Rename to a matching slug (e.g. 2026-06-18-where-to-plant-seeds.markdown). The post_url tag in this post points to introducing-seeds (not itself), so renaming is safe. Exact slug TBD.

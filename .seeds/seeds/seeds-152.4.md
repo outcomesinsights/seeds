@@ -41,7 +41,7 @@ A second prompt-macro skill candidate. The user has a recurring workflow: after 
 4. Set the dependency graph
 5. Land the plane — commit any unstaged work into a clean tree
 
-## Scope question (real tension with [[decision-skills-are-prompt-macro-scale]])
+## Scope question (real tension with \[[decision-skills-are-prompt-macro-scale]\])
 
 This workflow is multi-step and arguably workflow-engine scale. The prompt-macro stance from seeds-152.2 says skills are 3–10 lines of markdown framing — not orchestration.
 

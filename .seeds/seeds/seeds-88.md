@@ -19,6 +19,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 Beads v0.50+ added `bd graph` — horizontal DAG visualization in terminal, DOT format, and HTML. For a task tracker, this shows dependency chains. For a deliberation tool, a graph would show something more interesting: how ideas branch, merge, and supersede each other.
 
 A `seeds graph` could visualize:
+
 - Parent-child deliberation hierarchies
 - `supersedes` chains showing how decisions evolved
 - `related_to` clusters showing idea neighborhoods

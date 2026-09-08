@@ -39,6 +39,7 @@ WHAT DOLT WOULD INTRODUCE
 1. A 120 MB Go binary, in a pip-installable public CLI. Measured: `/usr/local/bin/dolt` is 120 MB. seeds is on GitHub as outcomesinsights/seeds, MIT, Beta, `requires-python >=3.10`, and its runtime dependencies are exactly `click` and `flask` — both pure Python. `uv tool install seeds` currently yields a working tool with nothing outside the wheel. After Dolt, every user and every contributor needs a 120 MB non-Python binary on PATH. That is the single biggest cost and it is a distribution cost, not a code cost.
 
 2. No in-process option from Python. Beads links Dolt in-process because beads is Go; there is no maintained Python binding that does the same. That leaves two paths and both are bad:
+
    - Shell out per query. Measured: `dolt sql -q` costs ~90 ms per invocation, essentially all process startup. For comparison, seeds' ENTIRE current command latency is 158 ms for `seeds list` and 113 ms for `seeds show` (which includes ~90 ms of Python interpreter startup). One shelled-out query costs about as much as a whole command does today; any command issuing several would visibly regress.
    - Run `dolt sql-server` and talk MySQL wire protocol. That is a background process lifecycle, a port, a lock, and a new driver dependency — and it is precisely the shared-server mode beads TRIED AND RETIRED in favour of embedded. Seeds would be adopting the mode its own model abandoned, without the escape hatch that made abandoning it possible.
 
@@ -58,11 +59,11 @@ WHAT IS *NOT* A REAL COST, so it should not be argued either way: the SQL port. 
 
 THE CHEAPER ALTERNATIVE THAT SHOULD BE PRICED FIRST
 Every gain above except cell-level merge is reachable without leaving SQLite:
+
 - Auto-import on merge/checkout via git hooks — kills the "remember to" ricketiness (seeds-lcfa.1 problem 1). Costs nothing.
 - Replace silent whole-record LWW with per-field timestamps or an explicit conflict flag — captures the CORRECTNESS core of the merge argument without the engine. Two hosts editing different fields merge cleanly; a real collision gets reported instead of vanishing.
 - An append-only revision log table in SQLite — delivers gain 2 (a seed's evolution over time), which is the most on-thesis win, in pure Python.
-If those three land and the pain is gone, Dolt was never the answer. If they land and same-seed collisions are still routinely lossy, that is the evidence that justifies the 120 MB.
-
+  If those three land and the pain is gone, Dolt was never the answer. If they land and same-seed collisions are still routinely lossy, that is the evidence that justifies the 120 MB.
 
 --- PREMISE CORRECTION (2026-08-26): gain 4 above was falsified within a day ---
 
@@ -82,12 +83,13 @@ the non-branch ref refs/dolt/data, and home-manager adopted it on 2026-08-26
 WHAT THE NEW PRECEDENT ACTUALLY SAYS - and it is worse for Dolt, not better.
 home-manager did not move to the Dolt remote because the JSONL was inelegant. It
 moved after a two-day silent data-loss incident:
+
 - From 2026-08-24 to 2026-08-26, sync.remote was present in .beads/config.yaml.
 - That single line makes beads' post-merge hook SKIP the JSONL import
   ("post-merge: skipping JSONL import because sync.remote is configured").
 - Nothing was wired to run `bd dolt push` / `bd dolt pull` in its place.
 - So boost, molt and titan ran three disjoint databases, and each commit's JSONL
-  export deleted the other hosts' work. Bead counts ping-ponged 46/47 <-> 81
+  export deleted the other hosts' work. Bead counts ping-ponged 46/47 \<-> 81
   across roughly 20 commits before anyone noticed.
 - Recovery was a hand-reconciled 102-bead union (commit 91631e1) plus a 146-line
   procedure doc, because a wedged embedded-Dolt database closes every `bd` route
@@ -118,7 +120,6 @@ and unrecoverably break multi-machine bd dolt sync after both clones upgrade"
 and home-manager's sync was rebuilt after it. So this is history, not a live
 risk - but it is a fair data point on how young the Dolt-remote path is.
 
-
 --- RYAN'S READ ON THE INCIDENT (2026-08-26), and a recalibration it forces ---
 
 @aguynamedryan, on the home-manager churn recorded in the section above: "the churn in
@@ -127,6 +128,7 @@ Recorded with his hedge intact. It is the right correction, and the section
 above leaned harder on that incident than the facts support.
 
 WHAT WAS ACTUALLY MISCONFIGURED, so this is checkable rather than a vibe:
+
 1. sync.remote was present in .beads/config.yaml from 2026-08-24, which switches
    beads' post-merge hook OFF the JSONL import - and nothing was wired to run
    `bd dolt push` / `bd dolt pull` in its place. Half a migration: the old path
@@ -134,8 +136,8 @@ WHAT WAS ACTUALLY MISCONFIGURED, so this is checkable rather than a vibe:
 2. The three hosts disagreed with each other. molt's `git remote get-url origin`
    was ssh while boost's and titan's were https, and bd REWRITES sync.remote to
    match origin and commits the change - so the line flip-flopped host to host.
-Neither of those is Dolt malfunctioning. Both are setup that was incompletely
-applied on each host and inconsistent between them.
+   Neither of those is Dolt malfunctioning. Both are setup that was incompletely
+   applied on each host and inconsistent between them.
 
 WHAT IS NO LONGER FAIR TO SAY, and it was the load-bearing sentence of the
 previous section: that Dolt's cell-level merge "was present and working the
@@ -152,6 +154,7 @@ measured costs in this seed (120 MB, no maintained Python path, ~90 ms/query,
 the test suite) - not on this incident.
 
 WHAT STILL TRANSFERS, at its real and much smaller weight:
+
 - A multi-host sync topology introduces a per-host configuration surface, and in
   beads' case the tool mutates part of that surface on its own. This is a cost
   of the TOPOLOGY, not of the engine - it would apply to any multi-host design

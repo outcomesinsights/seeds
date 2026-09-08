@@ -26,6 +26,7 @@ The user identified a terminology overload problem: 'gathering seeds' is ambiguo
 - **Winnowing**: Separating wanted seeds from unwanted — fits the filtering/scoping step where you decide what's relevant to THIS project
 
 The full metaphor maps well:
+
 1. Source document = the harvested crop
 2. Gleaning = extracting candidate seeds from the document
 3. Threshing = separating actionable ideas from noise

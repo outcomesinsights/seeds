@@ -27,6 +27,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Output:** Same one-liner format as `seeds list`, sorted by updated_at desc.
 
 **Use cases:**
+
 - 'Continue an incremental transcript-incorporation pass' (the seeds-142 workflow)
 - 'What did the team touch since I was last in this project?'
 - Feeds the 'Recently Updated' section of the proposed seeds-87 prime digest

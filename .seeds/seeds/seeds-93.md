@@ -70,7 +70,8 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 
 Deliberation about best practices for publishing seeds as a public Python project on GitHub under the Outcomes Insights org (outcomesinsights). Covers licensing, packaging metadata, README, CI/CD, and release strategy.
 
----
+______________________________________________________________________
+
 **Key constraint (Feb 2026):** License (MIT) is pending employer approval since seeds was developed on work time/equipment. Phase 5 (create GitHub repo, push) is BLOCKED until licensing is resolved. All other phases can proceed.
 
 **Repo ownership decision:** Repo will live under outcomesinsights GitHub org, not aguynamedryan personal account. Development was sponsored by OI. @aguynamedryan's attribution is in commit history. Can fork if needed (unlikely).

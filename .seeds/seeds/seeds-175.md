@@ -21,4 +21,4 @@ relationships:
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
-Working set of edit decisions from the pre-publish editorial review of the 'Where to Plant seeds' post (_posts/2026-06-18-the-journey-not-the-destination.markdown, published:false). Children are individual feedback items, each marked resolved or still-open. Source citations were checked against the live articles AND against docs/intent-debt-investigation/capturing-the-why-landscape.md. Continues the intent-debt thread anchored by seeds-168. Apply edits to the post only after the open items are settled.
+Working set of edit decisions from the pre-publish editorial review of the 'Where to Plant seeds' post (\_posts/2026-06-18-the-journey-not-the-destination.markdown, published:false). Children are individual feedback items, each marked resolved or still-open. Source citations were checked against the live articles AND against docs/intent-debt-investigation/capturing-the-why-landscape.md. Continues the intent-debt thread anchored by seeds-168. Apply edits to the post only after the open items are settled.

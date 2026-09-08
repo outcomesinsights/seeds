@@ -26,6 +26,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 @aguynamedryan, 2026-08-25, during the Dolt storage deliberation: "we can drop the webui -- that never went anywhere and I don't use it ever."
 
 WHAT THIS REMOVES (measured 2026-08-25):
+
 - `src/seeds/web.py` (177 lines)
 - `tests/test_web.py` (398 lines, a meaningful slice of the 571-test suite)
 - `src/seeds/templates/` — base.html, detail.html, list.html, questions.html
@@ -33,6 +34,7 @@ WHAT THIS REMOVES (measured 2026-08-25):
 - The `flask>=3.1.3` runtime dependency — which leaves `click` as the ONLY runtime dependency of the entire tool
 
 WHY IT MATTERS BEYOND TIDINESS:
+
 1. The runtime dependency surface drops to one package. That sharpens the distribution argument in the Dolt ledger (seeds-lcfa.3): a tool whose whole dependency list is `click` has a very high bar to clear before adding a 120 MB binary — and equally, it is very cheap to keep as Python.
 2. It shrinks the port surface if a Go rewrite is entertained (seeds-lcfa.5) by ~575 lines plus templates plus an HTTP layer.
 3. The global CLAUDE.md deploy note about restarting `seeds serve` processes after a deploy becomes obsolete and should go with it.

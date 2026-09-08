@@ -24,6 +24,7 @@ Why I want to keep this: clancey (now 1.6.0) clicked for me as a design, and I d
 Clancey's approach (the thing I like): a *passive, retrospective* memory of my Claude Code work. 1.6.0 ingests conversations via Claude Code hooks (PostToolUse + SessionStart) into a local SQLite store (~/.clancey/clancey.db), and the agent records decisions (what was decided + why) and learnings (non-obvious facts) in the background as it works. I do nothing; it accumulates. Future sessions recall it via search / recall / grep_turns / read_turns, anchored to repo + branch + files. It captures what already happened and why.
 
 How it is orthogonal — the capture trio:
+
 - seeds = prospective. Unsettled ideas/questions I deliberately capture and let grow (lifecycle: explore -> defer/resolve/abandon). Serves me, the thinker.
 - beads = actionable. Concrete tasks/work to do.
 - clancey = retrospective. Settled facts/decisions/conversation, captured passively. Serves the future agent.
@@ -34,13 +35,14 @@ The one overlap seam to watch: a resolved seed and a recorded clancey decision c
 
 Room to grow (why this is a seed, not just a clancey note): explore workflows that deliberately exploit the orthogonality — when a seed resolves, do I hand the conclusion to clancey explicitly, or trust passive capture? Is a clean seeds -> clancey handoff worth building? Where exactly should the decision/rationale boundary live so the two never duplicate? And since seeds and clancey are sibling tools here, is there a product opportunity in making that handoff first-class?
 
+______________________________________________________________________
 
----
 ## Architecture deep-dive (2026-06-05): feature lessons + guardrails
 
 Went past the README into the Clancey source. Lessons for seeds, kept here because this is the Clancey seed.
 
 **Capture mechanism — the passive/active split (the core idea):**
+
 - *Facts* (which file/command, repo, branch, ts) captured 100% passively by a PostToolUse hook — zero agent cost, no model in the loop.
 - *Reasons* (why, alternatives rejected) never inferred — captured *actively* by nudging the agent to record them.
 - Two hooks only: SessionStart (standing "record as you go" instruction) + PostToolUse (matcher Edit|Write|MultiEdit|NotebookEdit|Bash). Hook never blocks; fails silent.
@@ -50,16 +52,19 @@ Went past the README into the Clancey source. Lessons for seeds, kept here becau
 **Backfill — correction to the mental model:** clancey backfill is a plain CLI doing *deterministic* transcript parsing (imports tool events + verbatim messages + a small "framing" embedding so old sessions are searchable). It does NOT LLM-extract decisions. "Fill in the decisions it finds" = an agent behaviour (you ask Claude to read old transcripts and record them), not a pipeline. Implication: seeds' transcript-incorporation (seeds-142) is already *more* ambitious than Clancey's backfill.
 
 **Smaller liftable mechanisms (mechanism, not policy):**
+
 - Retrieval ladder: recall (deterministic, branch to sessions) -> search (semantic) -> grep_turns (FTS keyword) -> read_turns (full read), with an explicit low-confidence handoff (semantic score < 0.45 -> "try keywords"). UX template for discoverability — seeds-2, seeds-87.
 - Semantic dedup without a vector DB: a ~30MB local MiniLM (384-dim) with brute-force cosine in-process. Makes "does this already exist?" cheap in Python — seeds-142.1.
 - Idempotent re-ingestion: mtime cache + delete-then-reinsert per session unit -> re-gleaning never duplicates — seeds-131.
 - Revise-or-drop discipline: update/remove re-embed, treated first-class for "wrong or duplicated" notes -> note rot, hallucinated refs (seeds-142.3).
 
 **What NOT to bring over (orthogonality guardrail):**
+
 - Not the passive tool-event log — seeds cares about *why*, not which files changed. Porting it makes a worse Clancey.
 - Not the invisible + copious policy — seeds is deliberate, visible, human-in-the-loop.
 
 **The handoff seam, made concrete:**
+
 - seeds resolve IS a Clancey "decision point" — a settled rationale waiting to be recorded.
 - Clancey's snapshot DB (every Claude Code transcript, pruning-proof, subagents folded in as of v1.6.0) is a ready-made durable gleaning corpus for seeds-131 / seeds-142 — seeds could consume it rather than build its own snapshotting.
 - Drift boundary still holds: the destination (settled decision + rationale) -> Clancey; the journey-not-done -> seeds.

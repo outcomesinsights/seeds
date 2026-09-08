@@ -43,22 +43,23 @@ The timing matters and is the whole point: ask BEFORE the bead is written, not a
 ## The bar for asking
 
 The risk is an interrogation, which would make the skill worse than plunging ahead. Ask only where the decision is genuinely the user's:
+
 - scope boundary (this bead / separate bead / out of scope)
 - taste, UX, naming -- anything landing on a surface a person reads
 - something the seeds raised and never landed, or two seeds pointing different directions
 - acceptance criteria that need a definition picked before they can be mechanical
 - sequencing that encodes a design commitment rather than an ordering convenience
 
-Explicitly do NOT ask about: anything the deliberation already settled (re-opening a locked decision is the failure this skill exists to prevent -- see the locked-decisions guidance in [[seeds-186]]), mechanical decomposition and wording, or anything answerable by reading the repo.
+Explicitly do NOT ask about: anything the deliberation already settled (re-opening a locked decision is the failure this skill exists to prevent -- see the locked-decisions guidance in \[[seeds-186]\]), mechanical decomposition and wording, or anything answerable by reading the repo.
 
 Batch the questions after a full analysis pass rather than dripping them one at a time; offer options with a recommendation so a one-word answer is complete.
 
 ## Autonomous is not silent
 
---autonomous restores the prior behavior, but every call it would otherwise have asked about is recorded in the bead as an explicit assumption (\"Assumed: ... -- the deliberation didn't settle this\") and gathered into the closing summary. The judgment stays visible and overturnable without reading every bead to find it.
+--autonomous restores the prior behavior, but every call it would otherwise have asked about is recorded in the bead as an explicit assumption ("Assumed: ... -- the deliberation didn't settle this") and gathered into the closing summary. The judgment stays visible and overturnable without reading every bead to find it.
 
 ## Feedback loop back into seeds
 
 When an answer settles something the originating seed had open, carry it back with seeds answer / a note on the seed. Otherwise the deliberation record ends up poorer than the beads it produced -- which inverts the point of the tool.
 
-Extends the skill defined in [[seeds-152.4]] and the intent-capture guidance in [[seeds-186]]; feeds the efficacy question in [[seeds-184]], since consultation should shift \"tweaking needed\" from planning-miss toward inherent-unknown.
+Extends the skill defined in \[[seeds-152.4]\] and the intent-capture guidance in \[[seeds-186]\]; feeds the efficacy question in \[[seeds-184]\], since consultation should shift "tweaking needed" from planning-miss toward inherent-unknown.

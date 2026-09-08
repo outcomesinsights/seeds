@@ -29,13 +29,13 @@ Skills shipped with seeds are **prompt macros**, not workflow engines. Each skil
 - **Cheap to ship.** A 3-line skill can be added in minutes and revised at no cost.
 - **Cheap to iterate.** If a phrase isn't working, edit the markdown — no code change.
 - **Cheap to discard.** Skills that don't earn their keep cost nothing to remove.
-- **The closer pattern proves the value of small.** A single line ("invite questions/comments/criticisms") carries real behavioral weight (see [[agents-under-surface-doubts-unless-invited]]). Skills don't need to be large to matter.
+- **The closer pattern proves the value of small.** A single line ("invite questions/comments/criticisms") carries real behavioral weight (see \[[agents-under-surface-doubts-unless-invited]\]). Skills don't need to be large to matter.
 - **Workflow engines are premature commitment.** We don't yet know which workflows are worth automating. Building infrastructure before discovering the need is the textbook scope-creep failure mode.
 
 ## What fits this scope
 
 - `feedback` — frames the next utterance as feedback on the prior turn, with the closer baked in
-- `closure-check` — asks the agent to list what *it* believes is unresolved (never to declare resolution; see [[risk-lodestones-may-over-channel-agent-reasoning]])
+- `closure-check` — asks the agent to list what *it* believes is unresolved (never to declare resolution; see \[[risk-lodestones-may-over-channel-agent-reasoning]\])
 - `utterance-ingest` (seeds-152.1) — frames the next utterance as raw material for seed creation/update, with a confirmation gate
 
 ## What doesn't (yet)

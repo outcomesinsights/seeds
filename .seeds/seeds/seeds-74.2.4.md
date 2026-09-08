@@ -24,6 +24,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Key insight:** Harvesting seeds from Claude conversations is the same process as harvesting from ANY deliberation source.
 
 **Potential sources:**
+
 - Claude conversation logs
 - Meeting transcripts (Zoom, Teams, etc.)
 - Email threads
@@ -34,12 +35,14 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 
 **Common pattern:**
 All are unstructured/semi-structured text containing:
+
 - Decisions made (and rationale)
 - Questions raised (answered or not)
 - Investigations and findings
 - User/participant insights
 
 **Architecture implication:**
+
 - Harvest logic should be source-agnostic
 - 'Sweep' = point extractor at a text source
 - Different sources may have different markers, but core extraction is same
@@ -52,14 +55,13 @@ All are unstructured/semi-structured text containing:
 
 **This makes seeds a general deliberation→structure tool, not just Claude-specific.**
 
-
-
 ## CORRECTION: User pushback
 
 Too hard a pivot. Overlaps with intent.build's positioning.
 
 **Seeds' actual secret sauce:**
 Not 'capture from anywhere' but the **structured database** around deliberation:
+
 - Hierarchical seeds (parent/child for drilling down)
 - Questions as first-class objects attached to seeds
 - Lifecycle: captured → exploring → resolved/deferred/abandoned
@@ -67,14 +69,14 @@ Not 'capture from anywhere' but the **structured database** around deliberation:
 - Records the *discovery and exploration process*, not just decisions
 
 **The difference:**
+
 - Intent.build: System of record for *decisions* (the outputs)
 - Seeds: Structured tracking of the *deliberation process* (the journey)
 
 Seeds answers: 'How did we get here? What did we explore? What questions led to this decision? What's still open?'
 
+______________________________________________________________________
 
-
----
 **Terminology refinement (Mar 2026):**
 
 The user identified that 'harvest' and 'gather' are overloaded — seeds is both the tool and the thing being extracted. Agriculture vocabulary offers more precision:
@@ -85,8 +87,7 @@ The user identified that 'harvest' and 'gather' are overloaded — seeds is both
 
 'Glean' is the strongest candidate for the primary extraction command: `seeds glean <source>`. It implies methodical examination of existing material, not generation of new material. It also carries the connotation of 'picking up what others missed' — fitting for re-ingestion where later passes find seeds the first pass didn't.
 
-
----
+______________________________________________________________________
 
 ## RESOLVED 2026-09-01. The pivot stays rejected; the vocabulary is what survived.
 

@@ -25,13 +25,15 @@ The concrete, bead-ready build plan for the lodestone feature. Closes the open f
 
 Signature:
 
-    seeds promote <id> --to <file> --as "<one-line principle>" [--no-resolve] [--section "## Lodestones"]
+```
+seeds promote <id> --to <file> --as "<one-line principle>" [--no-resolve] [--section "## Lodestones"]
+```
 
 Behavior (all deterministic — no model judgment):
 
 1. Load the seed; error cleanly if not found (reuse `get_seed_or_exit`).
 2. Write forward-provenance into `<file>`: find-or-create a managed section (default heading `## Lodestones`, overridable with `--section`) and append a bullet:
-       - <principle> — seeds-<id>, promoted <YYYY-MM-DD>
+   \- <principle> — seeds-<id>, promoted <YYYY-MM-DD>
    The inline `seeds-<id>, <date>` citation is the file->seed half of the two-way link — human-readable and greppable. Create the file if absent.
 3. Write back-provenance onto the seed: set `resolution` = "Promoted to `<file>` on <date> as a lodestone: <principle>", and add a `lodestone` tag (idempotent — do not duplicate if already present).
 4. Resolve the seed (status=resolved, resolved_at=now_utc()) UNLESS `--no-resolve` is passed.

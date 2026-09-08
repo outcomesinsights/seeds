@@ -33,7 +33,6 @@ Open shape: a light "revisit" affordance on resolved seeds, and/or an optional `
 
 Status: deferred (cousin cluster).
 
+______________________________________________________________________
 
-
----
 **2026-09-01: partially absorbed by `winnow` (seeds-158).** Ryan ruled the corpus-audit skill covers all five flavors of the self-audit family, this one included — so the *surfacing* half now has a home and a shape. What `winnow` can do here is bounded: neither outcome nor learning is detectable from the corpus alone, so both are surfaced as prompts for the user to answer, never asserted by the tool (see seeds-164). The broader concern in this seed — that seeds under-captures this material at resolution time, not just at audit time — is NOT addressed by winnow and stays live here. Cousin: the `resolve-seeds-from-beads` skill already carries learnings back at resolution time.

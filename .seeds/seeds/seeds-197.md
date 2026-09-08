@@ -31,16 +31,19 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Keep it distinct from seeds-147.3's settled non-goal.** 147.3 said "no prime injection" — but that was about not surfacing the *promoted lodestones themselves* (durable context / CLAUDE.md carries those). It said nothing about advertising the *promote command*. This seed is the second thing: capability-discovery, not content-surfacing. Do not let the two blur.
 
 **The reactive/proactive split — the crux.**
+
 - The designed primary discovery path is the `seeds:promote` skill (bead seeds-3p4): the harness fires it when the *user* says "promote this to a lodestone." That is **reactive** — it presupposes the user already knows promotion exists.
 - Nothing makes an agent **proactively aware** the capability exists. An agent won't volunteer "this seed feels load-bearing — want to promote it?" unless something told it promotion is a thing.
 
 **Two audiences, two channels.**
+
 - Agents working *on* the seeds repo get seeds' own CLAUDE.md injected → documenting promote there (bead seeds-435) gives them awareness.
 - Agents using seeds *as a tool* in other projects — the primary audience — never see seeds' CLAUDE.md. Their only channels are `seeds prime` (proactive) and the installed skill (reactive). prime is silent → for tool-users there is currently **no proactive awareness at all**.
 
 **The tension (why this isn't an automatic yes).** Advertising promote in prime is exactly what would enable useful agent-*suggested* promotion — cf. seeds-147.2, where an agent spontaneously reached for lodestone reasoning ("keep this active"). But it is also exactly the amplification seeds-147.1 warns about: agents over-act on stated capabilities (the Jigsaw-33 incident; seeds-151's "context as gospel"). Tell every agent "you can promote seeds to lodestones" and some will promote too eagerly, manufacturing spurious lodestones that then sit in always-on durable context. Proactive awareness is double-edged.
 
 **The decision to make.**
+
 - (A) Add the output-mode workflows to prime's command list — proactive awareness for tool-users. Optionally with hedged framing per 147.1 ("promote sparingly; only load-bearing, bounded principles").
 - (B) Keep prime silent; rely on the skill (reactive) + docs. Accept that agents won't suggest promotion unprompted.
 - (C) In between — mention the workflows exist without encouraging use, or gate promote behind an explicit "only when the user names it" note.
@@ -49,9 +52,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 
 Relates to seeds-147.1 (the over-promotion risk this must weigh), seeds-147.3 (the content-vs-capability distinction), seeds-147.2 (agent-suggested promotion as the upside), seeds-152.5 (reactive skill-discovery is the only path today), seeds-182 (dynamic prime for external routers — adjacent prime-surface question).
 
-
-
----
+______________________________________________________________________
 
 **DECIDED (2026-07-15, @aguynamedryan): keep prime silent — Option B, with two conditions.** `seeds prime` does NOT advertise the output-mode workflows. Discovery is handled by two other channels instead:
 

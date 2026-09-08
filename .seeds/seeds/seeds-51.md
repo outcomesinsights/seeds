@@ -21,16 +21,16 @@ The tool's design gaps become visible through use. This is valuable - dogfooding
 
 Implication: keep using seeds to design seeds.
 
+______________________________________________________________________
 
-
----
 **Related meta insight (consolidated from seed-268a):**
 
 From discussion.md: 'Watching and noting how I'm interacting with AI and planning this tool is going to be a great source of figuring out possible workflows and approaches and habits and techniques I use to plan and design a project.'
 
 Actions this suggests:
+
 - Look at commit history to see how ideas evolved
-- Note what exchanges worked well vs poorly  
+- Note what exchanges worked well vs poorly
 - Capture lessons about major feature planning
 
 Key observation: Conversation logs are often lost. Only resulting documents survive. This is exactly what seeds should prevent.

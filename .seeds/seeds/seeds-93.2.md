@@ -18,6 +18,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 Now that the repo is going public with potential outside contributors and Dependabot auto-merge, tests need to be tight enough to catch regressions with confidence.
 
 Approach:
+
 1. Run code coverage immediately to establish baseline
 2. Identify gaps, prioritizing the most important/critical code paths
 3. Add meaningful tests (not just coverage padding) to fill those gaps

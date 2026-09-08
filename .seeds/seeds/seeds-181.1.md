@@ -30,6 +30,7 @@ Captured 2026-06-23 from docs/sower.txt. The core loop of sower (part of the sow
 ## The loop
 
 For any transcript @aguynamedryan feeds it, sower must:
+
 1. Ingest the transcript.
 2. Determine which projects were discussed.
 3. For each, decide which seeds need to be created or updated.
@@ -48,9 +49,8 @@ Possibly just an agent wired together with scripts that pulls transcripts and wa
 This is the productized form of the transcript-incorporation workflow already captured as seeds-142 (and its dedupe-and-create discipline), driven by the project context described in seeds-130. The update-vs-create judgment, hallucinated-ID risk (seeds-142.3), and "only look at what I haven't processed" (seeds-142.2) all apply here, per-project.
 
 ## Related
+
 seeds-142, seeds-130, seeds-152.1
-
-
 
 ## Input source & quality
 

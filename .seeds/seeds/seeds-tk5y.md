@@ -67,9 +67,7 @@ An earlier suggestion of "warn when discarding more than N characters" was rejec
 - Does `seeds import` (last-write-wins upsert) have the same exposure — can a stale JSONL silently overwrite newer deliberation? Worth checking; different code path, same class of risk.
 - Is there any case for a `--dry-run` on `update`, mirroring `rename-prefix --dry-run`?
 
-
-
----
+______________________________________________________________________
 
 ## Promoted to beads (2026-08-10)
 
@@ -80,9 +78,7 @@ Both are bead IDs, not seed IDs.
 
 Open question 1 (should `--tags` get the same guard?) and open question 3 (`update --dry-run`?) are NOT promoted — neither has been ruled on.
 
-
-
----
+______________________________________________________________________
 
 ## Open questions 1 and 3 resolved (2026-08-10)
 
@@ -150,8 +146,7 @@ the instance; the class is still open.
 
 **The reporting is what makes it invisible**, and that is the cheapest thing to
 fix. A discarded record prints `0 created, 0 updated, 1 skipped` — the same line
-every unchanged seed produces. A routine sync of this project would say `270
-skipped`, so a real loss hides inside a number nobody reads. Distinguishing
+every unchanged seed produces. A routine sync of this project would say `270 skipped`, so a real loss hides inside a number nobody reads. Distinguishing
 "skipped, identical" from "skipped, and the file's content DIFFERS" would surface
 both silent paths before the export runs.
 
@@ -163,9 +158,7 @@ leaves a dirty tree carrying later seeds).
 Remedy is a design decision, deliberately not taken in the investigation bead.
 Options and full evidence are in **seeds-agk** (P1).
 
-
-
----
+______________________________________________________________________
 
 ## Shipped in v0.5.0 (2026-08-11) — and the locked gate did not survive contact
 

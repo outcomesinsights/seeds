@@ -26,6 +26,7 @@ Use Claude Code's `/fork` to copy the conversation into a background session, th
 seed that points at that session id. Full conversational context is preserved for free.
 
 Rejected because the pointer rots:
+
 - Session ids are host-local. A cutting taken on titan is meaningless on boost.
 - Background sessions do not survive indefinitely; the seed outlives the thing it names.
 - It makes seeds depend on a harness-specific, undocumented identifier.

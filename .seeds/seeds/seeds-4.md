@@ -48,6 +48,7 @@ From spec_first_pass.md: Transcripts are NOT seeds - they are source material fr
 Storage: Source materials should be stored alongside seeds as a separate entity type.
 
 Processing workflow:
+
 1. Store it as source material
 2. Extract potential seeds from the document
 3. Find existing seeds that match and merge transcript references (possibly tweaking with new info)
@@ -56,23 +57,24 @@ Processing workflow:
 
 Key insight: The act of turning a transcript into seeds can be repeated multiple times. The current state of the seeds database informs what seeds to parse - it's not a one-time operation.
 
+______________________________________________________________________
 
----
 **Expanded scope (Feb 2026): source materials include generated artifacts.**
 
 Original concept was external inputs (transcripts, documents). But source materials also include:
+
 - Plan documents from pre-seeds conversations with Claude
 - Expertise documents generated from investigation
 - Any knowledge artifact that seeds were derived from or informed by
 
 These are vulnerable — often not version controlled, can be overwritten by Claude. Seeds should at minimum provide a place to store/reference them. Provenance tracking (which seed came from which source) is deferred but acknowledged as valuable.
 
+______________________________________________________________________
 
-
----
 **Expanded scope (Mar 2026): source document types and the inbox model.**
 
 Full list of source document types identified:
+
 - Meeting notes and transcripts (boss meetings, team standups, etc.)
 - Research documents and articles
 - Plan files from pre-seeds conversations
@@ -82,6 +84,7 @@ Full list of source document types identified:
 **The inbox model:** Users place documents into a seeds inbox directory. Seeds processes them for seed extraction and records references. The user is responsible for ensuring documents are safe to include (privacy, copyright, proprietary concerns). Convention over configuration — no automated filtering.
 
 **Key concerns raised:**
+
 - Transcripts often span multiple projects — only a portion may be relevant
 - Proprietary/personal/copyrighted content in source docs conflicts with public repos
 - Verbatim preservation is desired but often infeasible

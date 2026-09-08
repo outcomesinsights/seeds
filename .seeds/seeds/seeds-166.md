@@ -30,7 +30,6 @@ Meta's pre-compute engine sweeps a whole existing codebase/corpus with a fleet o
 
 Recorded so the boundary is explicit: setting the edges of the tool matters as much as setting its direction.
 
+______________________________________________________________________
 
-
----
 Update (2026-06): the deliberation-software revival sweep (docs/deliberation-software-revival-2026-06.md) found the dev-tooling research literature independently proposing exactly this post-hoc approach — "Architecture Without Architects" (arXiv:2604.04990) proposes mining rationale from AI agent reasoning traces and persisting them as ADRs after the fact. The field converging on the approach seeds declined validates this boundary by contrast: seeds bets on live capture, not reconstruction-from-residue. See the competitive-watch seed for detail.

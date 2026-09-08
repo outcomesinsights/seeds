@@ -56,19 +56,19 @@ Options to explore:
 Relates to the multi-project source-document concern (seeds-129).
 
 ## Related
-seeds-129
 
+seeds-129
 
 --- ANSWERED IN PRACTICE (2026-08-25, out of the Dolt storage deliberation) ---
 
 Yes, and it is already available with no code change and no new dependency. Measured on titan while prototyping seeds-lcfa.6: the duckdb CLI (v1.5.2, already installed) globs every repo's tracked JSONL into one table, with `filename=true` supplying the project column.
 
-  SELECT regexp_extract(filename, 'outins/([^/]+)/', 1) AS repo,
-         count(*) AS seeds,
-         sum(CASE WHEN status='captured' THEN 1 ELSE 0 END) AS open
-  FROM read_json_auto('/home/ryan/projects/outins/*/.seeds/seeds.jsonl',
-                      union_by_name=true, filename=true)
-  GROUP BY 1 ORDER BY 2 DESC;
+SELECT regexp_extract(filename, 'outins/([^/]+)/', 1) AS repo,
+count(*) AS seeds,
+sum(CASE WHEN status='captured' THEN 1 ELSE 0 END) AS open
+FROM read_json_auto('/home/ryan/projects/outins/*/.seeds/seeds.jsonl',
+union_by_name=true, filename=true)
+GROUP BY 1 ORDER BY 2 DESC;
 
 Result: 13 repos, 1,161 seeds, 57 ms. code_set_catalog 393 (212 open), seeds 280 (164), code_collector 163 (116), habituate 58 (41), oimnibus 52 (40), outcomesinsights.github.io 50 (12), ohdsi_supplemental_vocabs 34 (8), vocabulation 31 (4), epc 30 (29), litmine 29 (23), pman 29 (15), vocabulary_formats 12 (9).
 
@@ -78,4 +78,4 @@ WHAT THIS CHANGES ABOUT THE QUESTION: the cross-project view does not need a sin
 
 OPEN CHOICE, and it is a packaging question rather than a capability one: ship this as a documented recipe against the duckdb CLI (zero dependency), or as a `seeds` subcommand that imports duckdb (a 21 MB wheel against a runtime dependency list that is about to be just `click`). The recipe is the cheaper default; the subcommand only earns its weight if cross-project querying becomes routine.
 
-Also worth noting for whoever picks this up: the repo list here is a hardcoded glob of ~/projects/outins/*. A real cross-project story needs to decide how projects are discovered — which is the same registry problem raised in the sower seeds (seeds-181.2).
+Also worth noting for whoever picks this up: the repo list here is a hardcoded glob of ~/projects/outins/\*. A real cross-project story needs to decide how projects are discovered — which is the same registry problem raised in the sower seeds (seeds-181.2).

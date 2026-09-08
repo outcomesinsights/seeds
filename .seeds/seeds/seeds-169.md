@@ -6,7 +6,7 @@ type: question
 created_at: 2026-06-15T22:01:59.182458+00:00
 updated_at: 2026-08-31T20:02:42.685461+00:00
 resolved_at: 2026-06-15T22:19:09.776493+00:00
-resolution: "Yes — but intent reaches the implementer through the distilled, self-contained bead, not by the agent reading seeds. Beads cite their source seeds by convention (~37/83 carry a \"Source: seeds-X\" line, skill-mandated), and intent carries in distilled form (bead = \"## Why\" + pre-written content; the journey stays in the seed). The implementer is NOT told to dereference the citation — the bead-process skill never mentions seeds — so the seed is upstream / distillation-time context, not a live lookup. This is exactly the goal: the seeds->beads conversion front-loads the figuring-out so the agent does not have to. The dependency it exposes: hand-off quality rides entirely on the distillation step. Full findings are in the seed body plus answered sub-questions seeds-171 / seeds-172 / seeds-173."
+resolution: 'Yes — but intent reaches the implementer through the distilled, self-contained bead, not by the agent reading seeds. Beads cite their source seeds by convention (~37/83 carry a "Source: seeds-X" line, skill-mandated), and intent carries in distilled form (bead = "## Why" + pre-written content; the journey stays in the seed). The implementer is NOT told to dereference the citation — the bead-process skill never mentions seeds — so the seed is upstream / distillation-time context, not a live lookup. This is exactly the goal: the seeds->beads conversion front-loads the figuring-out so the agent does not have to. The dependency it exposes: hand-off quality rides entirely on the distillation step. Full findings are in the seed body plus answered sub-questions seeds-171 / seeds-172 / seeds-173.'
 tags:
   - beads-integration
   - agent-context
@@ -35,6 +35,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 @aguynamedryan does not know whether seeds actually provides context to the agents that implement features. He has not looked, because he has been one-shotting features and "haven't felt the need to look under the hood at what's causing the magic." The intent-debt landscape keeps emphasizing intent-as-context-for-an-agent, and that has not been a focus of seeds — so it is worth checking, *inside seeds* (per @aguynamedryan: "why would we do the investigation outside of seeds? the whole point is we're supposed to be doing things inside of seeds").
 
 The investigation, three sub-questions (attached):
+
 1. Do the beads generated from a seed reference the seed they came from?
 2. When a seed becomes beads, does the seed's intent carry into the bead description — or is it lost in the hand-off?
 3. In implementation session logs, does an agent actually follow a reference back to a seed?
@@ -45,10 +46,10 @@ Relates to seeds-85 (MCP vs better CLI integration) and seeds-87 (dynamic prime 
 
 Status: exploring — investigation pending (this session).
 
+______________________________________________________________________
 
-
----
 INVESTIGATION FINDINGS (2026-06-15): Intent DOES reach the implementer — but through the distilled, self-contained bead, not by the agent reading seeds.
+
 1. Beads cite their source seeds by convention (skill-mandated; ~37/83 beads carry a "Source: seeds-X" line).
 2. Intent carries in distilled form: the bead holds a "## Why" + pre-written content while the full journey stays in the seed ("Beads represent work; seeds carry the deliberation").
 3. The implementer is NOT told to dereference the citation — the bead-process skill never mentions seeds — so the seed is upstream / distillation-time context, not a live lookup.

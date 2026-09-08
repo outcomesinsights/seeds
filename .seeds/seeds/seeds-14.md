@@ -26,6 +26,7 @@ From discussion.md: 'My mind races. When I start talking about one idea, I might
 This is why 'jot' command exists - minimal friction capture.
 
 Related challenges:
+
 - Ideas can split into two different ideas
 - Ideas can merge into a single idea
 - One idea can spark another
@@ -33,9 +34,8 @@ Related challenges:
 
 The tool must accommodate this mental chaos without requiring immediate organization.
 
+______________________________________________________________________
 
-
----
 **Solution pattern: Inbox (consolidated from seed-a7fa):**
 
 From spec_first_pass.md: 'Capture fast, refine later. Get the idea into the system as quickly as possible.'
@@ -43,6 +43,7 @@ From spec_first_pass.md: 'Capture fast, refine later. Get the idea into the syst
 Review later to: tag and refine, establish relationships, put in right categories, achieve 'inbox zero'.
 
 Embodied in:
+
 - 'jot' command for quick capture
 - 'captured' status for unexplored seeds
 - 'deferred' status for backlogged

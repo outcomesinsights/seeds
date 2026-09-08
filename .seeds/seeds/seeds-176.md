@@ -30,9 +30,8 @@ Planned follow-up to 'Where to Plant seeds'. Thesis: the benefits of keeping the
 
 RELOCATED SOURCE PROSE from the upstream post (verbatim, for reuse here): (1) 'I hate revisiting old ideas thinking they are new and discovering they are not only old ideas, but had been soundly rejected by my past self years ago. Now that capture of meetings and messages is cheap, I can finally have a record of not only what paths I chose, but which ones I explored and dismissed and why I dismissed them. To me, this messy record, not just the intent, is the real gold.' (2) 'Going back to the drawing board is, at least for me, a regular part of designing a system. What I want with a tool like seeds is to not have to erase the original drawing before I start over. That original drawing had insights, information, flawed assumptions, and details I still might want to keep and learn from.' (3) The auditing/introspection bullet (revisit resolved seeds to check assumptions still hold, detect contradictions among newer seeds, update seeds with what was learned, maybe measure which beads needed a second pass). (4) NAUR redeployed correctly HERE: 'Programming as Theory Building' = the program is a theory living in developers' minds that the artifact cannot fully recapture; supports keeping the deliberation/journey, not just the code.
 
+______________________________________________________________________
 
-
----
 ## 2026-06-18 — drafting session: spine, scope decisions, and @aguynamedryan's monologue (verbatim-ish)
 
 Pulling the post together. Title settled: **"It's About the Journey, Not the Destination"** (theme: why it matters to sit upstream of intent). Two scope calls made this session:
@@ -53,6 +52,7 @@ Pulling the post together. Title settled: **"It's About the Journey, Not the Des
 **Critique folded in — don't over-state the gap:** this seed already records three payoffs @aguynamedryan has *actually lived*, so "no qualitative data" is too harsh on himself. The honest split is lived qualitative payoffs (real — lead with these) vs. a systematic/quantitative program (not built — the honest frontier).
 
 **The could-do program (each only possible *because* the journey was kept), with seeds:**
+
 - Drift audit — aged-out premises + contradictions among resolved seeds (seeds-158/159).
 - Feed implementation learnings back into the seeds that produced them (seeds-161, seeds-177).
 - Metrics on the deliberation: was the first hunch the right hunch? did an AI-suggested approach pan out? how often do we revisit? (seeds-160/174).

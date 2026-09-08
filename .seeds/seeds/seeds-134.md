@@ -20,6 +20,7 @@ When a seed is marked resolved, the most valuable piece of the deliberation — 
 Proposal: add a first-class 'resolution' text field, distinct from notes or content. This field only applies when a seed reaches a terminal state (resolved, abandoned). It should be easily accessible — when you look back at a resolved seed, the resolution is the thing you most want to see.
 
 Design considerations:
+
 - Discrete field, not appended to notes (too generic, gets buried)
 - Should 'seeds resolve' require a resolution, or allow optional with encouragement?
 - Abandoned seeds likely benefit from a similar 'reason' field (or share the same field)

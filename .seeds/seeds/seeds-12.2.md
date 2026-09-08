@@ -29,6 +29,7 @@ Beads' wisp/mol/proto phase system already creates this separation. Wisps are ep
 ConPort stores conclusions; seeds tracks the journey. Does beads track the journey? Its event/history system records state changes, but that's audit logging, not deliberation capture. Seeds' content field holds *prose reasoning* — the "why we considered X and rejected it" narrative. Beads issues have descriptions but aren't designed for evolving narrative content.
 
 **Possible outcomes:**
+
 1. Seeds remains separate — deliberation tool that hands off to beads
 2. Seeds becomes a beads "mode" or plugin — same backend, different UX/philosophy
 3. Seeds' ideas get absorbed into beads piecemeal — seeds withers

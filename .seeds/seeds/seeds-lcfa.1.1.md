@@ -24,10 +24,12 @@ THE GAP, verified in this repo 2026-08-25. `seeds sync` already does the right t
 Note the export side is manual here too: nothing flushes the DB to `.seeds/seeds.jsonl` on commit, so every seed captured in this session needed an explicit `seeds sync --flush-only` before `git add`.
 
 THE SHAPE OF THE FIX — the same wiring beads already uses:
+
 - post-merge and post-checkout: run the import so a pull or a branch switch leaves the DB current.
 - pre-commit: flush the DB to the tracked JSONL and stage it, so a `seeds jot` cannot be stranded by a commit that happens minutes later.
 
 TRAPS THAT ARE ALREADY DOCUMENTED AND MUST NOT BE REDISCOVERED:
+
 - The pre-commit framework installs into `.git/hooks/` and refuses to install while `core.hooksPath` is set, which is exactly what `bd init` does. The coexistence wiring has failure modes that are all SILENT — the commit succeeds and the export just stops. The procedure lives in ~/.config/home-manager/docs/beads-git-hooks.md and should be read rather than reconstructed.
 - Committing `.seeds/seeds.jsonl` and `.beads/issues.jsonl` in separate commits deadlocks the stash-then-restore against the flush and export hooks. They go in one commit when both are dirty.
 - The export must be synchronous in the hook. Beads learned this the hard way: its throttled auto-export let a create survive in the DB while a quick commit shipped without it.

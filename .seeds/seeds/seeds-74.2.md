@@ -36,6 +36,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Question:** Should seeds be captured during conversation (proactive) or extracted via post-conversation sweep (retrospective)?
 
 **User's argument for sweep:**
+
 - Holistic view of conversation reveals patterns: questions asked but not answered, decisions that led to other decisions/questions
 - The conversation IS the context - sweep has full context available
 - Trigger words or manual invocation ('sweep for seeds') could work
@@ -45,6 +46,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Key insight:** The failure mode of proactive capture was demonstrated in real-time. We discussed capture quality for 15+ minutes without making a seed about it.
 
 **Sweep approach could identify:**
+
 - Questions raised but not answered
 - Questions answered that led to decisions
 - Decisions that led to new questions
@@ -52,13 +54,13 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 - User clarifications/insights
 
 **Open questions:**
+
 - What triggers a sweep? End of session? Manual command? Keyword?
 - How to present findings - auto-create seeds or suggest for user review?
 - How to handle very long conversations?
 - Could this work on historical conversations too?
 
-
----
+______________________________________________________________________
 
 ## RESOLVED 2026-09-01. The question was a false binary; the answer is both, and both now have names.
 
@@ -69,9 +71,9 @@ build and nothing to close.
 
 Both halves are now specified:
 
-| Half | Command | Seed |
-|---|---|---|
-| Proactive, in-conversation | `cutting` — capture a live topic with enough context to resume it cold | seeds-h5rq |
+| Half                          | Command                                                                         | Seed         |
+| ----------------------------- | ------------------------------------------------------------------------------- | ------------ |
+| Proactive, in-conversation    | `cutting` — capture a live topic with enough context to resume it cold          | seeds-h5rq   |
 | Retrospective, end-of-session | `glean` — read the transcript, diff against the corpus, surface what was missed | seeds-74.2.1 |
 
 Both are Claude Code skills. `cutting` is a pure skill (zero new CLI surface); `glean` is a

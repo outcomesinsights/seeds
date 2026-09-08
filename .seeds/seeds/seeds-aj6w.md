@@ -56,9 +56,7 @@ Secondary benefit, related to seeds-d773: read-modify-write costs an extra read 
 - Should `--remove-tag` on a tag the seed does not carry be a silent no-op, or an error? Silent is friendlier for batch operations ("clear this flag everywhere"); an error catches typos like `--remove-tag next-posts`. Leaning silent no-op with the removal count reported, so a typo shows up as "0 removed."
 - Is a batch form worth it (`seeds update --remove-tag next-post --all-tagged next-post`), or is looping over IDs fine? Looping is fine at 11 seeds; revisit if flags routinely span dozens.
 
-
-
----
+______________________________________________________________________
 
 ## Open questions resolved (2026-08-10)
 
@@ -67,17 +65,13 @@ Secondary benefit, related to seeds-d773: read-modify-write costs an extra read 
 - **`--remove-tag` on a tag the seed does not carry: silent no-op**, reporting the removal count. A typo like `--remove-tag next-posts` surfaces as "0 removed" rather than erroring mid-batch or vanishing without trace.
 - **No batch form.** Looping over IDs is fine at the current scale (11 seeds carrying `next-post`). Revisit only if flags routinely span dozens.
 
-
-
----
+______________________________________________________________________
 
 ## Promoted to beads (2026-08-10)
 
 - **seeds-3ps** (P2, feature) — Add `--add-tag` / `--remove-tag` to `seeds update`. Bead ID, not a seed ID. Carries both of @aguynamedryan's rulings (silent no-op on absent, no batch form) plus the locked decision to keep wholesale `--tags` and add no guard to tag operations.
 
-
-
----
+______________________________________________________________________
 
 ## Shipped in v0.5.0 (2026-08-11)
 

@@ -65,6 +65,7 @@ CORRECTION (2026-09-01, measured while building bead seeds-4co.16). The claim ab
 The check compares a file against render_seed_file(what the file NOW says): a render of itself. So it catches SERIALIZATION drift — an extra trailing newline, blank lines around the body, reordered frontmatter keys — and is blind to any rewrite of the body TEXT that leaves the layout canonical. ruff reformatting a Python code block inside a seed body produces a still-perfectly-canonical file; only the prose changed. Trimming trailing whitespace off a body line is the same shape. Both directions are now pinned by tests.
 
 So the defence needs THREE rules, not two, and two of them exist:
+
 - tool-config-includes-store — catches the tools we can NAME (shipped)
 - non-canonical-bytes — catches SERIALIZATION rewrites (shipped)
 - content-rewritten-without-a-timestamp-bump — catches a CONTENT rewrite that preserves layout (NOT built, filed as a bead)

@@ -19,7 +19,7 @@ relationships:
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
-Empirical refinement to [[agents-under-surface-doubts-unless-invited]], surfaced live in the seeds-152 conversation.
+Empirical refinement to \[[agents-under-surface-doubts-unless-invited]\], surfaced live in the seeds-152 conversation.
 
 ## The refinement
 
@@ -32,13 +32,13 @@ The closer pattern — "do you have any questions, comments, or criticisms?" —
 
 In the seeds-152 conversation, the agent (me) ended a reply where the user had just *answered* a question with the closer. The user noticed immediately: "Why are you asking me if I have questions, comments, or criticisms? Are you being silly? Are you playing with me? I think I answered all your questions."
 
-The user was right. The reply was logistical (here's what to file, here's the recommendation); the user had closed the loop; there was nothing to invite pushback on. Tacking on the closer was the failure mode that [[risk-lodestones-may-over-channel-agent-reasoning]] worried about generalized: ritualizing a pattern strips it of meaning.
+The user was right. The reply was logistical (here's what to file, here's the recommendation); the user had closed the loop; there was nothing to invite pushback on. Tacking on the closer was the failure mode that \[[risk-lodestones-may-over-channel-agent-reasoning]\] worried about generalized: ritualizing a pattern strips it of meaning.
 
 ## Implication for the feedback skill (seeds-152)
 
 The closer instruction in the feedback skill is for the agent's reply *to a user-initiated feedback turn*. It should not propagate into the agent's subsequent replies. Skill scope is one round-trip, not a behavioral mode.
 
-## Implication for [[decision-skills-are-prompt-macro-scale]]
+## Implication for \[[decision-skills-are-prompt-macro-scale]\]
 
 Confirms the prompt-macro stance. Skills should affect the *single next exchange* they're attached to, not install ongoing behavior changes. The closer working user-initiated is exactly the kind of intentional, scoped invocation that prompt-macro skills enable; the closer becoming a coda is exactly the kind of behavioral drift that workflow-engine-scale skills risk introducing.
 

@@ -24,18 +24,20 @@ Options appear to be statements with a specific relationship to a topic ('propos
 
 Example:
 Topic: 'what language?'
-  - Option: 'use Python' (context: 'AI proposed as fastest for MVP')
-  - Option: 'use Go' (context: 'not my strongest language, but Beads uses it')
-  - Input: 'whichever is best for AI is fine with me'
-  - Resolution: Python ACCEPTED, Go REJECTED
+
+- Option: 'use Python' (context: 'AI proposed as fastest for MVP')
+- Option: 'use Go' (context: 'not my strongest language, but Beads uses it')
+- Input: 'whichever is best for AI is fine with me'
+- Resolution: Python ACCEPTED, Go REJECTED
 
 Questions:
+
 1. Are options a distinct seed type, or statements with a relationship?
 2. What is the exact relationship between option and topic?
 3. What happens to non-selected options when one is accepted?
 
+______________________________________________________________________
 
----
 **Partial answers (from conversation):**
 
 Q1: Are options a distinct seed type, or statements with a relationship?

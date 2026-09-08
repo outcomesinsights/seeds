@@ -26,11 +26,12 @@ relationships:
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
-Captured 2026-06-23 from @aguynamedryan <-> @markdanese's working session (sharpens the "parlor trick" point in seeds-176.5). The keystone reply to intent.build for the journey post.
+Captured 2026-06-23 from @aguynamedryan \<-> @markdanese's working session (sharpens the "parlor trick" point in seeds-176.5). The keystone reply to intent.build for the journey post.
 
 THE POINT: Everyone in the intent-capture space treats the settled decision/intent as the artifact to capture and nurture. But deriving the decision FROM the deliberation is the easy, downstream output — a "parlor trick" (seeds-176.5). The precious, hard-won thing is the deliberation itself. Keep the deliberation and the intent is one query away; keep only the intent and the deliberation is gone for good.
 
 @aguynamedryan, verbatim (01:27:29):
+
 > "The deliberation itself is the artifact, is the precious stuff... Intent just falls out of seeds. It's trivial to pull it out at the end. I don't have to have a special tool for capturing and nurturing that part — that's just something I can ask it at the end."
 
 WHY IT'S ALSO AN ECONOMICS ARGUMENT: because distillation got cheap, storing the distillate (the intent/decision) as a first-class artifact is premature caching of something now cheap to recompute — and lossy, because it drops the dismissed branches. So "intent falls out" and "keep the source, not the summary" are the same argument.
@@ -40,4 +41,5 @@ NON-TOTALIZING (seeds-168, seeds-176.5): the claim is seeds is upstream of INTEN
 USE IN POST: keystone of section 3. Lived proof attached separately (the beads-carry-intent discovery).
 
 ## Related
+
 seeds-176.5 (intent.build / parlor-trick), seeds-168 (upstream-of-intent), seeds-176.3 (spine).

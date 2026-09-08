@@ -23,10 +23,12 @@ unusable mid-session: `git status`, `git add` and `git commit` all failed with
 `fatal: this operation must be run in a work tree`. Cause was four values that
 appeared in .git/config at 13:44:24 -
 
-    core.bare=true              <- this is what broke it
-    user.email=test@example.com
-    user.name=Test
-    commit.gpgsign=false
+```
+core.bare=true              <- this is what broke it
+user.email=test@example.com
+user.name=Test
+commit.gpgsign=false
+```
 
 @aguynamedryan ran the repair by hand (`git config --local core.bare false`, plus
 --unset on the other three). No commit was ever authored with the bad
@@ -34,6 +36,7 @@ identity - it arrived after the 13:24 commit, and all commits check out as
 @aguynamedryan <aguynamedryan@gmail.com>.
 
 ROOT CAUSE, established from the timeline rather than guessed:
+
 - 13:44 - worktree agent-a615c1063024add25, on branch
   seeds-ww8/guard-mixed-stage-flush, was developing the mixed-stage guard.
 - 13:50 - that work merged as 00ed416, introducing src/seeds/gitstage.py and
@@ -50,9 +53,8 @@ worktree defaults to --local, which is the common config file.
 
 THE IRONY, and the reason this is worth a seed rather than just a fix:
 src/seeds/gitstage.py already carries `_subprocess_env()`, which strips six
-repo-pinning GIT_* variables, and its own comment says it was written after
-discovering exactly this class of bug ("run as a pytest hook inside `git
-commit` ... would otherwise silently redirect into the real repo's index").
+repo-pinning GIT\_\* variables, and its own comment says it was written after
+discovering exactly this class of bug ("run as a pytest hook inside `git commit` ... would otherwise silently redirect into the real repo's index").
 THE FIX LANDED SIX MINUTES AFTER THE DAMAGE. The guard was right; what was
 missing was (a) anyone reverting the damage already done, and (b) any detector
 that would have noticed. The repo sat bricked for ~20 minutes and was found
@@ -66,6 +68,7 @@ again. The blast radius is the developer's main working tree.
 WHAT DOES *NOT* FIX IT - recorded so it is not re-proposed. Enabling
 `extensions.worktreeConfig` was my first instinct and it is wrong twice over,
 per git-worktree(1) on git 2.55.0:
+
 - With the extension DISABLED (today's state), git already special-cases
   core.bare and core.worktree in the shared config so they "will be applied to
   the main worktree only". That is precisely why the four agent worktrees kept
@@ -78,6 +81,7 @@ per git-worktree(1) on git 2.55.0:
   defaults to --local and reaches the shared file either way.
 
 PROPOSED REMEDIATION, in priority order:
+
 1. DETECT. A pre-commit assertion that fails loudly if core.bare is true or
    user.email looks like a test fixture. The whole cost of this incident was
    that a config error surfaces as an unrelated, unexplained git failure. This
@@ -102,17 +106,16 @@ has a legitimate reason to strip repo-pinning vars; it has no business
 redirecting the user's global git config. Those are two different jobs that
 currently share one function.
 
-
 TRACKED AS: bead seeds-p0x (P1 bug) - carries the remediation plan, the
 rejected extensions.worktreeConfig option, and acceptance criteria.
-
 
 --- RESOLVED IN IMPLEMENTATION (2026-08-26, commit 3919c00) ---
 
 THE OPEN QUESTION ABOVE IS ANSWERED: the sandboxing belongs in a TEST-ONLY
 helper, not in `_subprocess_env()`. The two jobs really are different and the
 split is now explicit in tests/githelpers.py:
-- Shared with production: stripping the six repo-pinning GIT_* vars. That
+
+- Shared with production: stripping the six repo-pinning GIT\_\* vars. That
   describes git's hook contract, and `seeds sync` needs it for its own reasons.
 - Test-only, deliberately NOT in src/: GIT_CEILING_DIRECTORIES,
   GIT_CONFIG_GLOBAL/SYSTEM -> /dev/null, and the identity variables.
@@ -130,7 +133,8 @@ stripped, and the test sets those variables itself so the hook case runs every
 time rather than only during a commit.
 
 WHAT SHIPPED:
-- tests/githelpers.py - the sandbox, and the single home for _git/_git_init
+
+- tests/githelpers.py - the sandbox, and the single home for \_git/\_git_init
   (previously duplicated in test_gitstage.py and test_cli.py, which is how one
   copy came to poison a real repo).
 - tests/conftest.py - session-scoped autouse guard that snapshots the ambient

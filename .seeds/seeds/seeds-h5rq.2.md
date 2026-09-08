@@ -20,12 +20,12 @@ tags:
 Context gathered 2026-09-01 by string-dumping the Claude Code binary (v2.1.252, titan).
 These are the verbatim registered command descriptions, not recollection.
 
-| Command | Registered description | Shape |
-|---|---|---|
-| `/branch [name]` | "Create a branch of the current conversation at this point" | **You move into the branch**; the original stays behind |
-| `/fork [prompt]` | "Copy this conversation into a new background session and keep working here" | The topic leaves, you stay |
-| `/subtask <directive>` | "Send a subagent off with your full context; its result comes back here" | Answer returns inline |
-| `/btw` | "Ask a quick side question without interrupting the main conversation" | Smallest case |
+| Command                | Registered description                                                       | Shape                                                   |
+| ---------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `/branch [name]`       | "Create a branch of the current conversation at this point"                  | **You move into the branch**; the original stays behind |
+| `/fork [prompt]`       | "Copy this conversation into a new background session and keep working here" | The topic leaves, you stay                              |
+| `/subtask <directive>` | "Send a subagent off with your full context; its result comes back here"     | Answer returns inline                                   |
+| `/btw`                 | "Ask a quick side question without interrupting the main conversation"       | Smallest case                                           |
 
 Supporting: `claude agents` / `/tasks` (list background sessions), `claude attach <id>`,
 `claude --resume --fork-session`, and `/rewind` (which also forks at the restore point).

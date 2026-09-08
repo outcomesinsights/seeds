@@ -29,6 +29,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Command:** `seeds sweep [--session=ID] [--all] [--auto]`
 
 **Flow:**
+
 1. Locate conversation JSONL (~/.claude/projects/<project>/<session>.jsonl)
 2. Parse messages (user + assistant content)
 3. Send to Claude with prompt asking to identify:
@@ -41,6 +42,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 5. Present as suggestions OR auto-create with --auto flag
 
 **Output format:**
+
 ```
 Found 5 potential seeds:
 
@@ -54,49 +56,52 @@ Found 5 potential seeds:
 ```
 
 **Questions:**
+
 - How to handle multi-hour conversations? Chunk or summarize?
 - Should sweep use current session's model or cheaper/faster one?
 - How to find 'current' session from CLI context?
 
-
-
 ## Additional Design Considerations (from discussion)
 
 **Sweep invocation options:**
+
 1. CLI command: `seeds sweep` - invokes Claude to analyze
 2. Slash command: `/sweep` - runs within conversation context
 3. Part of prime statement - AI-initiated at session end
 
 **Re-sweep handling:**
+
 - Track which conversations have been swept (metadata/marker)
 - Avoid re-sweeping by default
 - Allow intentional re-sweep with flag: `seeds sweep --force` or `seeds sweep --since=<date>`
 - Use case: 'We have a new lens, let's revisit old conversations'
 
 **Slash command vs CLI:**
+
 - Slash command: Runs in Claude context, has conversation readily available
 - CLI command: Needs to find/parse conversation files, call Claude API
 - Slash command feels more natural for 'sweep current conversation'
 - CLI needed for 'sweep historical conversations'
-
-
 
 ## Context vs JSONL for sweep
 
 **Problem:** After compaction, AI context is summarized. Detail is lost.
 
 **Compacted context has:**
+
 - Key decisions
 - Summary of what happened
 - Recent exchanges in detail
 
 **Compacted context loses:**
+
 - Exact data from queries (13M vs 3 records)
 - Step-by-step investigation process
 - Specific user quotes/clarifications
 - Things mentioned but not acted on
 
 **JSONL conversation log has:**
+
 - Full transcript - every message
 - All tool calls and results
 - Not compacted - raw detail
@@ -104,14 +109,14 @@ Found 5 potential seeds:
 **Implication:** Slash command using current context won't work well after compaction. Need to actually read the JSONL.
 
 **Revised approach:**
+
 1. Slash command or 'harvest seeds' phrase triggers
 2. AI identifies current session's JSONL path
 3. AI reads JSONL file (it's in ~/.claude/projects/...)
 4. Analyzes full conversation against seeds
 5. Surfaces gaps
 
-
----
+______________________________________________________________________
 
 ## RESOLVED 2026-09-01 (Ryan). The command is `seeds glean`.
 

@@ -47,6 +47,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **The challenge:** When an LLM reviews a source document to extract seeds, it needs to know what the project cares about. Seeds for the seeds project are different than seeds for other projects. How do we convey project context tersely but thoroughly?
 
 **What the LLM needs to know:**
+
 - High-level project purpose/domain
 - What kinds of seeds already exist (to avoid duplicates, to find updates)
 - What themes/topics are being actively explored
@@ -55,6 +56,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **The tension:** As a project grows, its seed database grows. We can't dump 152 seeds into a context window for every document ingestion. Need a compressed representation.
 
 **Possible approaches:**
+
 1. Use `seeds prime` output — already designed for this purpose
 2. Tag-based summary: list all unique tags as a project profile
 3. Active seeds only: only show exploring/captured status seeds

@@ -24,6 +24,7 @@ From ETL pilot: described the workflow pattern (sources → generators → mappi
 Key insight: Seeds doesn't need built-in workflow templates if the AI can be instructed on the pattern. The structure lives in the prompt/context, not the tool.
 
 This suggests:
+
 1. Domain-specific seeds variations might be unnecessary
 2. 'Good enough' approach: describe workflow in CLAUDE.md or session context
 3. Seeds stays simple/generic, workflows are emergent from AI instruction

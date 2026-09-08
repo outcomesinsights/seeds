@@ -31,18 +31,21 @@ Reported by a peer session working in the home-manager repo (seeds prefix hm-, 2
 
 WHAT THE USER HIT. `seeds sync` correctly refused to export after a divergence, saving the content — that part works and should be preserved. The refusal said:
 
-    hm-ml5: the database's content does not contain the on-disk content (they diverge at character 0)
-    # compare, then append the text that only exists on disk
-    seeds update <id> -a '<the text from disk>'
+```
+hm-ml5: the database's content does not contain the on-disk content (they diverge at character 0)
+# compare, then append the text that only exists on disk
+seeds update <id> -a '<the text from disk>'
+```
 
 They followed it exactly. Sync refused again with the identical message. They verified in Python that the on-disk string was now a genuine substring of the database content — containment held and the check still failed. The only thing that worked was `seeds update <id> --replace -c '<original><new>'`, rebuilding the record with the on-disk text FIRST.
 
 THE ACTUAL DEFECT, confirmed in code. `content_is_covered` (export.py:335-347) is a PREFIX test:
-    if db_content.startswith(disk_content): return True
-    return db_content.strip().startswith(disk_content.strip())
+if db_content.startswith(disk_content): return True
+return db_content.strip().startswith(disk_content.strip())
 Its own docstring states the intent correctly — "the database's body **starts with** the file's" — and justifies the strictness with evidence: of 42 content-changing edits across 67 commits, 41 were literal appends, and the one exception was a prepended header, "precisely the kind of edit an operator should be told about." The design is deliberate and good.
 
 Three surfaces describe it as containment instead:
+
 1. the function NAME, `content_is_covered`
 2. the docstring's summary line, "Is the on-disk body fully contained in what the database is about to write?" — which contradicts the body of its own docstring three paragraphs later
 3. the user-facing message at export.py:349, "the database's content does not contain the on-disk content"
@@ -52,6 +55,7 @@ WORSE THAN "MISLEADING" — THE ADVICE IS STRUCTURALLY INCAPABLE OF WORKING. The
 Compounding it, the message's parenthetical "(they diverge at character 0)" is the one accurate clue on screen, and it points at prefix semantics — but it sits under prose saying "does not contain," so it reads as noise.
 
 FIX, in the order I would do it:
+
 1. Correct the user-facing wording: "the database's content does not BEGIN WITH the on-disk content." One line, removes the false lead.
 2. Replace the remediation with one that can actually work — the `--replace` form with the on-disk text leading, i.e. reconstruct the body as <on-disk text> followed by the database's newer text. This is what the reporter had to derive unaided.
 3. Rename `content_is_covered` and fix its summary line so the code stops contradicting itself. The explanatory body of that docstring is excellent and should be kept verbatim.
@@ -60,13 +64,11 @@ DO NOT relax the check to genuine containment, which the report offered as a thi
 
 TEST TO ADD ALONGSIDE: assert that following the remediation the message prints actually clears the refusal. That is the property that was broken, and no test currently asserts it — the guidance and the guard were free to drift apart.
 
-
 --- SCOPE RULED (@aguynamedryan, 2026-08-26): build it ---
 
 Promoted to beads for implementation. Confirmed scope: fix the user-facing wording to say BEGIN WITH, replace the remediation with a form that can actually clear the guard (the `--replace` form with the on-disk text leading), rename `content_is_covered` and fix its self-contradicting summary line, and add a test asserting that following the printed remediation actually clears the refusal.
 
 Explicitly NOT in scope: relaxing the guard to genuine containment. The prefix strictness is deliberate and evidence-backed, and containment would silently admit the one historical case it was built to catch.
-
 
 --- SHIPPED (2026-08-26, commit 54057b1, bead seeds-pfe) ---
 

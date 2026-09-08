@@ -32,7 +32,7 @@ Two goals are in tension:
 
 Invisible customization works against the second goal. It also obscures whether our design is good or whether we're papering over deficiencies with accumulated memories.
 
-This is part of *why* shipping skills/agents with seeds matters (see [[ship-an-agent-persona-cedric-and-or-skills]] and [[decision-skills-are-prompt-macro-scale]]) — good defaults should be baked into the tool, not just emergent in the author's environment.
+This is part of *why* shipping skills/agents with seeds matters (see \[[ship-an-agent-persona-cedric-and-or-skills]\] and \[[decision-skills-are-prompt-macro-scale]\]) — good defaults should be baked into the tool, not just emergent in the author's environment.
 
 ## Possible responses
 

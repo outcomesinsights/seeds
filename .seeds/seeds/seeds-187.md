@@ -37,6 +37,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 Proposal (drafting it now): a `resolve-seeds-from-beads` skill — the symmetric bookend to the seeds-to-beads skill (seeds-152.4). Run once, user-initiated, after an implementation session when the user is satisfied with the shipped feature.
 
 What it does:
+
 1. Find the originating seeds from the completed beads' "Source:" lineage (or ask).
 2. Reconcile the deliberation against what actually shipped — tweaks, last-minute changes, divergences — and APPEND them to the seeds (seeds update --append, never -c which replaces), preserving the original reasoning and voice. Agent proposes; user confirms.
 3. Capture the efficacy note (tweaking-needed? / planning-miss vs inherent-unknown / what a better bead would have said).
@@ -46,11 +47,10 @@ Why it is well-motivated: it is the operational answer to two already-deferred c
 
 Open design question (values-laden): how aggressively should the agent edit the seed record? Default chosen: append-only, preserve the original deliberation, propose-and-confirm -- never overwrite. Provenance otherwise rides on git blame (seeds-157). Relates to the still-open efficacy/metrics question seeds-185.
 
-SHIPPED (bead seeds-3p4) — the skill exists at src/seeds/plugin/claude-plugin/skills/resolve-seeds-from-beads and installs under the seeds:* namespace. LESSON FROM THE FIRST REAL RUN (2026-08-31), which this seed's own resolution came out of: step 1 says find the originating seeds from the beads' "Source:" lineage. In this repo that lineage is not a field — it is prose mentions of seed ids inside bead descriptions, so recovering it means text-matching. That heuristic OVER-CLAIMS: seeds-lcfa.1.1 (wire seeds sync into git hooks) showed up as done because every bead mentioning it had closed, when the closed bead (seeds-ww8) had actually shipped a different, downstream fix. Every candidate has to be verified against shipped code, not against bead status. Second gap: the skill assumes one just-finished feature, and says nothing about being pointed at a backlog of 38 stale candidates, where the real work is triage — which is what happened here.
+SHIPPED (bead seeds-3p4) — the skill exists at src/seeds/plugin/claude-plugin/skills/resolve-seeds-from-beads and installs under the seeds:\* namespace. LESSON FROM THE FIRST REAL RUN (2026-08-31), which this seed's own resolution came out of: step 1 says find the originating seeds from the beads' "Source:" lineage. In this repo that lineage is not a field — it is prose mentions of seed ids inside bead descriptions, so recovering it means text-matching. That heuristic OVER-CLAIMS: seeds-lcfa.1.1 (wire seeds sync into git hooks) showed up as done because every bead mentioning it had closed, when the closed bead (seeds-ww8) had actually shipped a different, downstream fix. Every candidate has to be verified against shipped code, not against bead status. Second gap: the skill assumes one just-finished feature, and says nothing about being pointed at a backlog of 38 stale candidates, where the real work is triage — which is what happened here.
 
+______________________________________________________________________
 
-
----
 **2026-09-01: the two follow-ons named in this seed's resolution are now beads.**
 
 - **seeds-20v (P1, bug)** — resolve-seeds-from-beads must verify candidates against shipped code, not bead status. Carries the seeds-lcfa.1.1 / seeds-ww8 over-claim as its worked example.

@@ -17,12 +17,14 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 Currently @aguynamedryan converts finalized seed decisions into beads issues ad hoc by asking an agent. This works but is inconsistent.
 
 A formalized command would:
+
 - Take a resolved/mature seed with answered questions
 - Extract actionable items from the decisions
 - Create beads issues with appropriate priority, type, and dependencies
 - Link back to the source seed for traceability
 
 Design considerations:
+
 - Mapping rules: seed type → bead type (decision→task, concern→bug, etc.)
 - What constitutes 'ready for conversion'? All questions answered? Status = resolved?
 - Should it be `seeds export --to-beads` or `bd import --from-seeds`?

@@ -27,6 +27,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 Skills shipped with seeds should be distributed as a **Claude Code plugin** (option 2), provided we can make the install experience as smooth as a hypothetical `seeds skills install` command (option 1). If we can't — for example, if plugin install requires the user to run separate Claude Code commands or accept multiple prompts — we ship option 1 first and migrate to option 2 once tooling allows.
 
 The strong preference for option 2 is driven by:
+
 - The `seeds:*` namespace (matching `beads:*`) is what we want long-term anyway.
 - Native Claude Code discovery, listing, versioning.
 - Avoids inventing our own out-of-band install/update mechanism that we'd later replace.

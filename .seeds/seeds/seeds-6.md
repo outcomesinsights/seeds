@@ -34,15 +34,17 @@ From spec_first_pass.md, relationship types identified:
 - Supersedes: One seed replaces another
 
 Additional concepts:
+
 - Explicit vs Possible relationships: Confirmed vs AI-suggested connections
 - Relationship discovery can happen at creation, during review, or on demand
 - No seed is ever truly 'permanently standalone' - new seeds might create relationships later
 
+______________________________________________________________________
 
----
 **Beads v0.50-v0.56 validation (Feb 2026):**
 
 Beads now implements typed relationships in production. Four relationship types beyond blocking:
+
 - `relates_to` — bidirectional "see also" (what seeds has today)
 - `replies_to` — message/reasoning threading
 - `duplicates` — deduplication with auto-close of the duplicate
@@ -57,11 +59,13 @@ For seeds, `supersedes` is the highest-value addition — decisions evolve and t
 Analysis of production data (114 seeds, 36 questions, 65 related_to links) identified these patterns:
 
 **Initial relationship types (v1):**
+
 - `questions` — directed: question-seed → seed it asks about (36 instances)
 - `answers` — directed: for when a separate seed answers a question (25 answered questions)
 - `relates-to` — bidirectional placeholder for 'not yet specifically typed' (65 links)
 
 **Observed but deferred patterns (still as relates-to):**
+
 - Decision → Idea (~15 links, e.g. 5 web UI decisions all pointing at seed-5f7b)
 - Concern → Topic (~12 links, clustering around umbrella concerns)
 - Exploration → Topic (~8 links)

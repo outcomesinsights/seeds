@@ -39,7 +39,7 @@ Seeds is, in part, a context-shaping mechanism for agents. Every artifact we cap
 This dynamic has two implications:
 
 1. **The status quo is already shaping behavior.** We are not choosing whether seeds influence agents — only how much.
-2. **Amplifying features compound the risk.** Anything that elevates certain seeds (lodestones — see [[lodestone-north-star-marker]] and [[risk-lodestones-may-over-channel-agent-reasoning]]) makes this compounding worse. Stronger signal → less questioning.
+2. **Amplifying features compound the risk.** Anything that elevates certain seeds (lodestones — see \[[lodestone-north-star-marker]\] and \[[risk-lodestones-may-over-channel-agent-reasoning]\]) makes this compounding worse. Stronger signal → less questioning.
 
 ## Possible design responses
 

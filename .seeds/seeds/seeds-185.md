@@ -25,6 +25,7 @@ Genuinely undecided -- capturing the deliberation, not a decision.
 PROPOSAL on the table: at seed resolution, the agent writes a short HONEST efficacy note for the beads that implemented it -- did they need meaningful tweaking? was a tweak a planning miss (a better bead would have caught it) or an inherent unknown only discoverable by building? what would the better bead have said? Qualitative, low-friction, and nearly free because the agent is already present at resolution.
 
 WHERE it could live:
+
 - On the bead: beads IS extensible -- `bd create --metadata '<json>'` (arbitrary JSON) plus labels/tags/set-state. Technically viable, but an unschemaed blob in the ephemeral bead world we do not own.
 - On the seed resolution (preferred): seeds is ours end-to-end; the seed is the durable artifact; and the honest assessment can only be made post-implementation, which is exactly when we resolve.
 

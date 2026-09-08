@@ -30,12 +30,14 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Approach:** Hybrid of proactive capture + session-end sweep
 
 **During conversation (proactive):**
+
 - Use `seeds jot`, `seeds ask` for explicit callouts
 - Capture tangents, questions, ideas that come up but aren't current focus
 - Benefit: Stay on task while noting things to revisit later
 - This is intentional, human-directed capture
 
 **End of session ('land the plane' equivalent):**
+
 - Before closing out, seeds checks: what fell through the cracks?
 - Finds current conversation JSONL
 - Compares what was discussed vs what got captured
@@ -43,6 +45,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 - User decides what to add
 
 **Why hybrid:**
+
 - Auto-capture alone can't know what's a tangent worth noting vs noise
 - Pure proactive fails (as demonstrated: we talked 15min without capturing)
 - Explicit callouts handle 'I want to note this but stay on task'
@@ -50,15 +53,15 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 
 **Implementation thought:**
 Like beads 'land the plane' triggers sync, seeds could have similar phrase that triggers:
+
 1. `seeds sync --flush-only`
 2. Conversation sweep for gaps
 3. Present any uncaptured items for review
 
-
-
 ## Technical approach options
 
 **Option A: Slash command**
+
 - `/seeds-sweep` slash command
 - AI says 'land the plane' → invokes slash command
 - Slash command prompt instructs AI to analyze current conversation
@@ -66,6 +69,7 @@ Like beads 'land the plane' triggers sync, seeds could have similar phrase that 
 - Simpler: no need to find/parse JSONL from CLI
 
 **Option B: Hook-triggered**
+
 - Hook listens for trigger phrase
 - Calls `seeds sweep --current-session`
 - CLI finds conversation JSONL, calls Claude API to analyze
@@ -74,10 +78,10 @@ Like beads 'land the plane' triggers sync, seeds could have similar phrase that 
 **Option A seems simpler** - the AI already has the conversation in context, just needs prompting to analyze it against seeds.
 
 ## Trigger phrase
+
 Open question: use 'land the plane' (consistency with beads) or seeds-specific phrase?
 
-
----
+______________________________________________________________________
 
 ## RESOLVED 2026-09-01. The hybrid stands; both halves now have names.
 

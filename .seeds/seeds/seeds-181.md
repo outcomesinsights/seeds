@@ -66,6 +66,7 @@ Probably a hub on @aguynamedryan's laptop (voice memos are Apple-oriented), reac
 ## Relationship to existing seeds
 
 sower is essentially the productization of an existing cluster in this repo, not a greenfield idea:
+
 - seeds-142 — transcript-incorporation workflow (the recurring dedupe-and-create use case; already grew out of oimnibus + the transcript-seeds skill)
 - seeds-130 — project-aware gleaning (the routing brain: the LLM needs each project's context)
 - seeds-129 — source documents may span multiple projects (the multi-project routing concern)
@@ -79,4 +80,5 @@ Broken out below: (1) the routing engine / core ingest loop; (2) the project reg
 Two implied seeds-the-project features are captured as separate top-level seeds (kept in this repo so they don't leave with sower on export) and linked: a per-repo self-summary report, and a single-location cross-project query.
 
 ## Related
+
 seeds-142, seeds-130, seeds-129, seeds-87, seeds-126

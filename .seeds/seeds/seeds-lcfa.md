@@ -34,11 +34,13 @@ Open question: should seeds swap SQLite for Dolt as its storage engine, so the d
 Worth checking the premise first — beads does NOT git-track its Dolt data. Verified in this repo (2026-08-25): `git ls-files .beads` lists only `issues.jsonl`, `metadata.json`, `config.yaml`, `export-state.json`, and the hooks; `.beads/embeddeddolt/` and `.beads/dolt/` are gitignored local state. Beads syncs through the git-tracked JSONL export, with no Dolt remote. That is architecturally the SAME thing seeds already does with `.seeds/seeds.db` (ignored) plus `.seeds/seeds.jsonl` (tracked).
 
 So "embed the DB in the repo like beads" is not actually the delta. If Dolt is worth adopting, the reasons have to be the things Dolt gives that SQLite does not:
+
 - Real data-level merge instead of JSONL line-merge — matters if seeds get edited concurrently on multiple hosts/worktrees and the JSONL conflicts get ugly.
 - Cell-level history and time travel over the seed graph — arguably interesting for a tool whose whole thesis is capturing a deliberation's evolution. That is the argument most native to what seeds is for, and it is about provenance, not portability.
 - Branch-per-exploration semantics for the seed DB itself.
 
 Costs to weigh:
+
 - Beads is Go and can link Dolt in-process. seeds is Python — there is no in-process embedded Dolt for it, so this means shipping/managing a dolt binary or a sql-server process. Note that beads RETIRED shared server mode in favour of embedded; seeds would be adopting the mode beads abandoned.
 - Loses the "it's just a SQLite file plus a JSONL" simplicity, which is currently a real virtue for a small CLI.
 - The JSONL export would probably still exist for human/agent readability and cross-tool consumption, so this adds a layer rather than replacing one.
@@ -46,7 +48,6 @@ Costs to weigh:
 Framing question to settle before any of the above: what problem are we actually feeling? If it is "my seeds.jsonl conflicts when I work on two machines," Dolt is one answer but so is a smarter merge driver or per-seed files. If it is "I want to see how a seed's thinking changed over time," that is a provenance feature that could be built on SQLite without a new engine.
 
 Related: seeds-42 (deferred — would a graph DB beat SQLite if relationships become central?) is the same class of storage-engine question, and any answer here should probably answer that one too. Also touches seeds-10 (JSONL export format) and seeds-155 (a `seeds import` command).
-
 
 --- WHERE THIS LANDED (2026-08-25, after the full deliberation) ---
 
@@ -64,12 +65,11 @@ THE ANSWER THAT EMERGED (seeds-lcfa.4 option C, prototyped in seeds-lcfa.6): sto
 
 TENTATIVE DISPOSITION: Dolt is not the answer for seeds; the engine was never the problem. This seed should probably resolve as "no" once the per-seed-files path is decided on its own merits — but it should NOT resolve until then, because the Dolt-shaped wins (cell-level conflict reporting, SQL-queryable history) are the bar the replacement has to clear.
 
-
 --- PREMISE CORRECTION (2026-08-26) ---
 
 The opening premise above - "beads syncs through the git-tracked JSONL export,
 with no Dolt remote" - was verified against THIS repo's .beads/ and remains true
-here: seeds' own beads is single-host, with no sync.remote and no refs/dolt/*.
+here: seeds' own beads is single-host, with no sync.remote and no refs/dolt/\*.
 As a statement about beads-the-tool it is now false. home-manager moved its
 beads to a git-backed Dolt remote at refs/dolt/data on 2026-08-26.
 
@@ -78,7 +78,6 @@ interesting part: beads' move was forced by a two-day silent divergence in which
 three hosts ran disjoint databases and each commit deleted the others' work -
 with Dolt's cell-level merge present and working throughout. The engine was
 never what was broken; the wiring was. The full correction is in seeds-lcfa.3.
-
 
 CORRECTION TO THE CORRECTION (2026-08-26, same day): the paragraph above says
 Dolt's cell merge was "present and working throughout" the home-manager

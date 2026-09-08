@@ -69,7 +69,9 @@ Not a 0.3.3 problem that 0.5.0 fixed. In an isolated SEEDS_DIR with a JSONL of f
 
 The enum error is loud. What made this last five weeks is that the tool you run to ask "is my sync healthy?" answers from a proxy. cli.py's sync check is:
 
-    if jsonl_mtime >= db_mtime:  check_pass("JSONL is up to date")
+```
+if jsonl_mtime >= db_mtime:  check_pass("JSONL is up to date")
+```
 
 It compares mtimes and never looks at content. That is not merely weak — it is anti-correlated with this failure. A failed import leaves the JSONL holding records the DB lacks, i.e. JSONL newer than DB, which is exactly the state doctor certifies as healthy. @markdanese's "doctor clean" after the repair proves nothing; doctor was clean throughout the outage too.
 
@@ -83,4 +85,4 @@ Note what this means for @markdanese's fix: converting the 11 records unblocked 
 
 ## Open design questions (see attached)
 
-Three forks worth settling before any code: what an unrecognized type should do to the record and to the rest of the import; whether doctor should compare content and fail loudly; and whether import should be transactional. Related: [[seeds-cyy]] covers import/round-trip docs.
+Three forks worth settling before any code: what an unrecognized type should do to the record and to the rest of the import; whether doctor should compare content and fail loudly; and whether import should be transactional. Related: \[[seeds-cyy]\] covers import/round-trip docs.

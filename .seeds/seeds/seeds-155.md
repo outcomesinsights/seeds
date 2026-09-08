@@ -12,14 +12,16 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 
 We export to JSONL via 'seeds sync', but there is no CLI command to import that JSONL back into a seeds DB (e.g. rehydrate on a fresh clone / restore / move data between machines).
 
-Key finding: the import LOGIC already exists but is unwired. src/seeds/export.py defines import_from_jsonl(db, input_path) plus _import_v1_record and _import_v2_record (handles both schema versions). Nothing calls it — no CLI command, and sync only ever calls export_to_jsonl. So this is mostly a wiring + UX/semantics task, not a from-scratch build.
+Key finding: the import LOGIC already exists but is unwired. src/seeds/export.py defines import_from_jsonl(db, input_path) plus \_import_v1_record and \_import_v2_record (handles both schema versions). Nothing calls it — no CLI command, and sync only ever calls export_to_jsonl. So this is mostly a wiring + UX/semantics task, not a from-scratch build.
 
 Open design questions: should 'sync' do import-then-export for a true round-trip (like beads), or keep a separate explicit 'seeds import'? Merge vs replace semantics? Conflict handling on ID collisions?
 
----
+______________________________________________________________________
+
 RESOLVED DESIGN (2026-06-15): upsert with last-write-wins.
 
 Semantics: UPSERT keyed on id, last-write-wins (LWW) by updated_at.
+
 - New id -> insert.
 - Existing id -> overwrite from JSONL only if the JSONL record's updated_at is newer than the DB's; otherwise skip.
 - Records in DB but absent from JSONL are never touched (no deletion by absence).
@@ -29,6 +31,7 @@ Why LWW and not beads' blind 'JSONL wins': beads import is upsert (the increment
 Rejected: 'replace' (destructive - a truncated/corrupt JSONL could wipe the DB; and since seeds never deletes by absence, replace buys nothing). Also rejected: the current skip-on-collision behavior (silently ignores edits to existing JSONL lines - a latent round-trip bug).
 
 Commands:
+
 - New 'seeds import [PATH]': explicit upsert/LWW. Defaults to .seeds/seeds.jsonl; accepts a path or '-' for stdin. Prints a summary: N created, M updated, K skipped (stale).
 - 'seeds sync' becomes round-trip: import (LWW) then export.
 - 'seeds sync --flush-only' unchanged (export-only escape hatch).

@@ -22,6 +22,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **The question:** When seeds stores source documents, how large does the .seeds/ directory become? Is it reasonable to carry around a library of transcripts, articles, research docs alongside the seed database?
 
 **Considerations:**
+
 - Source documents are plain text — no images/binary for now
 - Transcripts can be large (meeting transcripts: 10-50KB each; could accumulate hundreds)
 - Git handles text well, but large repos get unwieldy
@@ -29,6 +30,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 - Some documents may be relevant to multiple projects
 
 **Possible approaches:**
+
 1. Store everything in .seeds/sources/ — simple but potentially huge
 2. Store only extracted/clipped portions — smaller but lossy
 3. Store references only (paths/URLs) — minimal footprint but source may disappear

@@ -20,6 +20,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 ## Chosen Solution
 
 Add --output-file flag to 'seeds show' that:
+
 1. Writes full output to a temp file
 2. Prints only the file path to stdout
 

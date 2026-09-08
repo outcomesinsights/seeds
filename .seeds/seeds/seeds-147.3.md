@@ -7,7 +7,7 @@ parent: seeds-147
 created_at: 2026-06-27T04:36:30.204522+00:00
 updated_at: 2026-08-31T20:02:41.403989+00:00
 resolved_at: 2026-08-27T13:40:29.304319+00:00
-resolution: "Decision held and shipped. `seeds trellis <id> --to <file> --as \"<line>\"` is in the CLI, the `seeds:trellis` skill ships in the plugin, README documents both, and the two-way provenance link works as specified. Body says `promote` throughout — shipped as `trellis`, renamed per seeds-198; text left as the historical record. One caveat carried forward: the phrasing-discipline mitigation for seeds-147.1 is untested — no seed in this repo has been trellised yet, so seeds-147.1 stays open."
+resolution: 'Decision held and shipped. `seeds trellis <id> --to <file> --as "<line>"` is in the CLI, the `seeds:trellis` skill ships in the plugin, README documents both, and the two-way provenance link works as specified. Body says `promote` throughout — shipped as `trellis`, renamed per seeds-198; text left as the historical record. One caveat carried forward: the phrasing-discipline mitigation for seeds-147.1 is untested — no seed in this repo has been trellised yet, so seeds-147.1 stays open.'
 tags:
   - lodestone
   - promotion
@@ -42,9 +42,7 @@ It's a new **output mode** of seeds — sibling to seeds-to-beads (seeds → exe
 
 Relates to seeds-147 (original proposal), seeds-147.1 (over-channeling risk → mitigated here), seeds-147.2 (lived origin + root cause), seeds-148 / seeds-149 / seeds-150 (answered / reframed), seeds-152.5 (the skill-vs-CLI cut it relies on), seeds-152.4 + seeds-187 (sibling skills).
 
-
-
----
+______________________________________________________________________
 
 **Open forks closed (2026-07-10, planning session with @aguynamedryan).** The three "Open (for later)" questions above are now decided; the concrete build spec lives in seeds-147.4.
 

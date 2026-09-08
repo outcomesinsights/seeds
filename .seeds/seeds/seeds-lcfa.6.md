@@ -42,19 +42,20 @@ Asked whether storing each seed as its own JSONL file would let DuckDB read the 
 IT WORKS, AND IT WORKS WELL. Exploded seeds.jsonl into 280 per-seed files; `read_json_auto('<dir>/*.jsonl', union_by_name=true)` reads them as one table in 54 ms and infers the schema perfectly — including `tags varchar[]` and `relationships struct(target_id varchar, rel_type varchar, created_at timestamp)`. Nested structure is handled natively, which is strictly better than SQLite, where relationships need their own table.
 
 BUT DUCKDB IS NOT WHAT MAKES IT POSSIBLE. Measured, same 280 files:
+
 - pure Python, read every file and filter: 47 ms total (most of it interpreter startup)
 - DuckDB CLI, same query: 60 ms
-At 18x scale — 5,040 synthesized seed files, 23 MB on disk:
+  At 18x scale — 5,040 synthesized seed files, 23 MB on disk:
 - pure Python: 297 ms
 - DuckDB: 427 ms
-Python wins at both scales because the work is file I/O, not query planning. And a real CLI can beat its own baseline badly: `seeds show <id>` becomes ONE file read, not a scan of anything. So at the scale seeds operates at, "drop SQLite" does not mean "swap in DuckDB" — it means DELETE THE PERSISTENCE LAYER and read the directory. DuckDB earns no place in the hot path.
+  Python wins at both scales because the work is file I/O, not query planning. And a real CLI can beat its own baseline badly: `seeds show <id>` becomes ONE file read, not a scan of anything. So at the scale seeds operates at, "drop SQLite" does not mean "swap in DuckDB" — it means DELETE THE PERSISTENCE LAYER and read the directory. DuckDB earns no place in the hot path.
 
 WHAT SQLITE IS ACTUALLY DOING THAT PYTHON IS NOT: full-text search. `db.py:159-190` defines a `seeds_fts` FTS5 virtual table plus insert/update triggers. That is the one genuine feature that disappears with the DB, and it needs an answer before anyone deletes anything: DuckDB's fts extension, a brute-force scan (fine at 280, tolerable at 5k), or a small inverted index rebuilt on write.
 
 WHERE DUCKDB IS GENUINELY THE RIGHT TOOL — cross-project querying, which is exactly seeds-183. Measured: one statement globbing 13 repos under ~/projects/outins/, 1,161 seeds total, 57 ms, with `filename=true` yielding a repo column:
-  SELECT regexp_extract(filename,'outins/([^/]+)/',1) AS repo, count(*), sum(status='captured')
-  FROM read_json_auto('/home/ryan/projects/outins/*/.seeds/seeds.jsonl', union_by_name=true, filename=true)
-  GROUP BY 1 ORDER BY 2 DESC;
+SELECT regexp_extract(filename,'outins/([^/]+)/',1) AS repo, count(*), sum(status='captured')
+FROM read_json_auto('/home/ryan/projects/outins/*/.seeds/seeds.jsonl', union_by_name=true, filename=true)
+GROUP BY 1 ORDER BY 2 DESC;
 Top of the list: code_set_catalog 393 seeds (212 open), seeds 280 (164), code_collector 163 (116), habituate 58 (41).
 Two things follow. First, this is a real new capability neither SQLite-per-repo nor pure Python gives, and it answers a question already sitting open in seeds-183. Second and more important: IT ALREADY WORKS ON TODAY'S SINGLE-FILE JSONL. It needs no per-seed split, no schema change, and no code change — the duckdb CLI is already installed (v1.5.2). So this win is available immediately and is completely orthogonal to the storage decision.
 

@@ -31,6 +31,4 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 
 The lived data favors (B), or at least shows (B) is the natural instinct. Worth deciding deliberately rather than defaulting into (A). Caution: (B) keeps a pillar perpetually in front of the agent — exactly the amplification seeds-147.1 warns about — so if we choose (B), 147.1's hedged-framing mitigation matters more.
 
-
-
 **Root cause (per @aguynamedryan, 2026-06-26): the resolve-reluctance was distrust of resolution.** The agent didn't balk because the seed needed to stay *open* per se — it balked because it didn't trust that seeds would keep paying attention to the seed once resolved. So the perpetually-active instinct (model B) is a *symptom of a visibility gap*, not a real requirement. Fix the gap — carry the decision forward (promote it to durable context) and keep resolved seeds inside the audit family (seeds-159 / seeds-160 / seeds-164) — and the fork lands cleanly on **(A)**: resolve it, don't keep it open. Decision recorded in seeds-147.3.

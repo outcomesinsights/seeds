@@ -23,25 +23,32 @@ Long-standing bug: every seeds database hardcodes 'seeds' as the ID prefix (e.g.
 # Design
 
 ## Storage
+
 Add a `config` table to the SQLite schema (key TEXT PRIMARY KEY, value TEXT) for project-level metadata. First entry: `prefix`.
 
 ## Default derivation
+
 On `seeds init` with no `--prefix` flag, derive the prefix from the project directory name:
+
 - Take `seeds_dir.parent.name` (typically `Path.cwd().name`)
 - Sanitize: lowercase, replace runs of non-[a-z0-9] with single hyphen, strip leading/trailing hyphens
 - Must start with a letter; if it doesn't (e.g., starts with a digit), prepend 'p-' or fall back to DEFAULT_PREFIX
 - Empty sanitized result → fall back to DEFAULT_PREFIX ('seeds')
 
 Examples:
+
 - `My Project` → `my-project`
 - `foo_bar.v2` → `foo-bar-v2`
 - `seeds` → `seeds`
 
 ## Init flag
+
 `seeds init --prefix=<name>` overrides the default. The supplied value is still sanitized (or rejected if it can't be coerced).
 
 ## Auto-derive on first run (after upgrade)
+
 For existing DBs lacking a config entry, on first command after upgrade:
+
 1. Derive prefix from project dir name
 2. Set config
 3. Rewrite all IDs (top-level seeds + children + relationships) replacing the old 'seeds' prefix with the new prefix
@@ -49,7 +56,9 @@ For existing DBs lacking a config entry, on first command after upgrade:
 5. Skip if derived prefix equals 'seeds' (no rewrite needed, just set config)
 
 ## Rename command
+
 `seeds rename-prefix <new>`:
+
 - Validates and sanitizes the new prefix
 - Reads current prefix from config (fallback: 'seeds')
 - If unchanged, no-op
@@ -61,6 +70,7 @@ For existing DBs lacking a config entry, on first command after upgrade:
 - Re-exports JSONL after
 
 ## Plumbing changes
+
 - `Database.get_prefix() -> str` reads from config, falls back to DEFAULT_PREFIX
 - `Database.set_prefix(value)` sets the config entry
 - `Database.next_id()` calls `get_prefix()` (no prefix arg required for callers)
@@ -68,4 +78,5 @@ For existing DBs lacking a config entry, on first command after upgrade:
 - Sanitization helper `sanitize_prefix(raw: str) -> str` in models.py
 
 ## Bead
+
 Tracked as bead seeds-5at.

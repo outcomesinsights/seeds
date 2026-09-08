@@ -54,6 +54,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 The inverse of the declined intent-debt-vocabulary boundary (see that seed). seeds *does* capture intent — but what it really captures is the **journey to reaching intent**, and that journey is, to @aguynamedryan, just as valuable as the destination. Intent is a *byproduct* of deliberation: "you don't figure out what you're trying to do until you've talked about and deliberated what you're trying to do."
 
 What the intent-debt framing structurally omits, and seeds keeps:
+
 - **What was considered and discarded**, and *why* — so you don't revisit a dismissed idea thinking it's new, and you remember why you dismissed it.
 - **Why decisions changed** — "why did a guard clause get put in, and why did it get taken back out? what happened in the 2023 incident that changed hearts and minds, and what other resolutions were considered?" None of that is intent; it's the deliberation around intent.
 
@@ -63,9 +64,8 @@ This is a positioning / README / blog direction, not a code change — the sharp
 
 Status: exploring — the active direction @aguynamedryan is articulating.
 
+______________________________________________________________________
 
-
----
 ## 2026-06-18 — precision: "upstream of INTENT," not "upstream of everything"
 
 @aguynamedryan correction (verbatim-ish): "I never said seeds is upstream of EVERYTHING else — that was your [the assistant's] assertion." Guard the framing: the claim is that seeds is upstream of INTENT (the journey that produces it). Do NOT inflate it to "upstream of everyone/everything," "everyone else is downstream," or "seeds is the only one that keeps the journey." Those totalizing claims are false and were the assistant's over-reach: intent.build reaches upstream too (its Arena surface), and DeltaDB keeps a (downstream) journey of its own. The honest distinction is not lifecycle position but what a tool makes FIRST-CLASS — seeds foregrounds the deliberation/journey; the others foreground the decision or the code. Keep the positioning precise and non-totalizing in the post. (See seeds-176.5 intent.build, seeds-176.2 DeltaDB.)

@@ -40,6 +40,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 seeds preserves the journey, but a resolution captured months ago rests on premises — data shape, library versions, constraints, team priorities — that may since have changed. Today the only correction is reactive and manual: a resolved seed gets reopened because reality disagreed (seeds-7). There is no concept of a resolution *aging out* — nor of two resolutions *contradicting* each other.
 
 Two detection targets @aguynamedryan named (2026-06-15):
+
 1. **Aged-out premises** — a resolution whose basis no longer holds.
 2. **Downstream contradiction / cognitive dissonance** — "go through resolved seeds and pull out any that look like they've been contradicted downstream by others marked resolved or captured." Did we resolve one thing two months ago and resolve something contradicting it a week ago?
 
@@ -53,8 +54,7 @@ Distinct from seeds-50 (coherence/story of the live graph, not freshness) and se
 
 Status: deferred — interesting, not actively pursuing; a free-afternoon meditation. Risk: seeds is journey-capture, not a freshness monitor; a lightweight revisit / flag-contradiction affordance may be all that fits, not a decay-detection engine.
 
-
----
+______________________________________________________________________
 
 ## RESOLVED 2026-09-01. Detection answered; shipping as `winnow` (see seeds-158).
 

@@ -18,7 +18,7 @@ relationships:
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
-From ETL pilot project: seeds is 'wildly successful' for ad-hoc exploration, but doesn't ensure you've 'dotted all I's and crossed all T's.' 
+From ETL pilot project: seeds is 'wildly successful' for ad-hoc exploration, but doesn't ensure you've 'dotted all I's and crossed all T's.'
 
 The issue: seeds lets you explore freely but doesn't tell you what you HAVEN'T explored yet. No way to say 'here are 20 source tables, have I made a decision about each one?'
 

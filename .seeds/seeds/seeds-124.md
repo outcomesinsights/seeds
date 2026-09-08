@@ -18,6 +18,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 Decision: new relationship types are discovered organically, not defined speculatively.
 
 Process:
+
 1. Use relates-to by default when linking seeds
 2. Periodically review relates-to edges for recurring patterns
 3. When a pattern is clear, name it and add to the RelationType enum

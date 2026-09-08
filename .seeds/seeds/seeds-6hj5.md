@@ -25,6 +25,7 @@ Found while reviewing the seeds-skc fix (2026-07-26). NOT a regression from that
 `_validate_id_refs` (src/seeds/cli.py) exists to catch, in its own words, "the common failure where an agent drafts a body like `see <prefix>-117` with a hallucinated ID." It works for grandfathered sequential IDs and silently does nothing for base36 hash IDs.
 
 Reproduced on a temp database, on BOTH main and the seeds-skc branch:
+
 - creating a seed whose body cites a NONEXISTENT numeric ID -> correctly errors ("seed body references unknown IDs")
 - creating a seed whose body cites a NONEXISTENT hash-shaped ID -> silently accepted, seed created
 
@@ -51,11 +52,9 @@ Option 2 feels most principled and option 4 most pragmatic; 3 seems like a trap.
 
 Related: the `--allow-unknown-refs` flag on `seeds create` / `seeds update` exists precisely as the escape hatch for this validator.
 
+______________________________________________________________________
 
-
----
-
-## Live instance: the seeds<->beads lineage workflow trips this both ways (2026-08-10)
+## Live instance: the seeds\<->beads lineage workflow trips this both ways (2026-08-10)
 
 Recording bead lineage inside a seed is *mandated* by the `seeds-to-beads` skill ("cite the originating seed IDs so the executor can recover deliberation context"), and in this repo beads share the `seeds-` prefix with seeds. So every promotion note contains `seeds-`-prefixed IDs that are **beads, not seeds** — and the validator has no way to know that.
 
@@ -66,9 +65,7 @@ Both failure directions were observed in a single session:
 
 So the current behavior is the worst of both: it blocks the legitimate case it can see, and waves through the case it cannot. Whichever option this seed eventually takes should account for the fact that `seeds-NNN` in a seed body is *ambiguous by construction* in this repo — it may be a seed OR a bead. Options 2 (explicit `[[wikilink]]` syntax) and 4 (soft `doctor` warning instead of a hard gate) both handle that gracefully; option 1 (accept as-is) leaves `--allow-unknown-refs` as a required step in a documented workflow, which is a smell.
 
-
-
----
+______________________________________________________________________
 
 ## Measured on the real database, and a workable design (2026-08-10)
 
@@ -78,11 +75,11 @@ Nobody had checked. So: scanned all 268 seeds' title/content/resolution with the
 
 **24 distinct tokens. Classified:**
 
-| what they actually are | count | examples |
-|---|---|---|
-| real **beads** | 16 | seeds-0y4, seeds-80g, seeds-230, seeds-mlj |
-| ordinary **prose** | 8 | seeds-marketplace, seeds-cli, seeds-native, seeds-tool, seeds-generated, seeds-level, seeds-like, seeds-side |
-| actual **hallucinations** | **0** | — |
+| what they actually are    | count | examples                                                                                                     |
+| ------------------------- | ----- | ------------------------------------------------------------------------------------------------------------ |
+| real **beads**            | 16    | seeds-0y4, seeds-80g, seeds-230, seeds-mlj                                                                   |
+| ordinary **prose**        | 8     | seeds-marketplace, seeds-cli, seeds-native, seeds-tool, seeds-generated, seeds-level, seeds-like, seeds-side |
+| actual **hallucinations** | **0** | —                                                                                                            |
 
 Switching on "not in the seed list -> error" today would produce **24 false alarms and catch nothing.**
 
@@ -109,9 +106,7 @@ This supersedes option 3 (length/entropy heuristic — still a trap) and makes o
 
 Related: seeds-tk5y (the `update -c` footgun, surfaced in the same exchange).
 
-
-
----
+______________________________________________________________________
 
 ## Promoted to beads (2026-08-10)
 
@@ -122,9 +117,7 @@ Both are bead IDs, not seed IDs.
 
 This seed stays open until those land — options 2 (`[[wikilink]]` syntax) and 4 (soft `doctor` warning) remain live but are no longer required to solve the core problem.
 
-
-
----
+______________________________________________________________________
 
 ## Shipped (2026-08-10) — with two documented residuals, not the predicted zero
 
@@ -138,11 +131,11 @@ The 8 measured terms were confirmed; 5 more single-occurrence prose words turned
 
 Three tokens were deliberately **NOT** allowlisted, because they are ID-shaped rather than prose. Allowlisting an ID-shaped token would blind the check to that ID permanently, inverting the point of the list:
 
-| token | where | status |
-|---|---|---|
-| `seeds-7.1` | seeds-140 content: *"e.g., seeds-1, seeds-7.1"* | **pre-existing** — numeric, so main flags it today too |
-| `seeds-k3n` | seeds-199 content: *"a 3-4 char id like \`seeds-k3n\`"* | the ONLY new failure this change introduces |
-| `seeds-8su` | seeds-199 **resolution** | field is never validated (create checks title+content; update checks title+content+append) |
+| token       | where                                                   | status                                                                                     |
+| ----------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `seeds-7.1` | seeds-140 content: *"e.g., seeds-1, seeds-7.1"*         | **pre-existing** — numeric, so main flags it today too                                     |
+| `seeds-k3n` | seeds-199 content: *"a 3-4 char id like \`seeds-k3n\`"* | the ONLY new failure this change introduces                                                |
+| `seeds-8su` | seeds-199 **resolution**                                | field is never validated (create checks title+content; update checks title+content+append) |
 
 So the honest post-change number in validated fields is **2, not 0**. The bead's acceptance criterion predicted zero; that prediction was wrong, and padding the allowlist to force it would have defeated the feature.
 

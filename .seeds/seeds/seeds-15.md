@@ -18,12 +18,14 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 From discussion.md: 'This tool is not just going to be limited to software.'
 
 Use cases identified:
+
 - Software development decisions
 - RPG character development and background
 - House projects
 - Life decisions in general
 
 Each domain produces different 'fruit':
+
 - Software: ADRs, hand off to Beads
 - Character: final document about nature/background
 - House project: purchase links, checklists, artifacts

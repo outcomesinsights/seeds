@@ -46,6 +46,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 Seeds' `prime` command outputs static text — a fixed prompt about workflow and capture philosophy. Beads' `bd prime` injects dynamic context: ready work, current state, active items.
 
 Seeds should do the same. A dynamic prime could surface:
+
 - Seeds in `captured` status needing triage (inbox count)
 - Seeds in `exploring` status (active deliberation)
 - Seeds with unanswered questions (blocking decisions)
@@ -56,9 +57,7 @@ This makes the AI context injection actionable rather than philosophical. Instea
 
 The static philosophy text could move to a `--full` flag or only appear on first session, with subsequent primes being purely dynamic state.
 
-
-
----
+______________________________________________________________________
 
 **Evidence from CSC production usage (2026-04 to 2026-05) — see seeds-142 for the full use-case write-up:**
 
@@ -67,6 +66,7 @@ CSC has 96 seeds. Across 6+ transcript-incorporation sessions, Claude consistent
 **Concrete digest design proposal:**
 
 `seeds prime` adds a `## Current Seeds` section after the workflow text:
+
 - Counts (total, by status)
 - Recently Updated (top N by updated_at — feeds off seeds-recent primitive)
 - Active Exploration (status=exploring)

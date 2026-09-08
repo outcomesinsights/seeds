@@ -17,8 +17,8 @@ Context: Solo dev who occasionally needs to consult with a couple of people befo
 
 Key question: Can the existing tag system handle this, or do we need something more?
 
-
 Resolution: Current tag system is sufficient. Use convention of double-tagging:
+
 - A specific tag like `review:dave` or `review:thursday-sync` for the person/meeting
 - A general `needs-review` tag for querying 'anything flagged for anyone'
 

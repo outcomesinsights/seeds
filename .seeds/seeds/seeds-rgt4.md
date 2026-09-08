@@ -12,4 +12,4 @@ relationships:
     created_at: 2026-09-08T21:02:27.956543+00:00
 ---
 
-None needed. Old bytes still parse under the new reader — a body-less ---\n\n normalizes on read, and a double-quoted scalar is still accepted — so nothing breaks and nothing must be rewritten on a schedule. The next seeds write renders each file canonical, and a prettier run gets there by itself. The only residue is check --smells reporting non-canonical-bytes on 44 files until they are touched; one read-and-rewrite pass per repo clears that if the smells-zero baseline is worth keeping.
+None needed. Old bytes still parse under the new reader — a body-less ---\\n\\n normalizes on read, and a double-quoted scalar is still accepted — so nothing breaks and nothing must be rewritten on a schedule. The next seeds write renders each file canonical, and a prettier run gets there by itself. The only residue is check --smells reporting non-canonical-bytes on 44 files until they are touched; one read-and-rewrite pass per repo clears that if the smells-zero baseline is worth keeping.

@@ -41,16 +41,19 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Observed pattern:** When exploring a new tool, library, or domain, the AI spends significant time (5-10 min) reading documentation, scraping code, and building understanding. This accumulated knowledge is valuable and shouldn't require re-scraping in future sessions.
 
 **Current behavior (ad hoc):**
+
 - Ask Claude to capture findings into a file (markdown document)
 - Store alongside the project (e.g., seeds/ has files about beads, deliberation software)
 - Reference these files in future sessions to avoid re-investigation
 
 **Examples of this pattern:**
+
 - This seeds project: comprehensive notes on beads, deliberation tools, domain research
 - Other projects: tool evaluations, API documentation summaries, architecture deep-dives
 - Any time Claude does a multi-minute investigation and you want to preserve the result
 
 **What formalization could look like:**
+
 - A seed type or tag for "investigation" or "knowledge base" items
 - Seed content holds the executive summary; an attached document holds the deep knowledge
 - The \`prime\` command could surface relevant knowledge documents for the current session context
@@ -61,12 +64,13 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 This strengthens the "seeds is for thinking, beads is for doing" distinction. Knowledge accumulation is a *deliberation* activity — understanding the landscape before deciding what to build. It's not a task to track in beads; it's context that informs future decisions.
 
 **Open questions:**
+
 - Should the knowledge document be part of the seed content, or a separate linked artifact?
 - How do you handle staleness? Knowledge about a tool at v0.50 may be wrong at v0.56.
 - Is this seeds' job or a separate "knowledge base" tool? (Same question as templates — and beads answered that by making molecules a core feature.)
 
+______________________________________________________________________
 
----
 **Refined insight (Feb 2026): Investigation output IS source material.**
 
 The distinction between "source materials" (seed-1def) and "knowledge accumulation" collapses: the expertise document generated from an investigation becomes a source material for future deliberation. The workflow is circular:
@@ -77,23 +81,26 @@ The distinction between "source materials" (seed-1def) and "knowledge accumulati
 4. Future sessions reference it as source material rather than re-investigating
 
 **What seeds should formalize:**
+
 - When an investigation is performed (large exploration, documentation scraping, tool research), seeds should expect and facilitate the capture of findings into a durable document
 - That document should be treated as a source material going forward — referenced, not regenerated
 - The document should be explicitly invalidatable: "this section seems wrong, re-investigate X" — targeted correction rather than wholesale re-research
 - The seed that triggered the investigation should link to the resulting document
 
 **What this is NOT:**
+
 - Not a cache or memoization (it's curated knowledge, not raw data)
 - Not immutable (it can be corrected, but corrections are explicit and targeted)
 - Not auto-generated (the AI captures what it learned, with judgment about what matters)
 
 **The pattern:** investigate → capture → reference → correct-as-needed. Seeds already does the first two ad hoc. Formalizing it means seeds becomes the system of record for "what do we know about X?" — not just "what are we thinking about X?"
 
+______________________________________________________________________
 
----
 **Additional pattern: plan documents as knowledge artifacts (Feb 2026).**
 
 Even before seeds is initialized for a project, there's often a plan document — an initial conversation with Claude working through structure, requirements, approach. This document:
+
 - Contains deliberation that predates the seeds database
 - Gets broken into individual seeds when the project formalizes
 - Is itself a knowledge artifact worth preserving and referencing

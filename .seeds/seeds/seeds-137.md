@@ -32,8 +32,7 @@ relationships:
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
-Context
--------
+## Context
 
 In seeds-31 we hit a problem where 'seeds show' output was truncated in
 the Claude Code CLI terminal — long content required Ctrl+O to expand,
@@ -42,8 +41,7 @@ adding the '--output-file' flag, which writes the rendered seed to a
 temp file and prints the path. The agent then reads the temp file. It
 works, but it's a workaround, not a clean solution.
 
-Observation
------------
+## Observation
 
 Beads has a 'bd show' command that appears to render an entire bead's
 content to the terminal in a Claude Code session without the same
@@ -51,8 +49,7 @@ truncation issue, and from outside inspection it doesn't look like it's
 using weird hackery. Worth investigating before we keep building on top
 of our temp-file approach.
 
-Goals
------
+## Goals
 
 1. Read the beads codebase and understand exactly how 'bd show'
    produces its output. Look for: output formatting choices, CLI
@@ -68,8 +65,7 @@ Goals
    the goal is to retire '--output-file' as the default-recommended
    path and have plain 'seeds show' work cleanly in Claude Code.
 
-Open questions
---------------
+## Open questions
 
 - What mechanism does bd use? (Stdio handling? Specific renderer? No
   pagination at all?)
@@ -81,8 +77,7 @@ Open questions
 - Would adopting the bd pattern change the agent's experience in any
   measurable way (token counts, latency, context window)?
 
-Related
--------
+## Related
 
 - seeds-31: original bug
 - seeds-31.1: temp-file workaround decision
@@ -104,7 +99,7 @@ stdout. Notes:
   and returns the raw markdown string when color is disabled. Color is
   auto-disabled when stdout is not a TTY (Claude Code captures stdout
   to a buffer, so this is true inside a Bash tool call).
-- All ui.Render* styling helpers wrap text with lipgloss. With color
+- All ui.Render\* styling helpers wrap text with lipgloss. With color
   disabled, they return the input unchanged. So no ANSI escape codes
   are emitted in Claude Code.
 - There is an IsAgentMode() check in internal/ui/styles.go that

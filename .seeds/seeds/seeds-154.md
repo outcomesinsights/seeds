@@ -37,6 +37,7 @@ All non-interactive. The `seeds:*` skill namespace is automatic via plugin distr
 ## Plugin layout (minimum)
 
 Inside the seeds Python package, ship something like `src/seeds/plugin/`:
+
 ```
 src/seeds/plugin/
 ├── .claude-plugin/
@@ -54,6 +55,7 @@ Reference: `~/.claude/plugins/marketplaces/beads-marketplace/.claude-plugin/mark
 ## Implementation entry point
 
 A `seeds skills install` command in the CLI:
+
 ```python
 import importlib.resources
 import subprocess

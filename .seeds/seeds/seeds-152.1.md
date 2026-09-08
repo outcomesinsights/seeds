@@ -32,7 +32,7 @@ The rhythms are different enough (batch vs. live) that this probably wants to be
 - Decide whether content should produce one seed or several.
 - Decide type (idea/question/decision/exploration/concern) per resulting artifact.
 - Decide whether to create a new seed, update an existing one, or attach a question to an existing one.
-- Surface the proposed actions to the user before committing them — given [[agents-treat-user-context-as-gospel]], the agent should not blindly file what it heard.
+- Surface the proposed actions to the user before committing them — given \[[agents-treat-user-context-as-gospel]\], the agent should not blindly file what it heard.
 
 ## Risk
 

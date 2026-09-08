@@ -32,6 +32,7 @@ From discussion.md: 'One of my major surprises in using beads is how much Claude
 Goal: Seeds should have the same natural adoption by AI agents.
 
 Design considerations:
+
 - Flag-based CLI (no interactive editors that block agents)
 - Atomic operations (each command does one thing)
 - Queryable (easy to filter and find)
@@ -39,9 +40,8 @@ Design considerations:
 
 The tool must be intuitive for humans AND easily adopted by AI agents. This dual nature is a key design tension.
 
+______________________________________________________________________
 
-
----
 **Observed AI frictions (consolidated from seed-aeb6, seed-5c22):**
 
 **Friction 1 - Premature implementation (from seed-aeb6):**

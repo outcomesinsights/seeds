@@ -57,4 +57,5 @@ MOTIVE (stated): not a blog-post-for-its-own-sake. The point is awareness — ge
 OPEN EDITORIAL QUESTION (@aguynamedryan to steer): standalone post, or the HOOK / opening for the 176.7 thesis in post #3? Assistant lean: doorway to #3, not a separate post — as a standalone it's a "taste matters" take (crowded); as the entry to "…and here's the tool for it," it earns the word. BUT post #3 was just deliberately NARROWED (seeds-188) to avoid dilution after a draft "fell off the rails" — bolting a hot-vocabulary frame onto it is exactly the kind of move that could pull it back off. Decide deliberately, not by reflex.
 
 ## Related
+
 seeds-176.7 (the thesis "taste" re-vocalizes), seeds-176 (the journey post), seeds-188 (the narrowing this must not undo), seeds-168 (upstream-of-intent positioning + the overclaim-guard precedent), seeds-189 (the colonized-vocabulary hazard, one level up), seeds-190 (anti-council differentiation context).

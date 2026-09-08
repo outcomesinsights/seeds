@@ -18,6 +18,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 From discussion.md: 'We could have just a limited predefined set of tags for any given project so that way when it is tagging, it will be consistent and we will be able to find interrelated topics and seeds more easily.'
 
 Benefits:
+
 - Ensures consistency in tagging
 - Easier to find interrelated seeds
 - Helps AI categorize without inventing new tags

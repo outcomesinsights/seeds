@@ -63,8 +63,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 
 Relates to seeds-152.2, seeds-152.3, seeds-152.4, seeds-187, seeds-147.1.
 
-
----
+______________________________________________________________________
 
 ## RATIFIED 2026-09-01 (Ryan): P2 — thin skills over hardened CLI cores
 
@@ -74,8 +73,7 @@ auto-discovery and fast iteration), and every deterministic substep becomes a te
 description-matched auto-discovery, and would need wrapper skills anyway, so it buys
 nothing.
 
-The ruling was forced by a concrete case rather than settled in the abstract: `seeds
-cutting` (seeds-h5rq), where the judgment/mechanism split is unusually clean. Applying the
+The ruling was forced by a concrete case rather than settled in the abstract: `seeds cutting` (seeds-h5rq), where the judgment/mechanism split is unusually clean. Applying the
 test to the two commands on the table:
 
 - **`cutting` — pure skill, no new CLI verb.** The judgment (what context matters, how to

@@ -22,21 +22,25 @@ Observed in a live session: an AI agent was deliberating about the project's one
 Questions should be captured the moment they surface, not retroactively after resolution. This is the exact scenario described in the prime guidance ('Capture DURING investigation, not just after') but the agent didn't follow it.
 
 Possible causes:
+
 1. Prime guidance isn't strong enough on this point
 2. The agent doesn't know HOW to capture mid-conversation (workflow friction)
 3. There's no hook or trigger reminding agents to persist open questions
 
 This is a high-priority concern because it undermines seeds' core value proposition.
 
----
+______________________________________________________________________
+
 **Another instance (Feb 27, 2026):** During beta release planning session, detailed five-phase plan was discussed including documentation structure (README sections, CHANGELOG, CONTRIBUTING.md), CI/CD specifics (GitHub Actions matrix, ruff, mypy, pytest-cov), and numerous decisions (full strict mypy, keep .seeds/ public, web UI experimental, PyPI deferred). Only high-level decisions were captured into seeds. The detailed phase breakdown, specific README sections modeled on beads, pre-commit/beads hook integration steps, and most implementation specifics were lost. Had to harvest from the session JSONL file after the fact. This is the exact scenario seed-7ec5 warns about — the cost of mid-conversation capture meant the agent skipped it, and critical planning detail fell through the cracks.
 
----
+______________________________________________________________________
+
 **Detailed gap analysis — beta release planning session (Feb 27, 2026):**
 
 What follows is an item-by-item accounting of what the agent captured into seeds vs. what it failed to capture. Everything in the "NOT CAPTURED" list was only recoverable by harvesting the raw session JSONL after the fact.
 
 **CAPTURED in seeds (high-level decisions only):**
+
 - License choice: MIT, pending employer approval (q-c562)
 - Repo ownership shift: outcomesinsights org, not personal (q-beb8)
 - Phase ordering: docs before CI/CD (noted in seed-81a4 content)
@@ -48,33 +52,34 @@ What follows is an item-by-item accounting of what the agent captured into seeds
 
 **NOT CAPTURED — recovered only via session harvest:**
 
-1. THE FIVE-PHASE PLAN ITSELF: The actual phase breakdown (Foundation, Code Quality, Documentation, CI/CD, Ship) with 14 numbered steps was never persisted as a seed or child seeds. Only oblique references to "Phase 5" appeared in the content.
+01. THE FIVE-PHASE PLAN ITSELF: The actual phase breakdown (Foundation, Code Quality, Documentation, CI/CD, Ship) with 14 numbered steps was never persisted as a seed or child seeds. Only oblique references to "Phase 5" appeared in the content.
 
-2. PHASE 1 SPECIFICS: pyproject.toml metadata details — specific author email, specific classifiers to add, specific URLs format, specific keywords list (deliberation, decision-making, idea-tracker, cli, ai-agent, knowledge-management, brainstorming, seed, exploration). Also: ruff+mypy config goes in pyproject.toml.
+02. PHASE 1 SPECIFICS: pyproject.toml metadata details — specific author email, specific classifiers to add, specific URLs format, specific keywords list (deliberation, decision-making, idea-tracker, cli, ai-agent, knowledge-management, brainstorming, seed, exploration). Also: ruff+mypy config goes in pyproject.toml.
 
-3. README STRUCTURE: Entire section list modeled on beads README was discussed and agreed but never captured:
-   - One-liner tagline placement
-   - Quick demo format (text-based CLI block, NOT screenshots/screencasts)
-   - Specific demo script (jot->explore->ask->resolve flow with example output)
-   - Installation from GitHub section
-   - Usage/commands overview
-   - Status section (clearly labeled beta)
-   - Experimental web UI note (seeds serve)
-   - Acknowledgments section with specific wording about Steve Yegge/beads
-   - Contributing section
-   - License section
+03. README STRUCTURE: Entire section list modeled on beads README was discussed and agreed but never captured:
 
-4. ACKNOWLEDGMENTS WORDING: @aguynamedryan provided specific language about beads inspiration — "giving AI agents structured tools to work with (1) improves how agents do their jobs, (2) bridges AI-human communication, and (3) unlocks AI potential that is not accessible through unstructured conversation alone." This exact phrasing was lost.
+    - One-liner tagline placement
+    - Quick demo format (text-based CLI block, NOT screenshots/screencasts)
+    - Specific demo script (jot->explore->ask->resolve flow with example output)
+    - Installation from GitHub section
+    - Usage/commands overview
+    - Status section (clearly labeled beta)
+    - Experimental web UI note (seeds serve)
+    - Acknowledgments section with specific wording about Steve Yegge/beads
+    - Contributing section
+    - License section
 
-5. API DOCS DECISION: @aguynamedryan asked about Python equivalent of RDoc. Decision was "thorough docstrings yes, hosted docs site no" for beta. Reasoning: CLI tool not a library, --help is the real API surface, can layer Sphinx later. Never captured as a seed or question.
+04. ACKNOWLEDGMENTS WORDING: @aguynamedryan provided specific language about beads inspiration — "giving AI agents structured tools to work with (1) improves how agents do their jobs, (2) bridges AI-human communication, and (3) unlocks AI potential that is not accessible through unstructured conversation alone." This exact phrasing was lost.
 
-6. TYPE CHECKING DECISION: @aguynamedryan said "go hog wild with it" — full strict mypy, not gradual. Rationale: structured data models benefit from type checking, modest codebase, guards against agent mistakes. Never captured.
+05. API DOCS DECISION: @aguynamedryan asked about Python equivalent of RDoc. Decision was "thorough docstrings yes, hosted docs site no" for beta. Reasoning: CLI tool not a library, --help is the real API surface, can layer Sphinx later. Never captured as a seed or question.
 
-7. RUFF AS UNIFIED TOOL: Decision that ruff replaces black+flake8+isort (handles both linting AND formatting). Never captured.
+06. TYPE CHECKING DECISION: @aguynamedryan said "go hog wild with it" — full strict mypy, not gradual. Rationale: structured data models benefit from type checking, modest codebase, guards against agent mistakes. Never captured.
 
-8. PYTHON VERSION DETAILS: Codebase was scanned and confirmed no 3.13-specific features. Drop to >=3.9 deemed straightforward. Specific versions: 3.9, 3.10, 3.11, 3.12, 3.13. 3.14 excluded as pre-release. Never captured.
+07. RUFF AS UNIFIED TOOL: Decision that ruff replaces black+flake8+isort (handles both linting AND formatting). Never captured.
 
-9. CI/CD SPECIFICS: GitHub Actions confirmed as platform. Specific checks: pytest+coverage, ruff check, ruff format --check, mypy. NOT needed: PyPI publishing, release automation. Never captured as structured data.
+08. PYTHON VERSION DETAILS: Codebase was scanned and confirmed no 3.13-specific features. Drop to >=3.9 deemed straightforward. Specific versions: 3.9, 3.10, 3.11, 3.12, 3.13. 3.14 excluded as pre-release. Never captured.
+
+09. CI/CD SPECIFICS: GitHub Actions confirmed as platform. Specific checks: pytest+coverage, ruff check, ruff format --check, mypy. NOT needed: PyPI publishing, release automation. Never captured as structured data.
 
 10. PyPI NAME STRATEGY: "seeds" name is taken but abandoned (ecological simulation, last release 2011). PEP 541 for reclamation. Alternatives: seeds-cli, deliberation-seeds. Decision: deferred for beta. Never captured as a seed.
 

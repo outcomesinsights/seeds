@@ -21,8 +21,6 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 
 Beads is our lodestone project that seeds follows. ConPort analysis surfaced MCP as the most actionable idea for seeds — but beads doesn't use MCP either. Beads uses the same pattern as seeds: CLI commands invoked via Bash by AI agents, with a prime command for context injection and hooks for auto-integration. Before seeds adopts MCP, need to understand: Is there a deliberate reason beads avoids MCP? Is it a maturity/priority thing, or a philosophical choice? What would beads gain or lose from MCP? If beads eventually adopts MCP, seeds should follow; if beads deliberately avoids it, seeds should understand why.
 
-
-
 ## Investigation Findings (2026-02-13)
 
 ### Key Discovery: Beads DOES have MCP!
@@ -32,6 +30,7 @@ Contrary to our initial assumption, beads has a full MCP server at `integrations
 ### The Token Tax
 
 The beads docs state the trade-off clearly:
+
 - **CLI + hooks**: ~1-2k tokens
 - **MCP**: 10-50k tokens (tool schema overhead)
 
@@ -46,6 +45,7 @@ MCP exists for environments that LACK shell access (e.g., Claude Desktop). It's 
 ### The MCP Architecture
 
 The beads MCP server:
+
 - Wraps bd CLI commands via subprocess (not a separate implementation)
 - Uses per-project daemon architecture (LSP-style, Unix domain sockets)
 - Exposes 13 tools (create, list, ready, show, update, close, dep, blocked, stats, reopen, set_context, init, quickstart)

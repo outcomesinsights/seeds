@@ -40,4 +40,5 @@ Open scale question — how much state must it hold?
 This is the consumer side. The producer side — a seeds repo emitting a high-level self-summary (what's interesting / recent / popular) — is captured as a separate seeds-the-project feature so it stays in this repo when sower spins out. Builds on project-aware gleaning (seeds-130) and dynamic prime (seeds-87).
 
 ## Related
+
 seeds-130, seeds-87

@@ -37,12 +37,12 @@ The differential harness (bead seeds-4co.17) ran against real pre-0.7 stores on 
 
 Four repos converted from a copy and compared command-for-command, 0.6+SQLite against 0.7+tree:
 
-| repo | seeds | differences | unexplained |
-| --- | --- | --- | --- |
-| vocabulary_formats | 15 | 70 | **0** |
-| epc | 34 | 157 | **0** |
-| oimnibus | 52 | 235 | **0** |
-| pman | 29 | 125 | **0** |
+| repo               | seeds | differences | unexplained |
+| ------------------ | ----- | ----------- | ----------- |
+| vocabulary_formats | 15    | 70          | **0**       |
+| epc                | 34    | 157         | **0**       |
+| oimnibus           | 52    | 235         | **0**       |
+| pman               | 29    | 125         | **0**       |
 
 **130 seeds across 4 repos, zero unexplained differences.**
 

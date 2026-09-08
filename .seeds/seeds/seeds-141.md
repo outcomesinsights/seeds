@@ -22,14 +22,17 @@ Observation while using Claude's AskUserQuestion interface during a seeds dev se
 In this session alone, AskUserQuestion was used several times for non-trivial design decisions (auto-derive yes/no, body-rewrite default-on/opt-in, dry-run verbosity). Those answers shaped the codebase, but the only record is in the chat log — and one of those decisions was reversed mid-session, with the reversal also captured nowhere durable.
 
 # What the user wonders
+
 - Should seeds be *aware* of AskUserQuestion-style interactions? (Right now seeds has no concept of this UI.)
 - When the user answers one of those questions, should the Q+A get persisted as a seed (or attached to an existing seed under deliberation)?
 - Should the system optionally follow up with a 'why did you pick that?' prompt that the user can either answer or skip?
 
 # Why this matters
+
 Seeds' whole pitch is capturing the *journey* of deliberation, not just conclusions. AskUserQuestion is currently a journey-loss hole: a decision is rendered, picked, gone. If the decision was material (and many are), the rationale is exactly the kind of thing seeds was built to keep.
 
 # Open shape
+
 - Could be a manual flow: agent runs `seeds answer` after an AskUserQuestion exchange, optionally with --rationale
 - Could be a hook/integration: AskUserQuestion responses fed into seeds automatically with rationale prompt
 - Could just be a documented pattern in prime.py guidance rather than a new feature

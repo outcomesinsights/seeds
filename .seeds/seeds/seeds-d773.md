@@ -41,6 +41,7 @@ So the concrete change is a **one-line diff**. The deliberation is about the pri
 ## Measured, not assumed
 
 `seeds suggest "nix flake installation" --json`, real output:
+
 - pretty (`indent=2`): 406 bytes
 - compact (`jq -c`): 292 bytes
 - **28.1% reduction**
@@ -52,11 +53,13 @@ Small sample, but the ratio is structural (indentation scales with nesting depth
 @aguynamedryan's lean is no flag — always compact, `| jq` for humans. Arguments:
 
 **For no flag (his lean):**
+
 - `jq` is already the universal pretty-printer and is installed everywhere we care about. `seeds suggest --json | jq` is muscle memory.
 - A `--pretty` flag is surface area to document, test, and keep working, in exchange for something one pipe already does.
 - The output is explicitly *for agents*. Optimizing the default for the rare human reader inverts the priority.
 
 **For a flag:**
+
 - Someone without `jq` (a fresh container, a Windows shell) gets a wall of one-line JSON.
 - Cheap to add now, awkward to add later if anyone starts parsing our output positionally.
 
@@ -68,18 +71,17 @@ Worth deciding as a standing principle rather than a one-off, since the point is
 
 Related: seeds-142.1 (originated `seeds suggest`, and explicitly asked "JSON output mode for agent piping?" — this is the follow-through on that surface), seeds-137 and seeds-138 (the output-economy family: compact modes, fold thresholds, token cost of tool output), seeds-38 (JSON vs markdown token efficiency for LLM consumption).
 
-
----
+______________________________________________________________________
 
 ## Measurement refinement (2026-08-10): "compact" has two levels
 
 Python's `json.dumps` without `indent` still emits `", "` and `": "` separators. True compactness needs `separators=(",", ":")`. Measured on a representative payload:
 
-| form | bytes |
-|---|---|
-| `indent=2` (today) | 599 |
-| no indent, default separators | 453 |
-| `separators=(",", ":")` | 415 |
+| form                          | bytes |
+| ----------------------------- | ----- |
+| `indent=2` (today)            | 599   |
+| no indent, default separators | 453   |
+| `separators=(",", ":")`       | 415   |
 
 So dropping `indent` captures most of the win (~24%), and tight separators buys another 8.4% on top. The bead should specify the tight form explicitly — "remove indent=2" alone leaves value on the table.
 
@@ -90,15 +92,14 @@ The audit above said `export.py:103` was "already compact. No change needed." Th
 Measured on the real tracked export (268 seeds, 520,070 bytes): fully compacting would save **9,154 bytes (1.8%)**.
 
 **Decision: leave it alone.** Reasons, in order of weight:
+
 1. It would rewrite **every line** of a git-tracked 520KB file — an enormous one-time diff across the entire deliberation history, permanently muddying `git log -p` and `git blame` on `.seeds/seeds.jsonl`.
 2. The JSONL is a sync/export artifact and the source of truth for round-trip import — not agent-facing output. Nothing pipes it into a context window wholesale; agents read seeds via `seeds show` / `seeds suggest`. So the token-economy argument that motivates this seed does not actually apply to it.
 3. 1.8% is a rounding error against that churn.
 
 The token argument applies to output an LLM *reads*, which is exactly `suggest --json` and nothing else today. Worth stating explicitly so a future agent doesn't "finish the job" by compacting the export.
 
-
-
----
+______________________________________________________________________
 
 ## Promoted to beads (2026-08-10)
 

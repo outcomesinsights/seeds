@@ -41,4 +41,5 @@ The crux, framed as cost/benefit:
 He has already been doing light callouts in Zoom transcripts. Relates to existing capture-marker thinking: keyword markers in conversation (seeds-74.2.3) and the hybrid explicit-callouts + end-of-session sweep (seeds-74.2.2).
 
 ## Related
+
 seeds-74.2.3, seeds-74.2.2

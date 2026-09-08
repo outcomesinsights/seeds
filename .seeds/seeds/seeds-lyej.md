@@ -32,7 +32,9 @@ Ruled 2026-08-28 while pre-flighting the 0.6.0 bead chain. Implementation is bea
 
 `seeds doctor` and the test suite were both green, but the pre-push gate was not: `uv run mypy src/` reported **11 errors across 6 files**, every one cascading from `src/seeds/models.py:12`:
 
-    from enum import Enum, StrEnum
+```
+from enum import Enum, StrEnum
+```
 
 `enum.StrEnum` was added in **Python 3.11**. `pyproject.toml` declares `requires-python = ">=3.10"` and the CI matrix tests `["3.10", "3.11", "3.12", "3.13"]`. So on 3.10 this is an **ImportError at startup — every command**, not a type-checker complaint. The mypy errors are only the local symptom: at `python_version = "3.10"` the checker resolves `StrEnum` to `Any`, which is why the cascade reads as `"str" has no attribute "value"` at seven `.value` accesses that are in fact fine.
 

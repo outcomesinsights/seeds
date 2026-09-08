@@ -45,11 +45,13 @@ Rejected: moving superseded text to a `## Superseded` fold at the bottom. Reloca
 
 The marker sits immediately after the heading of the section it retires:
 
-    ## Dolt would give us cell-level merge
-    > [!SUPERSEDED] 2026-08-28 — ordinary git line-merge surfaces same-field
-    > collisions too, so the 120 MB dependency bought nothing.
+```
+## Dolt would give us cell-level merge
+> [!SUPERSEDED] 2026-08-28 — ordinary git line-merge surfaces same-field
+> collisions too, so the 120 MB dependency bought nothing.
 
-    ...original section text, untouched...
+...original section text, untouched...
+```
 
 - **GitHub alert syntax** renders as a blockquote in every markdown viewer, needs no extension, and greps cleanly (`^> \[!SUPERSEDED\]`).
 - **Scope is mechanical:** from the marker to the next heading of the same or higher level. That is the parse rule, and it is the whole parse rule.

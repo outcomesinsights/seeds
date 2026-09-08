@@ -30,7 +30,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 
 The motivating question behind seeds (@aguynamedryan, recalling early discussions with @markdanese — possibly preserved in a transcript somewhere, worth finding):
 
-In early @markdanese <-> @aguynamedryan discussions about seeds, "we were bemoaning the fact that now that we could build practically everything, the question had really become: WHAT should we build?" What they wanted was a tool that helped them determine what to build, and a little bit of how to build it — "the tool is really there to help you explore a problem space and explore potential solutions."
+In early @markdanese \<-> @aguynamedryan discussions about seeds, "we were bemoaning the fact that now that we could build practically everything, the question had really become: WHAT should we build?" What they wanted was a tool that helped them determine what to build, and a little bit of how to build it — "the tool is really there to help you explore a problem space and explore potential solutions."
 
 This was explicitly a RESPONSE TO PLAN FILES. "And that is the journey": a blank canvas plus powerful tools that can build anything — but what should I be building? "How do I find those answers? How do I narrow down all the possibilities to the possibilities that are the most sensible — the approaches that make the most sense?" That narrowing — the exploration of the problem space and the solution space — IS the journey the post is about.
 

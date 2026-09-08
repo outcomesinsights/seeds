@@ -44,6 +44,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 Reviewing the cousin cluster (staleness, retrospective-outcome, learning-capture), @aguynamedryan zoomed out to the umbrella they are all instances of (2026-06-15): beyond operational maintenance (clean indexes, healthy DB — what `doctor` does), is there a *semantic* maintenance — can seeds keep its own **body of knowledge consistent and up to date** by auditing itself?
 
 Named flavors of the audit, in his words:
+
 - **Staleness** — resolutions whose premises (data shape, versions, constraints, priorities) have since changed and may no longer hold.
 - **Cognitive dissonance / contradiction among resolved seeds** — "did we resolve one thing two months ago, and resolve something that contradicts it a week ago?" Surface resolved seeds that disagree with each other. The sharpest new flavor.
 - **Outcome** — did a resolved decision actually pan out?
@@ -56,8 +57,7 @@ Distinct from `doctor` (operational health) and seeds-50 (story-coherence of the
 
 Status: exploring — actively deliberated; the specific mechanisms (the cousins) remain deferred until a shape sparks.
 
-
----
+______________________________________________________________________
 
 ## RESOLVED 2026-09-01 (Ryan). The command is `winnow`, and it covers all five flavors.
 
@@ -114,6 +114,7 @@ contradiction between seeds-74.2.1 and seeds-74.2.2 — two children of the same
 ### Relationship to `doctor` and `check`
 
 Now a clean three-way split, and worth stating so the boundaries hold:
+
 - `seeds check` — are the FILES valid? (format rules)
 - `seeds doctor` — is the STORE healthy? (operational: dangling edges, prefixes, counts)
 - `seeds winnow` — is the THINKING healthy? (semantic: contradiction, staleness, neglect)

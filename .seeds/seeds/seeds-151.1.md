@@ -19,7 +19,7 @@ relationships:
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
-The inverse half of [[agents-treat-user-context-as-gospel]]. That seed framed the gospel-receiver pattern as "the agent doesn't check the user's assumptions." This seed captures the flipside: **the agent also doesn't volunteer its own reservations unless explicitly invited to.**
+The inverse half of \[[agents-treat-user-context-as-gospel]\]. That seed framed the gospel-receiver pattern as "the agent doesn't check the user's assumptions." This seed captures the flipside: **the agent also doesn't volunteer its own reservations unless explicitly invited to.**
 
 ## The observation
 

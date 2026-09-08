@@ -45,7 +45,7 @@ Idea: package the deliberation workflows we keep re-improvising into either a na
 
 Beads ships a bunch of `beads:*` skills (audit, close, dep, ready, list, workflow, show, etc.) — so there's precedent for shipping skills with a tracker. I'm not aware of beads shipping a *persona* agent. Worth verifying before duplicating.
 
-## Risk — direct tie to [[agents-treat-user-context-as-gospel]] and [[risk-lodestones-may-over-channel-agent-reasoning]]
+## Risk — direct tie to \[[agents-treat-user-context-as-gospel]\] and \[[risk-lodestones-may-over-channel-agent-reasoning]\]
 
 The "I think we've addressed all items" declaration is exactly the kind of confident agent claim that triggered the concerns in seeds-147.1 and seeds-151. If Cedric closes deliberations by announcing completeness, we're institutionalizing the very over-confidence we were just worried about. Mitigation might be: Cedric declares "here's what I think is unresolved" rather than "we're done" — leaves closure to the human.
 

@@ -6,7 +6,7 @@ type: decision
 created_at: 2026-07-17T19:11:53.679373+00:00
 updated_at: 2026-07-17T22:21:33.349214+00:00
 resolved_at: 2026-07-17T22:21:33.349207+00:00
-resolution: "Shipped whole-cloth as beads seeds-tek (idgen.py) + seeds-mlj (next_id -> adaptive base36 hash IDs with DB-check + nonce retry; config knobs; grandfathered seeds-1..198, no migration). Merged to main; full suite 429 green; live CLI mints hash IDs (fresh store -> seeds-8su, 3 chars; this repo 4). Efficacy: MINOR tweaking, mostly a planning-miss -- the next_id contract change (sequential->hash) rippled into ~12 pre-existing tests hardcoding seeds-1/seeds-2; a better seeds-mlj would have said \"adapt tests asserting sequential output, and note rename-prefix then covers legacy numeric IDs only.\" The rename_prefix/hash-ID interaction (see appended as-built note) was an inherent unknown, surfaced only by building. Global-CLI redeploy left to Ryan."
+resolution: 'Shipped whole-cloth as beads seeds-tek (idgen.py) + seeds-mlj (next_id -> adaptive base36 hash IDs with DB-check + nonce retry; config knobs; grandfathered seeds-1..198, no migration). Merged to main; full suite 429 green; live CLI mints hash IDs (fresh store -> seeds-8su, 3 chars; this repo 4). Efficacy: MINOR tweaking, mostly a planning-miss -- the next_id contract change (sequential->hash) rippled into ~12 pre-existing tests hardcoding seeds-1/seeds-2; a better seeds-mlj would have said "adapt tests asserting sequential output, and note rename-prefix then covers legacy numeric IDs only." The rename_prefix/hash-ID interaction (see appended as-built note) was an inherent unknown, surfaced only by building. Global-CLI redeploy left to Ryan.'
 tags:
   - ids
   - architecture
@@ -63,9 +63,7 @@ Under Option A there is **no data migration** — existing IDs stay put. The wor
 - On insert: generate candidate → DB collision check → bump nonce → retry. Config read from DB config table, else defaults.
 - (beads also has a sequential-counter mode via an `issue_counter` table, but its default — and the thing adopted here — is the hash scheme above.)
 
-
-
----
+______________________________________________________________________
 
 ## As-built reconciliation (2026-07-17, via resolve-seeds-from-beads)
 

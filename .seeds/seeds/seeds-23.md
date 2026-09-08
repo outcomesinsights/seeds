@@ -18,6 +18,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 From discussion.md: 'I'm wondering if AI would be assisted using the tool if I used carefully selected words when I'm doing brainstorming and planning.'
 
 Example phrases:
+
 - 'I have a question' followed by the question
 - 'I'd like to answer this question' followed by the answer
 - 'I have an idea for later' implying backlog status

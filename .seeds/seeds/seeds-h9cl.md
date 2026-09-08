@@ -24,7 +24,7 @@ relationships:
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
-@aguynamedryan, after ruling the type vocabulary fully open in [[seeds-1x6b]]:
+@aguynamedryan, after ruling the type vocabulary fully open in \[[seeds-1x6b]\]:
 
 > "should we consider a feature where types can be bulk-remapped to other types so if ideea sneaks in, we can easily clean it up?"
 
@@ -41,14 +41,17 @@ This matters much more once the vocabulary opens: `seeds create --type ideea` wi
 ## Shape
 
 Two pieces, and the first is the missing primitive rather than a convenience:
+
 1. `seeds update <id> --type <t>` — change one seed's type.
 2. A bulk remap — `seeds retype --from ideea --to idea` (name unsettled) — @markdanese's actual operation, and the repair that doctor's vocabulary warning should name.
 
 The pairing worth building: doctor detects drift and prints the command that fixes it.
 
-    ⚠ Vocabulary: 3 seeds use a type outside the standard set:
-        ideea (3)
-      Fix with: seeds retype --from ideea --to idea
+```
+⚠ Vocabulary: 3 seeds use a type outside the standard set:
+    ideea (3)
+  Fix with: seeds retype --from ideea --to idea
+```
 
 Detection that hands over the repair, rather than detection that leaves the operator to find one.
 
@@ -62,4 +65,4 @@ With a fully open vocabulary, `--to idae` is itself a typo nothing can catch. Dr
 
 ## Release argument
 
-This belongs in the same release as [[seeds-1x6b]]'s vocabulary work, not after it. That change is what makes typos possible; shipping the mess-maker and the detector without the broom is a worse story than shipping the loop closed. The bulk remap also generalizes past typos — it is the tool for deliberate vocabulary evolution (renaming `concern` to `risk` across a project), which is the more durable justification.
+This belongs in the same release as \[[seeds-1x6b]\]'s vocabulary work, not after it. That change is what makes typos possible; shipping the mess-maker and the detector without the broom is a worse story than shipping the loop closed. The bulk remap also generalizes past typos — it is the tool for deliberate vocabulary evolution (renaming `concern` to `risk` across a project), which is the more durable justification.

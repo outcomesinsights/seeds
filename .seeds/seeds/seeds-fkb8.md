@@ -92,6 +92,7 @@ The difference is the whole design, and the single-file option preserves the def
 ## DuckDB: already measured, and the answer is no — for storage
 
 seeds-lcfa.6, measured on titan 2026-08-25 against a scratch copy:
+
 - 280 seeds: pure Python 47 ms, DuckDB 60 ms
 - 5,040 seeds: pure Python 297 ms, DuckDB 427 ms
 

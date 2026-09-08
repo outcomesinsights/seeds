@@ -18,6 +18,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 From discussion.md: 'I think the fruit, if you will, from the seed would be ADRs.'
 
 The deliberation process in seeds produces artifacts:
+
 - ADRs (Architecture Decision Records) for software
 - Character documents for RPGs
 - Purchase lists and checklists for house projects

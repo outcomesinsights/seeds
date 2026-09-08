@@ -19,7 +19,8 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 Problem: Questions embedded as prose in seed content (e.g., 'Questions: 1. Are options distinct? 2. What relationship?') lose lifecycle tracking. We can't mark Q1 answered and Q2 deferred.
 
 Solution: Questions should be:
-- Formal Question objects attached via 'seeds ask' (have their own status), or  
+
+- Formal Question objects attached via 'seeds ask' (have their own status), or
 - Their own seeds of type question, linked to parent
 
 This likely resolves seed-8920 ('how are answers recorded?').

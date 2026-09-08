@@ -46,9 +46,11 @@ It changes the safety calculus of every editorial act on a seed. The objection t
 
 A `seeds history <id>` verb that walks the commits touching `.seeds/seeds/<id>.md` and renders the seed's evolution for a reader rather than for a diff tool. Something closer to:
 
-    2026-08-25  added: the Dolt ledger measurement (+340 words)
-    2026-08-27  corrected: "120 MB" -> "21 MB" in the dependency note
-    2026-08-28  superseded: the append-only entry-file proposal
+```
+2026-08-25  added: the Dolt ledger measurement (+340 words)
+2026-08-27  corrected: "120 MB" -> "21 MB" in the dependency note
+2026-08-28  superseded: the append-only entry-file proposal
+```
 
 rather than raw unified diffs. Two audiences with different needs: a human asking "how did we get here", and an agent that needs the journey without paying for every intermediate revision.
 

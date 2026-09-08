@@ -24,18 +24,21 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Observed failure mode:**
 
 When Claude drafts a new seed body that says 'see seeds-117 for context,' it sometimes guesses the ID. Transcript evidence (from Clancey review):
+
 - 2026-04-23 (CSC): 'I've got several wrong seed references in the new seeds. Let me correct them before continuing.'
 - 2026-05-08 (oimnibus): 'Let me first fix a couple of crossed seed references, then answer the real question.'
 
 Claude self-corrects when it notices, but there's no guarantee it notices. Silently-wrong cross-references degrade the graph's navigability and confuse future readers.
 
 **Proposed mitigation:** On `seeds create` / `seeds update`, scan the title/content/resolution for `<prefix>-NNN[.NNN]*` patterns. For each matched ID, verify the seed exists. If any don't:
+
 - Default: hard fail with a clear error listing unknown IDs
 - `--allow-unknown-refs` flag to override (for legitimate forward references during multi-step builds)
 
 **Why this beats 'just be careful':** Catches the error at the point of write, before it propagates to other readers. Cheap regex + DB lookup. Same idea as bd's link integrity checks.
 
 **Open design questions:**
+
 - Should `--allow-unknown-refs` be default-warn or default-fail?
 - How to handle short-prefix-confusion: `seeds-87` exists but Claude wrote `seed-87` (singular). Tolerant match? Or strict?
 - Apply to `--append` too? (yes — append is the same write path)

@@ -19,11 +19,13 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 From spec_first_pass.md:
 
 Multiple answerers:
+
 - AI can research and provide an answer
 - Human can provide an answer
 - Multiple answers might exist
 
 Closure requirements:
+
 - Questions need to be explicitly stated as answered
 - Closure includes attribution (who/what answered it)
 - May include summary of which answers resolved the question

@@ -26,10 +26,12 @@ Two patterns came up:
 The May 19 doc proposed an interim distinction: child if the sub-seed is in-scope and will resolve when shipped; top-level + relates-to if it is a spin-off or deferred-indefinitely (because children block parent resolution, and deferred children block forever).
 
 This convention was operationalized informally in code_set_catalog on 2026-05-21:
+
 - csc-65 (umbrella, post-alpha thinking about extras JSON column) gets csc-65.1 as a child (alpha implementation, will resolve when shipped).
 - The deferred ingest-side promotion playbook becomes a new top-level seed with relates-to csc-65, NOT csc-65.2 — because it is deferred until external publishers exist, which might be years.
 
 Open questions for this seeds-tool conversation:
+
 - Is "will it resolve in scope of the parent's resolution?" the right gate?
 - What about umbrella seeds that themselves never resolve (e.g. csc-65 is post-alpha thinking that may always stay open)? Are children still appropriate when the parent isn't trying to resolve?
 - Should this be codified in working-with-seeds.md, or fold into the May 19 doc, or both?

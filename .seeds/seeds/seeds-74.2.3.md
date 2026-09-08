@@ -23,6 +23,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Idea:** Instead of explicit CLI calls during conversation, use natural language markers that post-analysis extracts into seeds.
 
 **Examples of markers:**
+
 - 'Here's a question...' → becomes a seed question
 - 'I'm wondering if...' → investigation seed
 - 'Decision: we'll do X because...' → decision seed
@@ -30,22 +31,23 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 - 'TODO:' → becomes a task/concern seed
 
 **Flow:**
+
 1. During conversation: speak naturally but use marker words
 2. AI continues conversation without interruption
 3. At 'harvest seeds': post-analysis finds markers, extracts structured seeds
 4. User reviews/approves
 
-**Benefit:** 
+**Benefit:**
+
 - No workflow interruption
 - More natural than stopping to run CLI commands
 - Markers are lightweight - just a word or phrase
 - Post-analysis has full context to enrich the seed
 
-**Open question:** 
+**Open question:**
 Can this fully replace explicit `seeds jot`? Or is jot still useful for truly async capture (outside Claude conversations)?
 
-
----
+______________________________________________________________________
 
 ## RESOLVED 2026-09-01 (Ryan): markers become hints to the gleaner, not a mechanism.
 

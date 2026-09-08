@@ -25,6 +25,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Trigger:** Shipping v0.3.0 surfaced that we'd drifted three versions on CHANGELOG.md (v0.2.0, v0.2.1, v0.3.0 all missing). Hand-writing GitHub Release notes for v0.3.0 took effort that could have been generated. The conventional-commit discipline is already there — we should harvest it.
 
 **Direction (specifics TBD as we iterate):**
+
 - Generate per-release notes from conventional commits (feat/fix/chore/docs/etc → grouped sections)
 - Keep CHANGELOG.md in Keep-a-Changelog format
 - Mirror the same notes into GitHub Releases at tag time
@@ -35,5 +36,6 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Hand-curated CHANGELOG entries for v0.1.0–v0.3.0 stay as-is** — they're already written and the prose is better than auto-generated. git-cliff takes over for [Unreleased] going forward.
 
 **Related infrastructure decisions:**
+
 - Pre-push CI gate (just wired in this session) — release tooling should hook into the same pre-commit framework rather than its own mechanism.
 - seeds-yjk (CI workflow) explicitly scoped automated release tooling OUT of the v0.1.0 beta ("manual tags fine"). This decision revisits that scope now that the project has more release cadence.

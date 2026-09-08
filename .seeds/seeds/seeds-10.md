@@ -14,6 +14,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 From discussion.md: 'With the more complicated and granular the set of models, the more difficult it might be for us to export those bits of information into JSONL files like beads does.'
 
 Questions:
+
 - Do nested seeds get embedded in their parent's JSONL line?
 - Or do they have their own lines with references to parent IDs?
 - Are IDs inferred from hierarchy (e.g., seed-a1b2.1.2)?

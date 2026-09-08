@@ -35,6 +35,7 @@ WHAT EXISTS TODAY. src/seeds/db.py:159-190 defines `seeds_fts`, an FTS5 virtual 
 WHY IT IS THE ONLY CASUALTY. Everything else SQLite does for seeds is comfortably within reach of plain Python at this scale — measured 2026-08-25, reading and filtering all 280 seed records takes 47 ms, and 5,040 takes 297 ms. Ranked full-text search is the exception: there is no stdlib equivalent, and ranking is the part that matters, not just matching.
 
 THE OPTIONS, roughly in order of weight:
+
 1. Brute-force scan on every search. At 280 seeds this is instant and honestly fine; at 5,000 it is a few hundred ms. No dependency, no index to keep current, no staleness bug possible. The catch is ranking — substring matching gives hits, not relevance, and today FTS5 gives bm25 ordering for free.
 2. A small inverted index rebuilt from the files, cached in a gitignored derived file. Keeps ranking, keeps zero runtime dependencies, but reintroduces exactly the thing per-seed files were meant to eliminate: a derived artifact that can be stale. It is far less dangerous than today's situation because it is rebuildable from the files in milliseconds and never holds unique data — but it must be treated as a cache, with a cheap staleness check, not as a store.
 3. DuckDB's fts extension. Real ranking, but it drags in a 21 MB wheel to serve one command, against a runtime dependency list that is about to be just `click`.

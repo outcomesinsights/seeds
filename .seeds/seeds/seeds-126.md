@@ -29,18 +29,21 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Core concept:** Users place documents into a seeds inbox (a directory within .seeds/). Whatever is placed there is the user's responsibility to ensure it's cleared for inclusion. Seeds processes it for seed extraction, records references, but does NOT worry about copyright/privacy/sensitivity filtering — that's the user's job before placement.
 
 **Why this approach:**
+
 - No configuration needed (convention over configuration)
 - Avoids premature complexity around privacy/copyright detection
 - The user knows their documents and their risk tolerance
 - Seeds stays focused on deliberation capture, not content moderation
 
 **What seeds does with inbox documents:**
+
 1. Stores the document in .seeds/sources/ (or similar)
 2. Extracts/gleans candidate seeds using current project context
 3. Creates new seeds or updates existing ones with references to the source
 4. Records provenance: which seed came from which source document
 
 **Document types to support:**
+
 - Meeting notes/transcripts
 - Research documents (articles, reports)
 - Plan files (pre-seeds conversations)

@@ -23,23 +23,24 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 Focus: Seeds often lack sufficient detail when created. How to improve capture quality?
 
 **Potential approaches:**
+
 - Structured prompts during creation (why, alternatives, context)
 - Templates for different seed types (decision vs idea vs concern)
 - AI-assisted expansion: take a jot and prompt for elaboration
 - Review step before finalizing a seed
 
 **Tension:**
+
 - jot is intentionally low-friction for quick capture
 - But quick capture = thin content
 - Maybe a two-phase flow: jot fast, enrich later?
-
-
 
 ## Analysis: blargyblarg WIDGETTYP case study
 
 Compared conversations in ~/.claude/projects/ to seeds in superduperdata_blargyblarg.
 
 **What conversations captured but seeds missed:**
+
 1. Actual DuckDB queries run to verify data
 2. Step-by-step discovery (checking each table, finding NULL correlation)
 3. User insight: 'WIDGETTYP governs which generator, not a mapped value'
@@ -47,6 +48,7 @@ Compared conversations in ~/.claude/projects/ to seeds in superduperdata_blargyb
 5. Later iterations/refinements from TODO reviews
 
 **What seeds DID capture:**
+
 - Final decisions and conclusions
 - Vocabulary mappings
 - Generator WHERE clauses

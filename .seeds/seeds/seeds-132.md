@@ -23,6 +23,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Decision:** Seeds will not implement automated privacy filtering, copyright checking, or sensitivity detection for source documents. The user is responsible for ensuring any document placed into the seeds inbox is safe to include.
 
 **Rationale:**
+
 - Automated detection is unreliable and gives false confidence
 - The user knows their risk tolerance and legal obligations
 - Premature configuration (dial-in comfort level) is complexity without proven need
@@ -30,6 +31,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 - Convention over configuration: if it's in the inbox, seeds processes it
 
 **What this means in practice:**
+
 - Seeds provides no privacy/copyright guardrails on ingestion
 - The pre-commit hook for sensitive info scanning (seed-195a) remains relevant as a safety net
 - Documentation should make clear that anything in .seeds/ may become public

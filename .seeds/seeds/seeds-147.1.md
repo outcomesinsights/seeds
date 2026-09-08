@@ -34,7 +34,7 @@ If a casual statement-of-intent can produce that, a deliberately-elevated lodest
 
 ## Related phenomenon — agents over-weight provided context
 
-See [[agents-treat-user-context-as-gospel]] for the broader pattern. The shorthand version: when a user brings an assumption to an agent, the agent typically accepts it without checking. Example: I once asked an agent to add a column to a ConceptQL operator — a column that already existed in the codebase. The agent added it a second time without ever verifying. The agent doesn't reach for "is this premise true?"; it reaches for "how do I satisfy this premise?"
+See \[[agents-treat-user-context-as-gospel]\] for the broader pattern. The shorthand version: when a user brings an assumption to an agent, the agent typically accepts it without checking. Example: I once asked an agent to add a column to a ConceptQL operator — a column that already existed in the codebase. The agent added it a second time without ever verifying. The agent doesn't reach for "is this premise true?"; it reaches for "how do I satisfy this premise?"
 
 Lodestones would be another lever for this same dynamic. Worse, lodestones are *retained* across conversations, so the over-weighting compounds.
 
@@ -43,10 +43,12 @@ Lodestones would be another lever for this same dynamic. Worse, lodestones are *
 We are already shaping conversation by recording seeds at all. Every `seeds prime` invocation channels the agent toward prior thinking. The question isn't *whether* to influence — that ship has sailed — but whether amplifying selected ideas via lodestone status is net-positive or net-negative.
 
 Arguments for amplification:
+
 - Lodestones could *attract* agents toward important considerations they would otherwise miss.
 - A few well-chosen pillars beat 200 indistinguishable seeds for orienting an agent.
 
 Arguments against:
+
 - Channeling effect: lodestones might suppress entire avenues of fruitful exploration.
 - Promotion errors are sticky: a wrongly-elevated principle would distort every adjacent decision.
 - The Jigsaw failure mode shows we can't predict how agents will interpret a principle.

@@ -13,11 +13,13 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
 From spec_first_pass.md, deliberation is (naively) complete when:
+
 - All questions have been answered
 - Constraints have been listed
 - Proposed approaches have been evaluated (why adopted or not)
 
 Review process pattern:
+
 1. Ask for list of undecided/open items
 2. First item surfaces with questions
 3. Some questions are relevant now, others go to backlog

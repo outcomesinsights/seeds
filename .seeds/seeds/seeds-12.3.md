@@ -22,6 +22,7 @@ Raised during beta release planning. GitHub issues occupy a space between seeds 
 When seeds goes public on GitHub, people will open issues that contain deliberation content. Currently there's no way to pull that into the seeds database.
 
 Possible directions:
+
 - `seeds import --github-issue <url>` — pull an issue discussion into a seed
 - `seeds export --github-issue <seed-id>` — turn a resolved seed into a GitHub issue for implementation
 - Bidirectional sync — a seed references a GitHub issue, updates flow both ways
@@ -30,6 +31,7 @@ Possible directions:
 Key insight: GitHub issues are the first external source where seeds' deliberation capture would naturally apply. This is a concrete use case for the harvest/sweep architecture (seed-4653.2.4) but scoped to a single, well-structured source.
 
 Related questions:
+
 - Does a GitHub issue become a seed, or does a seed reference a GitHub issue?
 - What happens when a seed-issue gets resolved in seeds but the GitHub issue is still open?
 - Should the JSONL export include GitHub issue references?

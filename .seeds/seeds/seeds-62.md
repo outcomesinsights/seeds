@@ -25,6 +25,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 From ETL feedback: some domains have known structures that could be templated.
 
 For ETL, you could have a 'seeds etl init' that:
+
 1. Takes a list of source tables
 2. Creates a seed for each with the standard question 'include this table?'
 3. Provides a checklist view of which decisions are made
@@ -32,17 +33,19 @@ For ETL, you could have a 'seeds etl init' that:
 This preserves ad-hoc exploration within the structure while ensuring completeness.
 
 Other domains might have similar templates:
+
 - Feature design (requirements → design → implementation → testing)
 - Hiring decision (candidates → interview stages → offer)
 - Architecture decision (options → evaluation criteria → selection)
 
 Question: Is this seeds' job or a layer on top of seeds?
 
+______________________________________________________________________
 
----
 **Beads molecules/protos validate this idea (Feb 2026):**
 
 Beads v0.50+ implemented this as "molecules" (work graphs) with a phase system:
+
 - **Proto** (template): frozen, reusable scaffold
 - **Mol** (instance): persistent active work from template
 - **Wisp** (ephemeral): lightweight throwaway instance

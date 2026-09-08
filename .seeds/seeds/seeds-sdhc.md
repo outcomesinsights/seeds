@@ -99,7 +99,9 @@ Maildir (Bernstein, qmail, ~1995) is the proven prior art. Directory per unit; `
 
 Tested 2026-08-28 on a scratch repo. With one line in `.gitattributes`:
 
-    *.jsonl merge=union
+```
+*.jsonl merge=union
+```
 
 two hosts appending different metadata lines merged with **zero conflict** — git concatenated both sides; collapse-by-timestamp then resolves order.
 
@@ -207,6 +209,7 @@ So **seeds-183 needs a reader, not a file**: glob `~/projects/outins/*/.seeds/se
 **Single file per seed, not a directory.** Two files (body + metadata) meant two passes and ID bookkeeping to filter by status. YAML frontmatter at the top of `body.md` collapses it to one file and one ripgrep pipeline. Measured on the real corpus: `rg -l '<term>' $(rg --files-without-match '^status: abandoned' <dir>)` — **17 ms** across 303 files, one pass, no ID bookkeeping.
 
 **Metadata in frontmatter, NOT a collapse-log.** The collapse-log was reinventing, worse, what git already does. Tested:
+
 - two hosts change *different* frontmatter properties -> **merges cleanly**, both survive;
 - two hosts change the *same* property -> **conflict surfaced** with markers for a human to resolve.
 
@@ -232,9 +235,11 @@ One format consequence: **frontmatter line granularity IS merge granularity.** `
 
 So `tags`, and any other multi-value field, use YAML block sequences:
 
-    tags:
-      - lodestone
-      - storage
+```
+tags:
+  - lodestone
+  - storage
+```
 
 not `tags: [lodestone, storage]`. This is the reading-preference call, and it happens to be the better merge behaviour too: one value per line means two hosts adding different tags touch different lines and merge cleanly, where the inline form would collide on the single line.
 

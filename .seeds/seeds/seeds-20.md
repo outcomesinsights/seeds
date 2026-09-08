@@ -18,12 +18,14 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 From spec_first_pass.md:
 
 User envisions distinguishing between:
+
 - Explicitly related: User or AI has confirmed the relationship
 - Possibly related: AI suggests a potential connection
 
 This distinction could be a helpful signal to both humans and AI.
 
 Additional notes:
+
 - Declaring seeds as unrelated doesn't make them 'standalone forever'
 - A new seed introduced later might create a relationship
 - No seed is ever truly declared permanently standalone

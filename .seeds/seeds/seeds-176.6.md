@@ -40,6 +40,6 @@ NATURAL-LANGUAGE-DEV TENSION (connects): code is "just a language that is a comp
 
 HOW THIS RELATES TO THE LANDSCAPE: DeltaDB and intent.build's Capture live AT the concrete contract — the conversation around writing/editing the code. seeds lives a level up: the deliberation about what the contract should contain and why. "Code is the centerpiece" tools optimize the contract; seeds optimizes the decision about the contract's contents.
 
-OPEN QUESTION (attached as a question-seed): is "code is just a concrete specification / a human<->computer contract" a commonly-held view of software development? @aguynamedryan is sure someone articulates this; worth finding a citation to anchor the frame.
+OPEN QUESTION (attached as a question-seed): is "code is just a concrete specification / a human\<->computer contract" a commonly-held view of software development? @aguynamedryan is sure someone articulates this; worth finding a citation to anchor the frame.
 
 Related: seeds-176.7 (the journey IS the design process), seeds-168 (upstream-of-intent), seeds-176.5 (intent.build).

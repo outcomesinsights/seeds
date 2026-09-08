@@ -28,13 +28,14 @@ A Nix flake (a flake.nix file at the repo root) is a standardized, reproducible 
 2. A distribution channel for public Nix users. Once seeds is public, a flake enables `nix run github:outcomesinsights/seeds` and `nix profile install github:outcomesinsights/seeds` for anyone on Nix — a first-class install method alongside pip/PyPI (see seeds-95) and git-clone.
 
 Cost / open questions:
+
 - Packaging a uv-managed Python CLI for Nix takes care. Options: nixpkgs buildPythonApplication, or the uv2nix / pyproject.nix toolchain. The dependency list must stay in sync with pyproject.toml (ongoing maintenance burden).
 - Worth doing before the public release, or a nice-to-have after? Sibling of the PyPI-vs-GitHub distribution decision in seeds-95.
 - Consult Hammond (nix specialist) on how cleanly this drops into @aguynamedryan home-manager config.
 
 Not a decision yet — capturing the question so it can grow.
 
----
+______________________________________________________________________
 
 ## Correction to two premises above (verified 2026-07-26)
 
@@ -62,6 +63,7 @@ Also: it would be the **first flake-input-as-package** in the config. All five e
 Realistic install-channel share for a niche Python CLI: `uv tool install`/`uvx`/`pipx` = essentially everyone; pip = long tail; Nix flake = a small vocal minority who would otherwise just `uv tool install` anyway. A flake does not meaningfully expand the audience — Nix users aren't blocked today.
 
 What it genuinely provides:
+
 - `nix run github:outcomesinsights/seeds -- jot "..."` — zero-install trial. One good README line.
 - A copy-pasteable `inputs.seeds.url` so other people don't each rewrite the derivation.
 - `nix develop` — pinned Python + uv + ruff + mypy shell. **Arguably the highest-value output** for a repo we want contributable.
@@ -73,6 +75,7 @@ What it does NOT provide: discoverability. Nobody browses flakes. Real Nix-ecosy
 uv2nix/pyproject.nix exists for large dep trees whose transitive deps aren't in nixpkgs. seeds has **two** runtime deps (click, flask), both first-class nixpkgs packages. Adopting uv2nix would add three flake inputs plus a `follows` dance and would track uv's lock format (so it breaks on uv releases). Wildly disproportionate. `uv.lock` has 34 entries but the great majority are dev-only; the real runtime closure is click + flask + werkzeug/jinja2/itsdangerous/blinker/markupsafe, all resolved automatically via `propagatedBuildInputs`.
 
 Three worries, all resolved:
+
 - **hatchling?** Non-issue, three lines, already proven: `pyproject = true; build-system = [ python3Packages.hatchling ];`
 - **Dynamic hatch version?** Non-issue — hatchling reads `src/seeds/__init__.py` at build time; nix never touches it. Only cosmetic risk is the hand-declared nix `version` drifting from `__version__`. A repo-local flake can close that outright by parsing `__init__.py` with `builtins.readFile` + `builtins.match`, making per-release maintenance literally zero.
 - **`src/seeds/plugin/` data files?** Non-issue — verified empirically in the built store output, not theorized. All six plugin files including the dotfile dirs (`.claude-plugin/marketplace.json`, `claude-plugin/.claude-plugin/plugin.json`, four `skills/*/SKILL.md`) are present. `[tool.hatch.build.targets.wheel] packages = ["src/seeds"]` sweeps them into the wheel and nix just installs the wheel. No `postInstall`, no force-include. The pyproject warning about force-include breaking the build is irrelevant to Nix, which never adds one.
@@ -87,13 +90,13 @@ The one real recurring wrinkle: `pythonRelaxDeps = [ "flask" ]` — nixpkgs ship
 
 ### Effort
 
-| Item | Cost |
-|---|---|
+| Item                                           | Cost                                                                                  |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `flake.nix` (packages/apps/overlays/devShells) | 45-60 min — derivation already written and proven; mostly `forAllSystems` boilerplate |
-| CI `nix build` job | 10-15 min |
-| README `nix run` section | 5 min |
-| Per-release maintenance | ~0 with the `readFile` version trick; occasional 1-line `pythonRelaxDeps` fix |
-| Switching @aguynamedryan's hosts to consume it | **Don't.** Keep `packages/seeds.nix`. |
+| CI `nix build` job                             | 10-15 min                                                                             |
+| README `nix run` section                       | 5 min                                                                                 |
+| Per-release maintenance                        | ~0 with the `readFile` version trick; occasional 1-line `pythonRelaxDeps` fix         |
+| Switching @aguynamedryan's hosts to consume it | **Don't.** Keep `packages/seeds.nix`.                                                 |
 
 One deliberate difference Hammond recommends between a repo-local flake and the existing `packages/seeds.nix`: that file sets `doCheck = false` (correct — it just wants a binary on the hosts). A repo-local flake gets `tests/` for free via `src = ./.;`, so it SHOULD run them via `pytestCheckHook`. Small genuine quality gain for the artifact strangers consume.
 
@@ -101,7 +104,7 @@ One deliberate difference Hammond recommends between a repo-local flake and the 
 
 "If you'd rather not spend the hour: that is a completely defensible call. The flake's honest value is one README line plus a contributor devShell. Neither is load-bearing for a tool whose realistic install path is `uv tool install`. This belongs in a nice-to-have polish bucket, **well below the unresolved PyPI naming question** — which does gate the primary install channel and is worth more attention." (See seeds-95.)
 
----
+______________________________________________________________________
 
 ## Counter to Hammond's weighting — direction now leans YES (2026-07-26)
 
@@ -126,6 +129,7 @@ More decisively: **that path already changes on every seeds release today.** New
 He priced the benefit as "`nix flake update seeds` instead of hand-editing 2 lines — ~2 minutes, three times so far." That measures convenience. The actual benefit is **single source of truth**.
 
 `packages/seeds.nix:28-37` hand-maintains, in a *different repo from `pyproject.toml`*, with nothing enforcing agreement:
+
 - the runtime dependency list (`click`, `flask`)
 - the `pythonRelaxDeps = [ "flask" ]` workaround for nixpkgs shipping flask 3.1.2 against our `>=3.1.3` floor
 
@@ -144,6 +148,7 @@ Hammond suggested `src = ./.;` plus `pytestCheckHook` (a genuine quality gain ov
 ### Direction (not yet a decision — needs beads before building)
 
 Lean YES on both counts, reversing Hammond's "public-facing only" recommendation:
+
 1. Ship `flake.nix` in the seeds repo — `packages.default`, `apps.default`, `overlays.default`, `devShells.default`, `checks.default`.
 2. Add a `nix build` job to `.github/workflows/ci.yml` — non-negotiable prerequisite; a silently-rotting flake is a broken README promise.
 3. **Do** switch home-manager to consume it via the overlay, and retire `packages/seeds.nix`. Accept the one-time marketplace-path rewrite.
@@ -152,8 +157,7 @@ Still orthogonal to the PyPI naming question (seeds-95) — a repo-local flake u
 
 Retained from Hammond unchanged: `buildPythonApplication`, NOT uv2nix (two runtime deps, both first-class in nixpkgs; uv2nix would add three inputs and track uv's lock format). Hatchling is a non-issue. The `src/seeds/plugin` data files are a non-issue — verified present in the built store output, swept in by the wheel `packages` directive, no `postInstall` needed.
 
-
----
+______________________________________________________________________
 
 ## Promoted to beads (2026-07-26)
 

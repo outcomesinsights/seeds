@@ -15,6 +15,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
 At end of session (or periodically), review seed graph and ask:
+
 - Does this tell a coherent story?
 - Can we trace how decisions were reached?
 - Are there orphan fragments that should be linked or pruned?

@@ -28,6 +28,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
 **Problem:** When incorporating candidate items from a transcript, Claude needs to ask 'is there already a seed about this?' for each item. Current options:
+
 - `seeds search 'keyword'` — requires Claude to guess the right FTS5 keyword (often misses on phrasing differences)
 - `seeds list` and scan — works but doesn't rank or filter by relevance
 - grep the JSONL — same problems
@@ -35,12 +36,14 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Proposed command:** `seeds suggest <text>` returns top-N existing seeds ranked by relevance to <text>.
 
 **Ranking approach (cheap, no embeddings):**
+
 - FTS5 score across title + content (auto-tokenized from the natural-language input)
 - Boost by tag overlap (if text mentions 'compare', boost seeds tagged compare)
 - Optional: boost recently-updated seeds (momentum)
 - Return top 5-10 with: id, status, title, tags, top matched snippet
 
 **Output sketch:**
+
 ```
 $ seeds suggest 'venn diagram showing overlap between two code sets'
 csc-111   ◌ Compare lens — Venn diagram [compare, deferred-lens, venn, viz]
@@ -54,13 +57,12 @@ csc-101   ◐ Compare diff — anchor-relative [compare, ...]
 **Why not just search:** `search` requires a single FTS5 expression with operator syntax. `suggest` takes natural-language input and does the keyword extraction internally. Different ergonomics for a different use case.
 
 **Open design questions:**
+
 - Should suggest include resolved/abandoned by default? (probably not — only candidates worth updating)
 - Min-relevance threshold to avoid noisy hits?
 - JSON output mode for agent piping?
 
-
-
----
+______________________________________________________________________
 
 **Design decisions (2026-05-18):**
 
@@ -70,10 +72,10 @@ csc-101   ◐ Compare diff — anchor-relative [compare, ...]
 
 3. **JSON output mode** — `--json` emits id/status/title/tags/snippet/score per result for agent piping.
 
+______________________________________________________________________
 
----
 **Clancey datapoint (2026-06-05) — see seeds-156:** semantic "does this already exist?" is cheap and dependency-light — Clancey's whole semantic layer is a ~30MB local MiniLM (Xenova/all-MiniLM-L6-v2, 384-dim) with brute-force cosine in-process, no vector DB. Viable in Python (sentence-transformers / onnxruntime). Pairs with the FTS5 + tag-overlap ranking already proposed here rather than replacing it.
 
 SHIPPED (bead seeds-c4b) as `seeds suggest`, with the ranking this seed proposed: bm25 across title+content, tag-overlap boost, recency, and a dynamic noise floor (Database.suggest, db.py:1173). NEW SINCE: the storage overhaul puts it at risk. Dropping SQLite drops FTS5, and whether ranked search survives is now the single decision left open in plans/storage-overhaul.md — it blocks phase 5. Two measurements point opposite ways: Porter stemming is a real casualty ("merging" stops finding "merge"), but grep tested broader than FTS on a real query, 72 hits vs 77, and found one FTS missed.
 
-RULED (@aguynamedryan, 2026-08-31): suggest is removed in the storage overhaul rather than reimplemented. Evidence gathered before agreeing: roughly 15 genuine invocations across 5 sessions in the entire project transcript history, mostly agent-initiated during dedup passes rather than user-initiated. The FTS5 machinery goes with it — Database.suggest, sanitize_fts_query, and the seeds_fts* tables.
+RULED (@aguynamedryan, 2026-08-31): suggest is removed in the storage overhaul rather than reimplemented. Evidence gathered before agreeing: roughly 15 genuine invocations across 5 sessions in the entire project transcript history, mostly agent-initiated during dedup passes rather than user-initiated. The FTS5 machinery goes with it — Database.suggest, sanitize_fts_query, and the seeds_fts\* tables.

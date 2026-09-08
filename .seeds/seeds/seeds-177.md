@@ -27,9 +27,8 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 
 Flagged by @aguynamedryan while reconciling David Poll's code-review article (see sibling seed). The interest: when a code review of an implementation surfaces feedback that should change the plan, capture that feedback and feed it BACK into the originating deliberation — link review outcomes to the seed(s)/bead(s) that produced the work, so the recorded decisions and assumptions can be inspected and revised rather than lost. Turns the deliberation record into a live loop (build -> evaluate/review -> revise -> build) instead of a write-once upstream artifact. Open question: is this a seeds feature, or just an agent-on-request behavior?
 
+______________________________________________________________________
 
-
----
 ## 2026-06-18 — @aguynamedryan's stream-of-consciousness additions
 
 "THROWING AWAY INSIGHT, NOT JUST CODE" (verbatim-ish): "I'm not trying to be precious about code, because code has become very cheap. I don't see any reason why you wouldn't build and discard — other than if you haven't captured what you learned from building and discarding, you're throwing away more than code. You're throwing away insight." -> This is the affirmative case for the feedback loop: build-and-discard is fine, good even, IF the learning is captured. The thing worth keeping from a discarded build is the insight, not the code.

@@ -45,18 +45,20 @@ whose canonical form disagrees with every tool that will ever walk the tree.
 i.e. `---\n\n`. Prettier strips trailing blank lines, leaving `---\n`, and the
 strict read then refuses it:
 
-    parse-error: no blank line between the closing '---' and the body
+```
+parse-error: no blank line between the closing '---' and the body
+```
 
 Cascades: seeds whose relationships point at an unparseable file then fail
 `relationship-target-missing` (oimnibus: 4 parse errors + 4 cascaded = 8).
 
 Measured, all three forms through prettier 3.6.2:
 
-| form | | result |
-| --- | --- | --- |
-| `---\n\n` | current body-less | blank line stripped — NOT a fixed point |
-| `---\n` | proposed body-less | unchanged |
-| `---\n\nbody\n` | bodied | unchanged |
+| form            |                    | result                                  |
+| --------------- | ------------------ | --------------------------------------- |
+| `---\n\n`       | current body-less  | blank line stripped — NOT a fixed point |
+| `---\n`         | proposed body-less | unchanged                               |
+| `---\n\nbody\n` | bodied             | unchanged                               |
 
 @aguynamedryan's rule, 2026-09-08: **the writer emits `---\n` for an empty body.**
 The alternative that was proposed first and withdrawn was liberal-read /
@@ -76,12 +78,16 @@ Not previously seen, because oimnibus happens to have zero of them. Prettier
 formats the frontmatter as YAML, and rewrites a double-quoted scalar whose *only*
 escapes are `\"` into the single-quoted form:
 
-    resolution: "he said \"yes\" today"      ->      resolution: 'he said "yes" today'
+```
+resolution: "he said \"yes\" today"      ->      resolution: 'he said "yes" today'
+```
 
 `_decode_scalar` accepts the plain and double-quoted forms and nothing else, so
 this is a hard parse error, on a file that has a body and is otherwise ordinary:
 
-    parse-error: field 'resolution': scalar starts with the YAML indicator "'"
+```
+parse-error: field 'resolution': scalar starts with the YAML indicator "'"
+```
 
 Affected: seeds 3 (seeds-147.3, seeds-169, seeds-199) · code_set_catalog 4 ·
 epc 1 · code_collector 1 · vocabulary_formats 1. All of them `resolution:` values
@@ -90,12 +96,12 @@ format exists to keep.
 
 Prettier's rule, established by fixture (fixed point unless noted):
 
-| value contains | double-quoted form | single-quoted form |
-| --- | --- | --- |
-| no `"` | kept | n/a |
-| `"` only | **rewritten to single** | kept |
-| `"` and `'` | **rewritten to single, `''`-doubled** | kept |
-| `"` plus any `\n` `\t` `\\` `\uXXXX` escape | kept | n/a |
+| value contains                              | double-quoted form                    | single-quoted form |
+| ------------------------------------------- | ------------------------------------- | ------------------ |
+| no `"`                                      | kept                                  | n/a                |
+| `"` only                                    | **rewritten to single**               | kept               |
+| `"` and `'`                                 | **rewritten to single, `''`-doubled** | kept               |
+| `"` plus any `\n` `\t` `\\` `\uXXXX` escape | kept                                  | n/a                |
 
 So it is not "prefer single quotes"; it is **prefer whichever quoting needs no
 backslash escapes**, which is an ordinary YAML-emitter convention rather than a
@@ -198,10 +204,12 @@ rule dv6r's correction identified as missing and unbuilt
 
 Asked by @aguynamedryan 2026-09-08. Minimal repro, prettier 3.6.2, five passes:
 
-    in:      ...(code_set_catalog rule) reads as a *human* principle.
-    pass 1:  ...(code_set_catalog rule) reads as a _human_ principle.
-    pass 2:  ...(code*set_catalog rule) reads as a \_human* principle.
-    pass 3+: unchanged
+```
+in:      ...(code_set_catalog rule) reads as a *human* principle.
+pass 1:  ...(code_set_catalog rule) reads as a _human_ principle.
+pass 2:  ...(code*set_catalog rule) reads as a \_human* principle.
+pass 3+: unchanged
+```
 
 So it converges — after two passes, not one. The damage is in what pass 2 does.
 Rendered through CommonMark (markdown-it-py):
@@ -224,13 +232,13 @@ pass 2.
 `mdformat` (markdown-it-py; CLI, library API, and a pre-commit hook) with
 `mdformat-gfm` + `mdformat-frontmatter`, over the same 1,324 files:
 
-| | prettier 3.6.2 | mdformat |
-| --- | --- | --- |
-| frontmatter / separator rewritten | **54 files, all hard parse errors** | **0** |
-| bodies whose rendering changes | 43 structural + 72 whitespace-collapse | **2** structural + 84 whitespace-collapse |
-| second pass changes anything | **26 files** (24 of them rendering) | **0 — idempotent** |
-| emphasis re-spelling | `*em*` -> `_em_`, which is what detonates | none |
-| YAML frontmatter | reformatted (class B) | **untouched** |
+|                                   | prettier 3.6.2                            | mdformat                                  |
+| --------------------------------- | ----------------------------------------- | ----------------------------------------- |
+| frontmatter / separator rewritten | **54 files, all hard parse errors**       | **0**                                     |
+| bodies whose rendering changes    | 43 structural + 72 whitespace-collapse    | **2** structural + 84 whitespace-collapse |
+| second pass changes anything      | **26 files** (24 of them rendering)       | **0 — idempotent**                        |
+| emphasis re-spelling              | `*em*` -> `_em_`, which is what detonates | none                                      |
+| YAML frontmatter                  | reformatted (class B)                     | **untouched**                             |
 
 Two things follow.
 
@@ -266,15 +274,15 @@ written by an LLM agent in the first place, so formatting it fixes the broken
 markdown LLMs emit *before* it is persisted. Fair, and the measurement mostly
 supports it. What a battery of seeds-specific hazards actually shows:
 
-| hazard | mdformat's behaviour |
-| --- | --- |
-| `> [!SUPERSEDED] YYYY-MM-DD — …` marker, long | **preserved exactly**; blockquote not rewrapped |
-| long prose line | **not reflowed** (`wrap` defaults to `keep`) |
+| hazard                                                   | mdformat's behaviour                                                                      |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `> [!SUPERSEDED] YYYY-MM-DD — …` marker, long            | **preserved exactly**; blockquote not rewrapped                                           |
+| long prose line                                          | **not reflowed** (`wrap` defaults to `keep`)                                              |
 | verbatim quote containing `code_set_catalog` and `*all*` | **untouched** — no emphasis re-spelling, so prettier's detonating rewrite has no analogue |
-| fenced code block | **preserved exactly** |
-| GFM table | re-padded to aligned columns — cosmetic |
-| ordered list a human numbered `1. 2. 3.` | renumbered to `1. 1. 1.` — fixable with `number=True` |
-| **unfenced pasted traceback / log** | **mangled**: indentation flattened, `*args` escaped to `\*args` |
+| fenced code block                                        | **preserved exactly**                                                                     |
+| GFM table                                                | re-padded to aligned columns — cosmetic                                                   |
+| ordered list a human numbered `1. 2. 3.`                 | renumbered to `1. 1. 1.` — fixable with `number=True`                                     |
+| **unfenced pasted traceback / log**                      | **mangled**: indentation flattened, `*args` escaped to `\*args`                           |
 
 So the residual harm is one shape: **literal non-markdown text that was pasted
 without a fence.** That is precisely what `seeds jot` exists to make frictionless,

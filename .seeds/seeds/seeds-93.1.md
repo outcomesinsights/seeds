@@ -16,6 +16,7 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
 @aguynamedryan hates breaking the build. Before going public, set up pre-commit hooks that run:
+
 - Ruff lint check
 - Ruff format check
 - Full pytest suite

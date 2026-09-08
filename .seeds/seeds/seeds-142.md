@@ -43,11 +43,13 @@ converted_at: 2026-09-01T05:20:22.746832+00:00
 **Use case observed in production (2026-04 to 2026-05):**
 
 User points Claude at an extracted-transcript file ('look over these and update existing seeds or create new ones'). Claude must:
+
 1. Identify candidate items in the transcript (questions, decisions, data, insights)
 2. For each, decide: existing seed? update which one? net-new?
 3. Write seeds with correct cross-references and links
 
 **Empirical observations (from Clancey conversation review):**
+
 - Recurring: 6+ sessions in 3 weeks (4/23, 5/4, 5/6, 5/8, 5/12, 5/15 on CSC; 5/8 on oimnibus)
 - Discovery pattern varies wildly across sessions: `seeds list`, `seeds search`, `cat .seeds/seeds.jsonl | grep`, multi-read `seeds show`. No canonical pattern.
 - Failure mode: hallucinated seed IDs in newly-written bodies (4/23 catalog, 5/8 oimnibus both had self-corrections of crossed references)
@@ -55,12 +57,14 @@ User points Claude at an extracted-transcript file ('look over these and update 
 - Gold-standard pattern (5/6 subagents): list → targeted search → read 4-6 neighbors → check candidate doc for duplicates → then write
 
 **Related existing infrastructure:**
+
 - A `transcript-seeds` skill already wraps this workflow as a slash command — validates the design need
 - seeds-130 covers the project-aware-gleaning meta-problem
 - seeds-87 covers part of the cold-start cost (dynamic prime)
 - seeds-74.2.1 (sweep) is a sibling pattern for conversation extraction
 
 **Missing primitives motivated by this use case (see child seeds):**
+
 - A digest in `seeds prime` so Claude doesn't restart discovery each session — see seeds-87 evidence update
 - A `seeds suggest <text>` dedup query (FTS5 + tag-overlap ranking)
 - A `seeds recent --since=<date>` view for incremental ingestion
