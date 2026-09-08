@@ -89,6 +89,13 @@ Seeds should capture the **journey**, not just conclusions. When investigating:
 
 **Rule of thumb:** If you ran a query or the user said something insightful, capture it before moving on.
 
+**FENCE anything that must stay verbatim** — logs, command output, tracebacks,
+SQL, file listings, hand-aligned columns, YAML samples. Seeds formats every body
+with mdformat as it writes it: a fenced block survives byte for byte, an unfenced
+one silently does not. A pasted traceback loses its indentation and gains
+escapes; a hand-aligned column block collapses to single spaces. Indentation and
+alignment are not markdown constructs; a fence is.
+
 ## Essential Commands
 
 ### Quick Capture

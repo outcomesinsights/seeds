@@ -2562,6 +2562,16 @@ class TestPrimeCommand:
         assert "seeds prefix" in result.output
         assert "--dry-run" in result.output
 
+    def test_prime_tells_agents_to_fence_verbatim_text(
+        self, cli_runner, initialized_env
+    ):
+        """Agents write nearly every body, and the writer formats what they
+        hand it: unfenced literal text is silently reshaped."""
+        result = cli_runner.invoke(main, ["prime"])
+        assert result.exit_code == 0
+        assert "FENCE anything that must stay verbatim" in result.output
+        assert "mdformat" in result.output
+
     def test_prime_teaches_the_cross_repo_rg_recipe(self, cli_runner, initialized_env):
         """Bead seeds-4co.20: the gap prime exists to close.
 
