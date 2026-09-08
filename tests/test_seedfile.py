@@ -32,6 +32,8 @@ from seeds.seedfile import (
     SeedEdge,
     SeedFileError,
     SeedRecord,
+    _decode_scalar,
+    _encode_scalar,
     id_for_path,
     inverse_relation,
     is_valid_id,
@@ -177,6 +179,29 @@ class TestRender:
     def test_canonical_bytes(self):
         """Hand-built record, hand-written file. This is the byte contract."""
         assert render_seed_file(canonical_record()) == CANONICAL
+
+    @pytest.mark.parametrize(
+        "value, expected",
+        [
+            # ": " forces quoting; what the value carries then picks the form.
+            (
+                'A decision: he said "yes" today',
+                """'A decision: he said "yes" today'""",
+            ),
+            (
+                'A decision: he said "yes" and it\'s fine',
+                """'A decision: he said "yes" and it''s fine'""",
+            ),
+            ("A decision: it's fine", '"A decision: it\'s fine"'),
+            ('Two lines: a\nand a "quote"', '"Two lines: a\\nand a \\"quote\\""'),
+            ('A path: back\\slash and "q"', '"A path: back\\\\slash and \\"q\\""'),
+        ],
+    )
+    def test_quoting_picks_the_form_that_needs_no_escapes(self, value, expected):
+        """A quoted value carrying only double quotes is single-quoted; one
+        needing a backslash stays double-quoted. Both round-trip."""
+        assert _encode_scalar(value) == expected
+        assert _decode_scalar(None, "resolution", expected, 1) == value
 
     def test_optional_fields_are_omitted_when_empty(self):
         text = render_seed_file(minimal_record())

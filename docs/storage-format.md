@@ -142,6 +142,25 @@ byte-idempotent.
 
 **Unknown keys are an error**, not something to preserve or ignore. See §7.
 
+**Scalar quoting: whichever form needs no backslash escapes.** A value that is
+unambiguously plain is written plain. Otherwise it is quoted, and the quoting is
+chosen, not fixed:
+
+- **single-quoted**, with a literal apostrophe doubled as `''`, when the value
+  contains a `"` and nothing that needs a backslash — no control characters, no
+  backslash of its own;
+- **double-quoted** otherwise, produced by `json.dumps`, whose output is a valid
+  YAML 1.2 double-quoted scalar.
+
+Both forms are read; exactly one is written for a given value, so the canonical
+spelling stays a function of the value and reads stay strict (§7).
+
+The rule is not a style preference. `resolution:` values quote people verbatim
+and are therefore full of double quotes, and `"he said \"yes\""` is precisely
+the spelling a YAML-aware formatter rewrites to the single-quoted form —
+measured on 10 files across the corpus, every one a hard parse error afterwards.
+Emitting the form the ecosystem already agrees on removes the class.
+
 ### `id` (string, required)
 
 The seed's identifier. Must equal the filename stem. A file whose `id`

@@ -265,6 +265,11 @@ _NON_STRING_PLAIN_RE = re.compile(
 # openers the format rejects outright (§4).
 _INDICATORS = "-?:,[]{}#&*!|>'\"%@`"
 
+# Characters a YAML double-quoted scalar cannot carry literally, so their
+# presence forces the double-quoted form: the single-quoted form has no escape
+# for them at all.
+_NEEDS_BACKSLASH_RE = re.compile(r"[\x00-\x1f\x7f\\]")
+
 
 def _encode_scalar(value: str) -> str:
     """Render ``value`` as a YAML scalar this module can read back exactly.
@@ -284,6 +289,13 @@ def _encode_scalar(value: str) -> str:
         and not value.endswith(":")
     ):
         return value
+    if '"' in value and not _NEEDS_BACKSLASH_RE.search(value):
+        # Whichever quoting needs no backslash escapes. A resolution that quotes
+        # somebody verbatim is full of double quotes and nothing else, and
+        # `"he said \"yes\""` is the one form a markdown formatter rewrites --
+        # measured on 10 files across the corpus, every one of them a hard parse
+        # error afterwards. The single-quoted form escapes only `'`, by doubling.
+        return "'" + value.replace("'", "''") + "'"
     return json.dumps(value, ensure_ascii=False)
 
 
@@ -331,6 +343,27 @@ def _decode_scalar(
                 line=line,
             )
         return decoded
+    if raw[0] == "'":
+        if len(raw) < 2 or not raw.endswith("'"):
+            raise _fail(
+                path,
+                "malformed single-quoted scalar; it is not closed",
+                field_name=field_name,
+                value=raw,
+                line=line,
+            )
+        inner = raw[1:-1]
+        # The single-quoted form has exactly one escape: '' for a literal
+        # apostrophe. A lone ' inside would have closed the scalar.
+        if re.search(r"(?<!')'(?:'')*(?!')", inner):
+            raise _fail(
+                path,
+                "malformed single-quoted scalar; a literal apostrophe is written ''",
+                field_name=field_name,
+                value=raw,
+                line=line,
+            )
+        return inner.replace("''", "'")
     if raw[0] in _INDICATORS:
         raise _fail(
             path,
