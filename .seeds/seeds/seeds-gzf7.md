@@ -4,7 +4,7 @@ title: git-cliff --unreleased silently drops commits after a merge — the relea
 status: resolved
 type: concern
 created_at: 2026-08-26T19:59:30.352755+00:00
-updated_at: 2026-08-31T21:35:01.705778+00:00
+updated_at: 2026-09-08T22:48:52.303789+00:00
 resolved_at: 2026-08-31T21:35:01.705772+00:00
 resolution: "Fixed: the changelog recipes use an explicit $(git describe --tags --abbrev=0)..HEAD range instead of --unreleased, with this seed's measurement preserved as a justfile comment so it is not simplified back, and 'just changelog-coverage' now verifies per-commit that nothing was silently dropped (bead seeds-0t1 promoted the detector into the repo; bead seeds-3sh fixed the cliff.toml rule that ate build: commits). Efficacy: no tweaking. Residual gap, deliberately left as open bead seeds-3ti rather than holding this seed: coverage gates the generator, not the committed CHANGELOG.md artifact."
 tags:
@@ -22,12 +22,15 @@ Found 2026-08-26 while preparing the v0.6.0 release. This is a silent-failure cl
 
 WHAT WAS OBSERVED, verified rather than inferred. After merging origin/main (three dependabot commits) into local main:
 
-  just changelog-preview     (= git-cliff --unreleased)  ->  5 entries
-  git-cliff v0.5.0..HEAD     (explicit range)            -> 12 entries
+```
+just changelog-preview     (= git-cliff --unreleased)  ->  5 entries
+git-cliff v0.5.0..HEAD     (explicit range)            -> 12 entries
+```
 
 `git log v0.5.0..HEAD --oneline | wc -l` reports 34 commits, and all three of the dropped code commits were confirmed as genuine ancestors of HEAD and descendants of the v0.5.0 tag via `git merge-base --is-ancestor`. So the commits are unambiguously unreleased and git-cliff's `--unreleased` mode is not seeing them.
 
 WHAT WOULD HAVE SHIPPED. The dropped entries include:
+
 - `54057b1` fix(export): make the divergence guard's guidance able to satisfy itself -- one of the THREE headline fixes of the release
 - `194cd3e` fix(lint): set ruff target-version to py310 to match requires-python
 - `ca568b0` ci: make pre-push actually match CI (Python matrix + nix job)
@@ -39,19 +42,20 @@ LIKELY CAUSE, stated as a hypothesis rather than a finding: the merge gives HEAD
 
 THE FIX IS CHEAP, whatever the cause. Change the justfile recipes to use an explicit range against the latest tag rather than `--unreleased`:
 
-  changelog-preview:  git-cliff $(git describe --tags --abbrev=0)..HEAD
-  changelog-release VERSION:  git-cliff $(git describe --tags --abbrev=0)..HEAD --tag {{VERSION}}
+```
+changelog-preview:  git-cliff $(git describe --tags --abbrev=0)..HEAD
+changelog-release VERSION:  git-cliff $(git describe --tags --abbrev=0)..HEAD --tag {{VERSION}}
+```
 
 THE BROADER POINT, and the reason this is a concern rather than a chore: this repo's own data-pipeline standard says a stale-check that reports green while the artifact is broken is the failure mode to design against, and that the detector itself is code that can be silently wrong. The release changelog is exactly such an artifact, and its generator just demonstrated the failure. A guard worth adding: at release time, assert that the number of non-skipped commits in the generated section matches what the explicit range produces, and fail loudly on a mismatch.
 
 Related: the same run surfaced that `cliff.toml` has no breaking-change handling at all (`grep -c breaking cliff.toml` returns 0), so a `BREAKING CHANGE:` footer or a `type!:` subject renders under "Fixed" like anything else. The v0.5.0 Breaking section was hand-written. These are two independent gaps in the same tool.
 
-
 --- FIXED (2026-08-26, commit 7cad77f) ---
 
 `changelog-preview` and `changelog-release` now take an explicit `$(git describe --tags --abbrev=0)..HEAD` range instead of `--unreleased`. Verified immediately after: preview went from 6 entries to 13, and `just changelog-release v0.6.0` renders all four Fixed entries including 54057b1, the one that was being dropped.
 
-Added a third recipe, `changelog-audit`, printing the range, the commit count (37) and the rendered entry count (13) side by side. Deliberately NOT a pass/fail gate: cliff.toml legitimately skips chore(beads), chore(seeds*), style, test and unconventional subjects, so a gap is expected and a hard assertion would either be wrong or would have to duplicate the skip rules and drift from them. It is a read-before-release check, which is the honest shape for something whose whole job is to make a silent truncation visible.
+Added a third recipe, `changelog-audit`, printing the range, the commit count (37) and the rendered entry count (13) side by side. Deliberately NOT a pass/fail gate: cliff.toml legitimately skips chore(beads), chore(seeds\*), style, test and unconventional subjects, so a gap is expected and a hard assertion would either be wrong or would have to duplicate the skip rules and drift from them. It is a read-before-release check, which is the honest shape for something whose whole job is to make a silent truncation visible.
 
 `changelog-latest` was left on `--latest`. It renders a closed tag..tag range rather than walking back from an open HEAD, so it does not share the defect — noted in the justfile that it has not been re-verified against a release whose range spans a merge.
 

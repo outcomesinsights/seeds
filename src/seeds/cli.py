@@ -58,9 +58,12 @@ from seeds.models import (
 from seeds.seedfile import (
     SeedFileError,
     SeedRecord,
+    read_seed_file,
     render_body,
+    render_seed_file,
     seed_files_dir,
     write_mdformat_config,
+    write_seed_file,
 )
 from seeds.store import (
     CONFIG_FILE,
@@ -1664,6 +1667,49 @@ def prime(no_digest: bool, digest_limit: int) -> None:
             digest_limit=digest_limit,
         )
     )
+
+
+@main.command()
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Name the files that are not canonical; write nothing.",
+)
+@pass_context
+def normalize(ctx: Context, dry_run: bool) -> None:
+    """Rewrite every seed file in the store's current canonical form.
+
+    Files written by an older seeds still read perfectly well -- the reader
+    normalizes what it can and `check --smells` reports the rest as
+    `non-canonical-bytes` -- so this is never required for correctness. What it
+    buys is a store that is canonical all at once, in a commit of its own,
+    instead of one that reformats a body months from now inside an unrelated
+    `seeds resolve`.
+
+    Run it after upgrading seeds, and after any bump to the pinned formatter.
+    """
+    store = ctx.get_store()
+    config = write_mdformat_config(store.seeds_dir)
+    files = sorted(store.files_dir.glob("*.md"))
+    changed = []
+    for path in files:
+        before = path.read_text(encoding="utf-8")
+        record = read_seed_file(path)
+        after = render_seed_file(record, store.seeds_dir)
+        if after == before:
+            continue
+        changed.append(path)
+        if not dry_run:
+            write_seed_file(path, record)
+
+    verb = "would be rewritten" if dry_run else "rewritten"
+    click.echo(f"{len(files)} seed file(s), {len(changed)} {verb}.")
+    for path in changed:
+        click.echo(f"  {path.name}")
+    if changed and not dry_run:
+        click.echo("Commit this on its own -- it is a reformat, not an edit.")
+    if config.exists():
+        click.echo(f"Formatter config: {config}")
 
 
 @main.command()
