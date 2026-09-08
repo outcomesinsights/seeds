@@ -5,7 +5,7 @@ status: captured
 type: concern
 parent: seeds-dv6r
 created_at: 2026-09-08T21:02:17.201968+00:00
-updated_at: 2026-09-08T21:33:55.428992+00:00
+updated_at: 2026-09-08T21:57:46.531954+00:00
 tags:
   - storage
   - format
@@ -258,3 +258,55 @@ What that leaves worth building is a *detector*, not a rewriter: flag a body tha
 is not stable under a CommonMark round-trip. That is a read-only check, it needs
 only markdown-it-py, and it is the thing that would have named seeds-183's SQL
 before a formatter ever reached it.
+
+## The dangers of a write-time formatter, measured (mdformat 1.0.0 + gfm + frontmatter)
+
+@aguynamedryan pushed back on the verbatim recommendation 2026-09-08: the body is
+written by an LLM agent in the first place, so formatting it fixes the broken
+markdown LLMs emit *before* it is persisted. Fair, and the measurement mostly
+supports it. What a battery of seeds-specific hazards actually shows:
+
+| hazard | mdformat's behaviour |
+| --- | --- |
+| `> [!SUPERSEDED] YYYY-MM-DD — …` marker, long | **preserved exactly**; blockquote not rewrapped |
+| long prose line | **not reflowed** (`wrap` defaults to `keep`) |
+| verbatim quote containing `code_set_catalog` and `*all*` | **untouched** — no emphasis re-spelling, so prettier's detonating rewrite has no analogue |
+| fenced code block | **preserved exactly** |
+| GFM table | re-padded to aligned columns — cosmetic |
+| ordered list a human numbered `1. 2. 3.` | renumbered to `1. 1. 1.` — fixable with `number=True` |
+| **unfenced pasted traceback / log** | **mangled**: indentation flattened, `*args` escaped to `\*args` |
+
+So the residual harm is one shape: **literal non-markdown text that was pasted
+without a fence.** That is precisely what `seeds jot` exists to make frictionless,
+which is the one place a write-time formatter costs something real.
+
+## The objection is about SCOPE, not principle — format the input, not the render
+
+The verbatim recommendation above was over-broad. §7's "nothing is destroyed"
+protects against compaction and summarising rewrites; re-spelling markdown is not
+that. The real objection is narrower and survives:
+
+**A formatter inside `render_seed_file` runs on every write, including writes that
+have nothing to do with the body.** `seeds resolve`, `seeds update --type`, adding
+a relationship — each re-renders the whole file, so a metadata change would
+reformat a body written months earlier and drop that diff into an unrelated
+commit. And it would make **canonical bytes a function of a third-party version**:
+an mdformat upgrade turns all 1,324 files non-canonical at once, and two hosts on
+different versions render the same body to different bytes — merge churn in a
+git-backed multi-host store, which is exactly what the hash-ID work (seeds-199)
+was about.
+
+Both objections dissolve if the formatter is applied to **incoming content** —
+`create --content/--content-file`, `update --content`, `jot` — and
+`render_seed_file` stays a pure function of the stored body. Then:
+
+- LLM-emitted markdown is fixed at the source, which is the whole point;
+- the corpus never churns from a version bump, because canonical form is still
+  entirely seeds';
+- `check --smells`' `non-canonical-bytes` keeps meaning what it means today;
+- a deliberate one-time pass can normalize the existing bodies in its own commit,
+  rather than drip-feeding reformats into unrelated ones.
+
+mdformat is at 1.0.0 and treats its output style as part of its API, but the
+version should be pinned regardless, and `wrap="keep"` and `number=True` set
+explicitly rather than inherited as defaults.
