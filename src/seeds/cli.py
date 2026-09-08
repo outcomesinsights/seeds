@@ -55,7 +55,13 @@ from seeds.models import (
     parse_since,
     sanitize_prefix,
 )
-from seeds.seedfile import SeedFileError, SeedRecord, render_body, seed_files_dir
+from seeds.seedfile import (
+    SeedFileError,
+    SeedRecord,
+    render_body,
+    seed_files_dir,
+    write_mdformat_config,
+)
 from seeds.store import (
     CONFIG_FILE,
     SEEDS_DIR,
@@ -507,6 +513,7 @@ def init(prefix: str | None) -> None:
 
     store.files_dir.mkdir(parents=True, exist_ok=True)
     store.set_prefix(prefix)
+    write_mdformat_config(seeds_dir)
     click.echo(f"Initialized seeds in {seeds_dir}")
     click.echo(f"  Project prefix: {prefix}")
     click.echo(f"  Seed files live in {store.files_dir}/ and are tracked by git")

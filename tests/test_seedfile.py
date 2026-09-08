@@ -34,9 +34,11 @@ from seeds.seedfile import (
     SeedRecord,
     _decode_scalar,
     _encode_scalar,
+    format_body,
     id_for_path,
     inverse_relation,
     is_valid_id,
+    mdformat_options,
     parse_seed_file,
     path_for_id,
     read_seed,
@@ -45,6 +47,7 @@ from seeds.seedfile import (
     render_seed_file,
     seed_files_dir,
     superseded_scopes,
+    write_mdformat_config,
     write_seed,
     write_seed_file,
 )
@@ -775,12 +778,22 @@ class TestLiveAndFullRender:
         path = write_seed(tmp_path, record)
 
         stored = read_seed_file(path)
-        # Nothing was removed on the way to disk: the file holds it all.
-        assert stored.body == MARKED_BODY
-        assert render_body(stored.body, full=True) == MARKED_BODY
+        # The writer formats on the way to disk, so the stored body is the
+        # formatted one -- here that means the blank line CommonMark wants
+        # between the heading and the marker's blockquote. Nothing was
+        # REMOVED, which is the property that matters: every non-blank line
+        # survives, in order.
+        formatted = format_body(MARKED_BODY)
+        assert stored.body == formatted
+        assert [line for line in formatted.split("\n") if line.strip()] == [
+            line for line in MARKED_BODY.split("\n") if line.strip()
+        ]
+        assert render_body(stored.body, full=True) == formatted
         # The live render keeps the retired heading and its marker, and drops
         # only the text they cover.
-        assert render_body(stored.body) == MARKED_LIVE
+        # `render_body` is a display function, not a stored artifact, so its
+        # blank lines are not pinned -- both sides go through the formatter.
+        assert format_body(render_body(stored.body)) == format_body(MARKED_LIVE)
 
     def test_a_bad_marker_makes_the_file_unreadable(self, tmp_path):
         """The reader cannot tell what is retired, so it does not guess."""
@@ -797,3 +810,61 @@ class TestLiveAndFullRender:
         record.body = "## H\n> [!SUPERSEDED] 2026-01-02 —\ndead\n"
         with pytest.raises(SeedFileError, match="no reason clause"):
             write_seed(tmp_path, record)
+
+
+class TestTheStoreIsAFixedPointOfItsFormatter:
+    """§2: bodies are formatted on write, so a repo-wide `mdformat` run is a
+    no-op on the store instead of a churn of every seed."""
+
+    def test_formatting_is_idempotent(self, tmp_path):
+        record = minimal_record()
+        record.body = "text\n+ a\n+ b\n"
+        path = write_seed(tmp_path, record)
+        once = path.read_text(encoding="utf-8")
+        write_seed_file(path, read_seed_file(path))
+        assert path.read_text(encoding="utf-8") == once
+
+    def test_a_fenced_block_survives_byte_for_byte(self, tmp_path):
+        """The rule that follows from formatting: anything that must stay
+        verbatim gets a fence. Unfenced, its indentation would be flattened."""
+        literal = (
+            "```\nTraceback (most recent call last):\n  raise ValueError(*a)\n```\n"
+        )
+        record = minimal_record()
+        record.body = literal
+        path = write_seed(tmp_path, record)
+        assert read_seed_file(path).body == literal
+
+    def test_a_superseded_marker_survives(self, tmp_path):
+        record = minimal_record()
+        record.body = MARKED_BODY
+        path = write_seed(tmp_path, record)
+        scopes = superseded_scopes(read_seed_file(path).body)
+        assert len(scopes) == 1
+        assert scopes[0].retired_on == date(2026, 8, 28)
+
+    def test_options_come_from_the_store_s_own_config(self, tmp_path):
+        """The writer reads the very file mdformat discovers, so the two agree
+        by construction rather than by being configured alike."""
+        numbered = "text\n\n1. a\n2. b\n"
+        assert "1. a\n1. b" in format_body(numbered, tmp_path)  # no config yet
+
+        write_mdformat_config(tmp_path)
+        assert "1. a\n2. b" in format_body(numbered, tmp_path)
+
+    def test_the_config_names_frontmatter_in_its_allowlist(self, tmp_path):
+        """Without it the CLI reads a seed's opening `---` as a thematic break
+        and destroys the frontmatter -- measured, every file in the store."""
+        config = write_mdformat_config(tmp_path)
+        assert 'extensions = ["frontmatter", "gfm"]' in config.read_text()
+
+    def test_the_writer_drops_frontmatter_from_what_it_formats(self, tmp_path):
+        """It formats a bare body, so a body opening with `---` must not be
+        swallowed as frontmatter."""
+        write_mdformat_config(tmp_path)
+        body = "---\n\ntext\n"
+        assert format_body(body, tmp_path).startswith("______")
+
+    def test_an_absent_config_means_mdformat_s_defaults(self, tmp_path):
+        assert mdformat_options(tmp_path) == {}
+        assert mdformat_options(None) == {}

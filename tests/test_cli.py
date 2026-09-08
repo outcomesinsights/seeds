@@ -254,6 +254,22 @@ class TestInitCommand:
             finally:
                 os.chdir(original_cwd)
 
+    def test_init_writes_the_store_s_formatter_config(self, cli_runner):
+        """The store carries the options the writer formats bodies with, so a
+        plain `mdformat .` over the repo is a no-op on it."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            original_cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                assert cli_runner.invoke(main, ["init"]).exit_code == 0
+                config = Path(tmpdir) / SEEDS_DIR / ".mdformat.toml"
+                assert config.exists()
+                text = config.read_text()
+                assert 'extensions = ["frontmatter", "gfm"]' in text
+                assert "number = true" in text
+            finally:
+                os.chdir(original_cwd)
+
     def test_init_already_initialized(self, cli_runner, initialized_env):
         """Verify init handles already initialized directory."""
         result = cli_runner.invoke(main, ["init"])

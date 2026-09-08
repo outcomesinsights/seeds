@@ -94,6 +94,30 @@ Mechanically:
   re-dirties itself on every run. The earlier `---\n\n` spelling still parses,
   and is reported as `non-canonical-bytes`.
 - Everything after that blank line, verbatim, is the body.
+- **The body is stored formatted.** Every write runs it through
+  [mdformat](https://mdformat.rtfd.io/) — pinned, because the formatter's
+  output *is* the canonical form, so a version whose style changed would make
+  every file non-canonical at once. Bodies are written by agents, and this
+  fixes malformed markdown before it is persisted; more importantly it makes
+  the store a **fixed point** of the formatter, so a repo-wide `mdformat .` is
+  a no-op on `.seeds/` rather than a churn of every seed. Verified over all
+  1,324 seed files on this machine: zero changed.
+
+  The options live in **`.seeds/.mdformat.toml`**, which the writer reads and
+  which mdformat itself discovers — it searches upward from each file's own
+  directory, so the config is scoped to the store and the repo's other
+  markdown keeps mdformat's defaults. The two therefore run the same
+  formatter by construction rather than by being configured alike. Its
+  `extensions` allowlist is load-bearing twice over: it neutralizes a plugin
+  the operator happens to have installed, and it must name `frontmatter`,
+  without which mdformat reads a seed's opening `---` as a thematic break and
+  destroys the frontmatter.
+
+  A fenced block survives this byte for byte. An **unfenced** literal does
+  not — a pasted traceback loses its indentation and gains escapes, and
+  hand-aligned columns collapse. Anything that must stay verbatim gets a
+  fence.
+
 - **The body carries no leading and no trailing blank lines.** One blank line
   separates the frontmatter from the body and the file ends in exactly one
   newline, so a body of `"\n\ntext\n\n\n"` is stored as `"text\n"`. Both ends

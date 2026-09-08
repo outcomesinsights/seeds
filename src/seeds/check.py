@@ -896,7 +896,7 @@ def _non_canonical_files(
     findings = []
     for path, record in entries:
         try:
-            canonical = render_seed_file(record).encode("utf-8")
+            canonical = render_seed_file(record, path.parent.parent).encode("utf-8")
         except SeedFileError:
             continue
         try:

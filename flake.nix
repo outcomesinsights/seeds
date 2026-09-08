@@ -66,6 +66,8 @@
           # new shape.
           dependencies = with python3Packages; [
             click
+            mdformat
+            mdformat-gfm
           ];
 
           # `seeds search` is a ripgrep pass over .seeds/seeds/, so `rg` has to

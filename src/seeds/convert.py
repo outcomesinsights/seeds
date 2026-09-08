@@ -1913,11 +1913,15 @@ def _write_tree(
             union.kept_resolution = True
             report.forks_already_resolved.append(union.record.id)
             report.forks.remove(union.record.id)
-        text = render_seed_file(union.record)
+        # Rendered WITHOUT the store's formatter: the conversion's guarantee is
+        # that a body lands verbatim, and it verifies that byte for byte. The
+        # normalize pass is what brings a converted store to current canonical
+        # form, and it runs after this, visibly, in its own commit.
+        text = render_seed_file(union.record, formatted=False)
         if existing is not None and path.read_text(encoding="utf-8") == text:
             report.unchanged.append(union.record.id)
             continue
-        write_seed_file(path, union.record)
+        write_seed_file(path, union.record, formatted=False)
         report.written.append(union.record.id)
 
 

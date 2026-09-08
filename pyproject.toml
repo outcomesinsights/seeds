@@ -30,6 +30,11 @@ classifiers = [
 ]
 dependencies = [
     "click>=8.1.8",
+    # Pinned, not floated: the formatter's output IS the store's canonical
+    # form, so a version whose style changed would make every file
+    # non-canonical at once and two hosts disagree on the same body.
+    "mdformat==1.0.0",
+    "mdformat-gfm==1.0.0",
 ]
 
 [project.urls]

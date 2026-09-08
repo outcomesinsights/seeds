@@ -37,13 +37,17 @@ depends on. Hand-parsing the subset also keeps the runtime dependency set at
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
 import tempfile
+import tomllib
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
+
+import mdformat
 
 from seeds.models import RelationType, SeedStatus
 
@@ -860,7 +864,107 @@ def read_seed(seeds_dir: Path, seed_id: str) -> SeedRecord:
 # --- Rendering and writing ---------------------------------------------------
 
 
-def render_seed_file(record: SeedRecord) -> str:
+MDFORMAT_CONFIG = ".mdformat.toml"
+DEFAULT_EXTENSIONS = frozenset({"gfm", "frontmatter"})
+# `frontmatter` belongs in the config, because the CLI formats whole FILES and
+# without it mdformat reads the opening `---` as a thematic break and destroys
+# the frontmatter -- measured, all 321 files. It does not belong in what the
+# writer passes, because the writer formats a bare body, and a body that opens
+# with `---` would then be swallowed as frontmatter.
+_FILE_ONLY_EXTENSIONS = frozenset({"frontmatter"})
+
+
+@functools.lru_cache(maxsize=32)
+def _mdformat_options_cached(path: str, mtime: int) -> tuple[tuple[str, object], ...]:
+    """Parse ``.mdformat.toml``. Keyed on mtime so an edit is picked up."""
+    with open(path, "rb") as handle:
+        return tuple(sorted(tomllib.load(handle).items()))
+
+
+def mdformat_options(seeds_dir: Path | None) -> dict[str, object]:
+    """The formatter options for the store rooted at ``seeds_dir``.
+
+    Read from ``.seeds/.mdformat.toml`` — the very file mdformat itself
+    discovers, because it searches upward from each file's own directory. The
+    writer and any ``mdformat`` run over the repo therefore use the same
+    options **by construction** rather than by two places being configured
+    alike, which is what keeps the store a fixed point of the formatter. It
+    also scopes the config to the store: the repo's other markdown is
+    untouched by it.
+
+    An absent file means mdformat's own defaults.
+    """
+    if seeds_dir is None:
+        return {}
+    config = Path(seeds_dir) / MDFORMAT_CONFIG
+    try:
+        mtime = config.stat().st_mtime_ns
+    except OSError:
+        return {}
+    return dict(_mdformat_options_cached(str(config), mtime))
+
+
+MDFORMAT_CONFIG_TEMPLATE = """\
+# The markdown formatter's settings for this seed store.
+#
+# seeds formats every body with mdformat as it writes it, and reads THIS file
+# for the options -- the same file mdformat itself discovers, because it
+# searches upward from each file's own directory. So a plain `mdformat .` over
+# the repo is a no-op on the store instead of a churn of every seed, and the
+# repo's other markdown is left on mdformat's defaults.
+#
+# `extensions` is an allowlist, and it belongs here: without it, an operator
+# whose mdformat has extra plugins installed would format the store
+# differently from the way seeds wrote it. `frontmatter` is not optional --
+# drop it and mdformat reads the opening `---` as a thematic break and
+# destroys every seed's frontmatter.
+extensions = ["frontmatter", "gfm"]
+
+# Keep a hand-numbered list numbered. mdformat's default rewrites 1. 2. 3. to
+# 1. 1. 1., which renders the same but edits text somebody may have quoted.
+number = true
+"""
+
+
+def write_mdformat_config(seeds_dir: Path) -> Path:
+    """Write the store's formatter config, unless one is already there."""
+    config = Path(seeds_dir) / MDFORMAT_CONFIG
+    if not config.exists():
+        config.write_text(MDFORMAT_CONFIG_TEMPLATE, encoding="utf-8")
+    return config
+
+
+def format_body(body: str, seeds_dir: Path | None = None) -> str:
+    """Run the body through mdformat, the store's markdown formatter.
+
+    Bodies are written by agents, so formatting them on write fixes malformed
+    markdown before it is persisted; and because the formatter is idempotent
+    and the store carries its own config, a repo-wide ``mdformat`` run over the
+    tree is a no-op on the store rather than a churn of every file.
+
+    A fenced block survives this byte for byte. An **unfenced** literal — a
+    pasted traceback, hand-aligned columns — does not: its indentation is
+    flattened and its asterisks escaped. That is why anything that must stay
+    verbatim gets a fence.
+    """
+    if not body.strip():
+        return ""
+    options = mdformat_options(seeds_dir)
+    extensions = options.pop("extensions", None)
+    # The plugin set is part of the agreement, not just the options: an
+    # operator whose mdformat also has `mdformat-gfm-alerts` installed would
+    # otherwise rewrite `[!note]` to `[!NOTE]` and churn every file the writer
+    # produced. The config's `extensions` allowlist is what makes both sides
+    # run the same plugins, and it is why `seeds init` writes that key.
+    wanted = set(extensions) if extensions is not None else set(DEFAULT_EXTENSIONS)
+    return mdformat.text(
+        body, extensions=wanted - _FILE_ONLY_EXTENSIONS, options=options
+    )
+
+
+def render_seed_file(
+    record: SeedRecord, seeds_dir: Path | None = None, *, formatted: bool = True
+) -> str:
     """Render ``record`` as the canonical bytes of its seed file.
 
     Validates as it goes, so an invalid record cannot reach the disk. Exposed
@@ -893,7 +997,9 @@ def render_seed_file(record: SeedRecord) -> str:
     if record.converted_at is not None:
         out.append(f"converted_at: {_encode_timestamp(record.converted_at)}")
     out.append("---")
-    body = record.body.strip("\n")
+    body = (format_body(record.body, seeds_dir) if formatted else record.body).strip(
+        "\n"
+    )
     if not body:
         # A body-less file ends at the closing delimiter's newline (§2). The
         # trailing blank line this used to carry is what every markdown
@@ -975,7 +1081,7 @@ def _validate_for_write(record: SeedRecord) -> None:
     superseded_scopes(record.body)
 
 
-def write_seed_file(path: Path, record: SeedRecord) -> None:
+def write_seed_file(path: Path, record: SeedRecord, *, formatted: bool = True) -> None:
     """Write ``record`` to ``path`` atomically (§7).
 
     Temp file in the destination directory, then :func:`os.replace`. Same
@@ -993,8 +1099,12 @@ def write_seed_file(path: Path, record: SeedRecord) -> None:
             field_name="id",
             value=record.id,
         )
-    text = render_seed_file(record)
     directory = path.parent
+    # `.seeds/seeds/<id>.md` -> `.seeds`, the same upward step mdformat makes.
+    # `formatted=False` is the converter's door out: its guarantee is that a
+    # pre-0.7 body lands verbatim, and `seeds normalize` is what brings the
+    # converted store to current canonical form afterwards, in its own commit.
+    text = render_seed_file(record, directory.parent, formatted=formatted)
     directory.mkdir(parents=True, exist_ok=True)
     handle, tmp_name = tempfile.mkstemp(
         dir=directory, prefix=f".{path.name}.", suffix=".tmp"
