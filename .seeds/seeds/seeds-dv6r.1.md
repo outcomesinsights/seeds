@@ -5,7 +5,7 @@ status: captured
 type: concern
 parent: seeds-dv6r
 created_at: 2026-09-08T21:02:17.201968+00:00
-updated_at: 2026-09-08T21:14:01.921837+00:00
+updated_at: 2026-09-08T21:33:55.428992+00:00
 tags:
   - storage
   - format
@@ -23,6 +23,9 @@ relationships:
   - target_id: seeds-7v9p
     rel_type: questioned-by
     created_at: 2026-09-08T21:02:28.168680+00:00
+  - target_id: seeds-8lxq
+    rel_type: questioned-by
+    created_at: 2026-09-08T21:33:55.427590+00:00
 ---
 
 Measured 2026-09-08 with prettier 3.6.2, default settings (no config file), over a
@@ -190,3 +193,68 @@ So the exclusion tier is not obsolete after all — it just changes meaning.
 fix is) and becomes the defence for *body content*, which is exactly the third
 rule dv6r's correction identified as missing and unbuilt
 (`content-rewritten-without-a-timestamp-bump`).
+
+## Prettier is not idempotent on this corpus, and the second pass is the corrupting one
+
+Asked by @aguynamedryan 2026-09-08. Minimal repro, prettier 3.6.2, five passes:
+
+    in:      ...(code_set_catalog rule) reads as a *human* principle.
+    pass 1:  ...(code_set_catalog rule) reads as a _human_ principle.
+    pass 2:  ...(code*set_catalog rule) reads as a \_human* principle.
+    pass 3+: unchanged
+
+So it converges — after two passes, not one. The damage is in what pass 2 does.
+Rendered through CommonMark (markdown-it-py):
+
+- input and pass-1 output are **identical**: `code_set_catalog` literal,
+  `<em>human</em>`. Pass 1 is a correct re-spelling.
+- pass-2 output renders `code<em>set_catalog rule) reads as a _human</em>`. The
+  identifier is broken and the emphasis span has moved.
+
+Prettier re-spells `*em*` as `_em_`, and then its own parser pairs that underscore
+with one inside a nearby snake_case identifier. **This is a prettier bug, not a
+badly-authored body** — an ordinary paragraph containing an identifier and an
+emphasis span is enough, and these corpora are made of such paragraphs. It is the
+one finding in this whole investigation that cannot be pushed back onto how the
+seed was written. 24 of 1,324 files take a second, rendering-changing rewrite on
+pass 2.
+
+## mdformat: a pure-Python formatter, measured head to head
+
+`mdformat` (markdown-it-py; CLI, library API, and a pre-commit hook) with
+`mdformat-gfm` + `mdformat-frontmatter`, over the same 1,324 files:
+
+| | prettier 3.6.2 | mdformat |
+| --- | --- | --- |
+| frontmatter / separator rewritten | **54 files, all hard parse errors** | **0** |
+| bodies whose rendering changes | 43 structural + 72 whitespace-collapse | **2** structural + 84 whitespace-collapse |
+| second pass changes anything | **26 files** (24 of them rendering) | **0 — idempotent** |
+| emphasis re-spelling | `*em*` -> `_em_`, which is what detonates | none |
+| YAML frontmatter | reformatted (class B) | **untouched** |
+
+Two things follow.
+
+**It independently confirms the `---\n` rule.** mdformat strips the trailing blank
+line on all 44 body-less files, exactly as prettier does. `---\n` is what the
+markdown ecosystem agrees a body-less file looks like, not a prettier quirk, which
+is a second reason the writer — not the reader — is the thing to change.
+
+**Class B is prettier-specific.** mdformat does not touch the YAML at all.
+
+mdformat's 2 structural cases are the same shape as everything else here: an
+unfenced YAML sample whose `---` lines CommonMark reads as setext headings
+(oimnibus/seeds-1.2), and a hand-aligned column block (vocabulation-fu2). No
+formatter can save those; a fence can.
+
+## Recommendation: mdformat as the repo-level formatter, NOT inside the writer
+
+Putting any formatter in `render_seed_file` makes **seeds itself** the thing that
+flattens an unfenced block, and §7 says the body is stored verbatim and nothing is
+destroyed. The format's job is to be stable under whatever the repo runs, not to
+be the thing that runs. The two writer fixes already deliver that at the layer
+seeds owns; the body belongs to whoever wrote it.
+
+What that leaves worth building is a *detector*, not a rewriter: flag a body that
+is not stable under a CommonMark round-trip. That is a read-only check, it needs
+only markdown-it-py, and it is the thing that would have named seeds-183's SQL
+before a formatter ever reached it.
