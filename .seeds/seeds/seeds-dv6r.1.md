@@ -5,7 +5,7 @@ status: captured
 type: concern
 parent: seeds-dv6r
 created_at: 2026-09-08T21:02:17.201968+00:00
-updated_at: 2026-09-08T22:07:15.311968+00:00
+updated_at: 2026-09-08T22:12:14.234475+00:00
 tags:
   - storage
   - format
@@ -311,7 +311,7 @@ mdformat is at 1.0.0 and treats its output style as part of its API, but the
 version should be pinned regardless, and `wrap="keep"` and `number=True` set
 explicitly rather than inherited as defaults.
 
-## Settled: the formatter goes in the WRITER, and it must use mdformat's defaults
+## Settled: the formatter goes in the WRITER
 
 @aguynamedryan, 2026-09-08: *"if seeds writes each seed properly formatted, and
 the formatter is idempotent, then we don't have diff churn and if someone runs
@@ -338,13 +338,49 @@ result: **0 files changed.**
 **The constraint that measurement surfaced.** The first run left **386 files
 churning**, because the writer used `number=True` (preserving `1. 2. 3.`) while
 the mdformat CLI's default renumbers to `1. 1. 1.`. The store is only a fixed
-point of the formatter *as the repo invokes it*, so **seeds must adopt mdformat's
-stock defaults rather than its own preferences**. The price is that verbatim
-ordered-list numbering is renumbered — renders identically, stored characters
-change.
+point of the formatter *as the repo invokes it* — the writer's options and the
+repo's options have to be the same options. The first reading of that was "seeds
+must adopt mdformat's stock defaults"; the config file below is better and that
+reading is retired.
 
 What remains is ordinary version coupling: canonical bytes become a function of
 the pinned mdformat version, so a bump means one deliberate normalize commit, and
 hosts must not skew. Both are handled by the lockfile.
 
 The one residual harm — unfenced literal text — is answered by seeds-dv6r.1.1.
+
+## The options belong in `.seeds/.mdformat.toml`, and mdformat scopes it for us
+
+@aguynamedryan, 2026-09-08: set the options as config so both the writer and
+`prettify` use them. Yes — and better than shared flags, because **mdformat
+discovers config per file, searching upward from the file's own directory**.
+Verified with a config at `.seeds/.mdformat.toml` carrying `number = true`:
+
+```
+mdformat root/
+  root/.seeds/seeds/s.md  ->  1. first   2. second   3. third     (config applies)
+  root/docs/d.md          ->  1. first   1. second   1. third     (stock defaults)
+  root/top.md             ->  1. first   1. second   1. third     (stock defaults)
+```
+
+So the config sits **inside the store**, and:
+
+- the rest of the repo is untouched — seeds imposes no formatter policy on
+  anyone's README, and a repo with its own `.mdformat.toml` elsewhere still wins
+  for its own files;
+- `prettify` needs no flags at all. A plain `mdformat <dir>` honours it, as does a
+  pre-commit hook, as does anyone who runs mdformat for unrelated reasons;
+- `1. 2. 3.` numbering is kept after all, and any other option the store wants.
+
+The writer must read that same file rather than hardcoding the options, so the two
+agree **by construction** instead of by two places being configured alike.
+mdformat's own `read_toml_opts(dir)` does the upward search and returns the
+mapping — verified returning `{'number': True}` from inside the store and `{}`
+from `docs/` — but it lives in `mdformat._conf`, a private module. Since the path
+is known and fixed, reading `.seeds/.mdformat.toml` with `tomllib` avoids the
+private dependency; that is a bead-level choice.
+
+One caveat worth stating: an option that changes body layout (`wrap = 80`, say) is
+still idempotent and still safe, but turning it on reformats every body in the
+store at once. That is the operator's call, and `non-canonical-bytes` is the thing
+that reports it.
