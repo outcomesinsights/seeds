@@ -127,9 +127,13 @@ which seeds
 
 - **`~/.nix-profile/bin/seeds`** — nix installed it (this is the case on titan).
   Refresh from `~/.config/home-manager`: `nix flake update seeds`, then switch.
-  The flake input carries no ref pin, so it tracks **main** — your changes must
-  be pushed to `origin/main` before the update can see them. Don't bump it by
-  editing `modules/packages.nix`.
+  The flake input **is pinned to a branch** while 0.7 is unreleased —
+  `git+https://github.com/outcomesinsights/seeds?ref=0.7.0` in home-manager's
+  `flake.nix`. It does NOT track main, and main is deliberately still on the
+  0.6.x line. Either way the ref is fetched over https from GitHub, so a
+  change must be **pushed to that branch** before an update can see it; a
+  local commit is invisible to nix. Don't bump it by editing
+  `modules/packages.nix`.
 - **`~/.local/bin/seeds`** — `uv tool` installed it. Refresh with
   `uv cache clean seeds && uv tool install --reinstall .`. `--reinstall` already
   implies `--refresh`, so no separate `uv tool uninstall` is needed.

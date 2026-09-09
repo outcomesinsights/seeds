@@ -1025,7 +1025,8 @@ def autofence(body: str) -> str:
 def _renders_the_same(before: str, after: str, *, ignore_spacing: bool = False) -> bool:
     """Whether two markdown texts mean the same thing to a CommonMark reader."""
     reader = _reader()
-    first, second = reader.render(before), reader.render(after)
+    first: str = reader.render(before)
+    second: str = reader.render(after)
     if ignore_spacing:
         first, second = re.sub(r"[ \t]+", " ", first), re.sub(r"[ \t]+", " ", second)
     return first == second
@@ -1067,12 +1068,24 @@ def _run_mdformat(body: str, seeds_dir: Path | None = None) -> str:
     """mdformat, with the store's own options."""
     options = mdformat_options(seeds_dir)
     extensions = options.pop("extensions", None)
+    # `.mdformat.toml` is somebody's file, so what comes back is whatever TOML
+    # they wrote; a non-list `extensions` is theirs to fix, not ours to guess at.
+    if extensions is not None and not isinstance(extensions, list):
+        raise _fail(
+            None,
+            f"{MDFORMAT_CONFIG}: 'extensions' must be a list of plugin names",
+            value=repr(extensions),
+        )
     # The plugin set is part of the agreement, not just the options: an
     # operator whose mdformat also has `mdformat-gfm-alerts` installed would
     # otherwise rewrite `[!note]` to `[!NOTE]` and churn every file the writer
     # produced. The config's `extensions` allowlist is what makes both sides
     # run the same plugins, and it is why `seeds init` writes that key.
-    wanted = set(extensions) if extensions is not None else set(DEFAULT_EXTENSIONS)
+    wanted: set[str] = (
+        {str(name) for name in extensions}
+        if extensions is not None
+        else set(DEFAULT_EXTENSIONS)
+    )
     return mdformat.text(
         body, extensions=wanted - _FILE_ONLY_EXTENSIONS, options=options
     )
