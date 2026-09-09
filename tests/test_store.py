@@ -25,6 +25,7 @@ from seeds.seedfile import SeedFileError, read_seed_file
 from seeds.store import (
     Store,
     StoreError,
+    escape_tolerant,
     find_seeds_dir,
     get_prefix,
     has_been_edited,
@@ -860,3 +861,41 @@ class TestAtomicWrites:
         store.save(record, touch=False)
 
         assert store.path_for("seed-test").read_bytes() == before
+
+
+def _store_with(tmp_path, body):
+    """A one-seed store whose body is written to disk verbatim."""
+    seeds_dir = tmp_path / ".seeds"
+    (seeds_dir / "seeds").mkdir(parents=True)
+    (seeds_dir / "config.yaml").write_text("prefix: t\n", encoding="utf-8")
+    (seeds_dir / "seeds" / "t-1.md").write_text(
+        "---\nid: t-1\ntitle: A ref\nstatus: captured\ntype: idea\n"
+        "created_at: 2026-01-01T00:00:00+00:00\n"
+        "updated_at: 2026-01-01T00:00:00+00:00\n---\n\n" + body + "\n",
+        encoding="utf-8",
+    )
+    return Store(seeds_dir)
+
+
+class TestSearchReadsTheFormatterSSpelling:
+    """seeds is not the only thing formatting these files, so the store keeps
+    the formatter's escapes and the search learns to read them."""
+
+    def test_a_wiki_reference_matches_either_spelling(self):
+        pattern = escape_tolerant(r"\[\[clc-97e\]\]")
+        assert re.search(pattern, "See [[clc-97e]] here")
+        assert re.search(pattern, r"See \[[clc-97e]\] here")
+
+    def test_an_underscore_matches_either_spelling(self):
+        pattern = escape_tolerant("code_set_catalog")
+        assert re.search(pattern, "the code_set_catalog rule")
+        assert re.search(pattern, r"the code\_set\_catalog rule")
+
+    def test_regex_syntax_is_left_alone(self):
+        assert escape_tolerant(r"^status: (captured|exploring)$") == (
+            r"^status: (captured|exploring)$"
+        )
+
+    def test_it_finds_a_seed_whose_reference_the_formatter_escaped(self, tmp_path):
+        store = _store_with(tmp_path, r"See \[[clc-97e]\]: 70 papers.")
+        assert [record.id for record in store.search(r"\[\[clc-97e\]\]")] == ["t-1"]

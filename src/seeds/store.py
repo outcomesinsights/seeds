@@ -79,6 +79,44 @@ PREFIX_KEY = "prefix"
 TERMINAL_STATUSES = (SeedStatus.RESOLVED, SeedStatus.ABANDONED)
 
 
+# The characters mdformat escapes in prose, measured rather than guessed:
+# `word*word` becomes `word\\*word`, and a `[[clc-97e]]` reference is stored as
+# `\\[[clc-97e]\\]`. Nobody types the backslashes, so a search for the text
+# somebody read would miss the file it came from -- 870 such references across
+# 164 files when this was measured.
+_ESCAPED_IN_PROSE = "*_`[]<"
+# Of those, the ones that are not regex metacharacters, so a BARE occurrence in
+# a pattern is unambiguously a literal and can be made tolerant too.
+_PLAIN_IN_REGEX = "_`"
+
+
+def escape_tolerant(query: str) -> str:
+    """Make ``query`` match text whether or not the formatter escaped it.
+
+    Every literal the formatter might have backslash-escaped gains an optional
+    backslash. The alternative -- unescaping on write -- was rejected: seeds is
+    not the only thing formatting these files, so putting the brackets back
+    would just churn against the next `mdformat` run forever. The store keeps
+    the formatter's spelling; searching learns to read it.
+    """
+    out: list[str] = []
+    index = 0
+    while index < len(query):
+        char = query[index]
+        if char == "\\" and index + 1 < len(query):
+            following = query[index + 1]
+            if following in _ESCAPED_IN_PROSE:
+                out.append("\\\\?")
+            out.append(char + following)
+            index += 2
+            continue
+        if char in _PLAIN_IN_REGEX:
+            out.append("\\\\?")
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
 class StoreError(Exception):
     """The store could not answer, and the caller must not proceed."""
 
@@ -542,7 +580,7 @@ class Store:
             "--files-with-matches",
             "-i",
             "-e",
-            query,
+            escape_tolerant(query),
             "--",
             *(str(path) for path in candidates),
         )

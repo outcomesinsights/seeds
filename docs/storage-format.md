@@ -115,8 +115,34 @@ Mechanically:
 
   A fenced block survives this byte for byte. An **unfenced** literal does
   not — a pasted traceback loses its indentation and gains escapes, and
-  hand-aligned columns collapse. Anything that must stay verbatim gets a
-  fence.
+  hand-aligned columns collapse. So **the writer fences literal text itself**,
+  because agents write nearly every body and there is nobody standing by to be
+  asked. Three tiers, all silent:
+
+  1. Each top-level paragraph whose rendering formatting would change is
+     scanned for its *literal run* — lines carrying column alignment, or
+     indented past the paragraph's own margin — and that run alone is fenced.
+     The run, not the paragraph: a prose lead-in above a table would otherwise
+     be set in monospace. The transformation is purely **additive** — two fence
+     lines, indentation kept, not one character removed — which is what lets
+     `seeds convert` go on verifying that a pre-0.7 body landed verbatim.
+  2. Where what remains differs only in spacing, the body is formatted anyway.
+     Those are hand-indented quotations; every word survives, and a fence would
+     be the wrong answer because they are prose.
+  3. Where formatting would still change what the body *means*, the body is
+     stored exactly as it came. Lossless, and the file then reads as
+     `non-canonical-bytes` — the visible end of a decision made silently.
+
+  Measured over 1,293 non-empty bodies: 64 gained a fence, 2 were stored
+  verbatim.
+
+  **The formatter's escapes are kept, and `seeds search` reads them.** mdformat
+  escapes `*`, `_`, `` ` ``, `[`, `]` and `<` in prose, so a `[[clc-97e]]`
+  reference is stored `\[[clc-97e]\]` — 870 of them across 164 files. Seeds
+  does not undo that: it is not the only thing formatting these files, and
+  unescaping on write would churn against the next `mdformat` run forever.
+  Instead every literal in a search pattern gains an optional backslash, so a
+  search matches either spelling.
 
 - **The body carries no leading and no trailing blank lines.** One blank line
   separates the frontmatter from the body and the file ends in exactly one

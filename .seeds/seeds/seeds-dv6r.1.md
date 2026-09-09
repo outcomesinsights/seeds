@@ -5,7 +5,7 @@ status: captured
 type: concern
 parent: seeds-dv6r
 created_at: 2026-09-08T21:02:17.201968+00:00
-updated_at: 2026-09-08T22:12:14.234475+00:00
+updated_at: 2026-09-09T14:18:34.296989+00:00
 tags:
   - storage
   - format
@@ -26,6 +26,9 @@ relationships:
   - target_id: seeds-8lxq
     rel_type: questioned-by
     created_at: 2026-09-08T21:33:55.427590+00:00
+  - target_id: seeds-n76z
+    rel_type: questioned-by
+    created_at: 2026-09-09T14:18:34.296219+00:00
 ---
 
 Measured 2026-09-08 with prettier 3.6.2, default settings (no config file), over a

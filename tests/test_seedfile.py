@@ -34,6 +34,7 @@ from seeds.seedfile import (
     SeedRecord,
     _decode_scalar,
     _encode_scalar,
+    autofence,
     format_body,
     id_for_path,
     inverse_relation,
@@ -868,3 +869,61 @@ class TestTheStoreIsAFixedPointOfItsFormatter:
     def test_an_absent_config_means_mdformat_s_defaults(self, tmp_path):
         assert mdformat_options(tmp_path) == {}
         assert mdformat_options(None) == {}
+
+
+class TestAutofencing:
+    """The store fences its own literal text, because agents write every body
+    and there is nobody to ask."""
+
+    def test_an_aligned_block_is_fenced(self):
+        body = (
+            "THREE notations:\n"
+            "  V57xx    double-x wildcard, ICD-9   (all of V57)\n"
+            "  C81.xx   dot-double-x, ICD-10       (all of C81)\n"
+        )
+        out = format_body(body)
+        assert "```" in out
+        assert "V57xx    double-x wildcard" in out  # alignment kept
+
+    def test_the_prose_lead_in_stays_prose(self):
+        """A lead-in and the block under it are ONE paragraph, so fencing the
+        paragraph whole would set the prose in monospace."""
+        body = (
+            "The distribution over 75,725 codes is:\n"
+            "    1 Chronic           12,955  (17.1%)\n"
+            "    9 No determination  10,615  (14.0%)\n"
+        )
+        out = format_body(body)
+        assert out.startswith("The distribution over 75,725 codes is:\n")
+        assert "```" in out
+
+    def test_fencing_is_additive(self):
+        """Two fence lines, and not one character of the body removed -- which
+        is what lets `seeds convert` keep verifying a body landed verbatim."""
+        body = "Counts:\n  a    1\n  b    2\n"
+        fenced = autofence(body)
+        assert [ln for ln in fenced.split("\n") if ln != "```"] == body.split("\n")
+
+    def test_an_indented_quotation_is_not_fenced(self):
+        """Prose, not output: every word survives and a fence would be wrong."""
+        body = 'Ryan said:\n\n  "a long quotation that runs\n   onto a second line"\n'
+        out = format_body(body)
+        assert "```" not in out
+        assert "a long quotation that runs" in out
+
+    def test_a_body_formatting_would_reshape_is_stored_verbatim(self):
+        """Nobody is asked anything: the body is kept exactly, and the file
+        reads as non-canonical-bytes, which is the visible end of it."""
+        body = "Front-matter shape:\n---\nproject: sequelizer\nstatus: draft\n---\n"
+        assert format_body(body) == body
+
+    def test_a_list_is_left_alone(self):
+        """Detection reads markdown-it's tokens, so anything nested -- a list
+        continuation, a blockquote, an existing fence -- is never a candidate."""
+        body = "- item one\n- item two\n\n1. first\n2. second\n"
+        assert "```" not in format_body(body)
+
+    def test_formatting_stays_idempotent(self):
+        body = "Counts:\n  a    1\n  b    2\n\nAnd prose after.\n"
+        once = format_body(body)
+        assert format_body(once) == once

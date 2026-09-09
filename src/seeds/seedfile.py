@@ -48,6 +48,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 import mdformat
+from markdown_it import MarkdownIt
 
 from seeds.models import RelationType, SeedStatus
 
@@ -934,6 +935,93 @@ def write_mdformat_config(seeds_dir: Path) -> Path:
     return config
 
 
+# A run of two or more spaces between non-space characters: column alignment,
+# which is layout markdown does not have and a formatter therefore collapses.
+_ALIGNED_RE = re.compile(r"\S {2,}\S")
+
+
+def _literal_runs(block: list[str]) -> list[tuple[int, int]]:
+    """The runs of LITERAL lines inside one paragraph's lines.
+
+    A prose lead-in and the aligned block under it are ONE paragraph when no
+    blank line separates them, so fencing the paragraph whole would set the
+    prose in monospace. Only the run carrying the layout is fenced.
+    """
+    base = min((len(ln) - len(ln.lstrip(" ")) for ln in block if ln.strip()), default=0)
+    literal = [
+        bool(ln.strip())
+        and (
+            _ALIGNED_RE.search(ln) is not None
+            or (len(ln) - len(ln.lstrip(" "))) > base
+            or (base > 0 and not ln.lstrip(" ")[:1].isalnum())
+        )
+        for ln in block
+    ]
+    runs: list[tuple[int, int]] = []
+    start: int | None = None
+    for index, flag in enumerate([*literal, False]):
+        if flag and start is None:
+            start = index
+        elif not flag and start is not None:
+            runs.append((start, index))
+            start = None
+    # A single stray line is prose far more often than it is a table.
+    return [run for run in runs if run[1] - run[0] >= 2]
+
+
+def _top_level_paragraphs(body: str) -> list[tuple[int, int]]:
+    """Line ranges of the paragraphs at nesting level 0.
+
+    Read off markdown-it's token stream rather than guessed at from blank
+    lines, which is what keeps this away from list continuations, blockquotes
+    and anything already inside a fence -- they are all at a deeper level.
+    """
+    return [
+        (token.map[0], token.map[1])
+        for token in _reader().parse(body)
+        if token.type == "paragraph_open" and token.level == 0 and token.map
+    ]
+
+
+@functools.lru_cache(maxsize=1)
+def _reader() -> MarkdownIt:
+    return MarkdownIt("commonmark").enable(["table", "strikethrough"])
+
+
+def autofence(body: str) -> str:
+    """Fence the literal text a formatter would otherwise reshape.
+
+    Agents write nearly every body, and nobody is standing by to be asked, so
+    the store fences its own literal blocks rather than refusing the write.
+
+    Purely **additive**: two fence lines per run, the indentation kept, not one
+    character of the body removed. That is what lets `seeds convert` go on
+    verifying that a pre-0.7 body landed verbatim.
+    """
+    lines = body.split("\n")
+    for start, end in reversed(_top_level_paragraphs(body)):
+        block = lines[start:end]
+        text = "\n".join(block).rstrip("\n") + "\n"
+        if _renders_the_same(text, _run_mdformat(text)):
+            continue
+        for run_start, run_end in reversed(_literal_runs(block)):
+            lines[start + run_start : start + run_end] = [
+                "```",
+                *block[run_start:run_end],
+                "```",
+            ]
+    return "\n".join(lines)
+
+
+def _renders_the_same(before: str, after: str, *, ignore_spacing: bool = False) -> bool:
+    """Whether two markdown texts mean the same thing to a CommonMark reader."""
+    reader = _reader()
+    first, second = reader.render(before), reader.render(after)
+    if ignore_spacing:
+        first, second = re.sub(r"[ \t]+", " ", first), re.sub(r"[ \t]+", " ", second)
+    return first == second
+
+
 def format_body(body: str, seeds_dir: Path | None = None) -> str:
     """Run the body through mdformat, the store's markdown formatter.
 
@@ -949,6 +1037,25 @@ def format_body(body: str, seeds_dir: Path | None = None) -> str:
     """
     if not body.strip():
         return ""
+    fenced = autofence(body)
+    formatted = _run_mdformat(fenced, seeds_dir)
+    # Against the FENCED text, not the original: fencing is supposed to change
+    # the rendering -- that is the whole point, text becoming a code block.
+    # What must not change is what the formatter then does to it.
+    if _renders_the_same(fenced, formatted, ignore_spacing=True):
+        # Either nothing moved, or what moved is spacing -- a hand-indented
+        # quotation losing its hanging indent, where every word survives and a
+        # fence would be the wrong answer, because it is prose.
+        return formatted
+    # Fencing did not save it and formatting would reshape what it means, so
+    # the body is stored exactly as it came. Lossless, and nobody is asked
+    # anything: `check --smells` reports the file as non-canonical-bytes,
+    # which is the visible end of a decision made silently here.
+    return body
+
+
+def _run_mdformat(body: str, seeds_dir: Path | None = None) -> str:
+    """mdformat, with the store's own options."""
     options = mdformat_options(seeds_dir)
     extensions = options.pop("extensions", None)
     # The plugin set is part of the agreement, not just the options: an
