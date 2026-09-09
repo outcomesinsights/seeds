@@ -605,6 +605,8 @@ def _load_db(db_path: Path, splits: dict[str, str] | None = None) -> _DbLoad:
 
     splits = {} if splits is None else splits
     legacy = _legacy_table_counts(db_path)
+    report_collisions: list[str] = []
+    report_orphans: list[str] = []
 
     db = LegacyDatabase(db_path)
     try:
@@ -624,6 +626,32 @@ def _load_db(db_path: Path, splits: dict[str, str] | None = None) -> _DbLoad:
             )
         halves: list[_Half] = []
         seen: set[tuple[str, str, str]] = set()
+        # The legacy `questions` table, translated rather than dropped. A
+        # question is a seed in 0.7 -- typed `question`, its answer the body,
+        # a `questions` edge to what it asks -- so nothing has to be invented
+        # and nothing is left behind. A row whose id already names a seed, or
+        # which asks about a seed the store does not hold, is reported instead
+        # of guessed at.
+        translated = 0
+        for question, asks_about in db.list_questions():
+            if question.id in sides:
+                report_collisions.append(question.id)
+                continue
+            if asks_about not in sides:
+                report_orphans.append(f"{question.id} -> {asks_about}")
+                continue
+            sides[question.id] = _Side(seed=question, origin="db")
+            halves.append(
+                _Half(
+                    source_id=question.id,
+                    target_id=asks_about,
+                    rel_type=RelationType.QUESTIONS,
+                    created_at=question.created_at,
+                )
+            )
+            translated += 1
+        if translated:
+            legacy.pop("questions", None)
         for seed_id in sides:
             try:
                 rels = db.get_relationships(seed_id)

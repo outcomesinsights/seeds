@@ -562,7 +562,98 @@ class TestDrops:
         assert report.dropped_fixtures == []
         assert report.total == len(FIXTURE_IDS)
 
-    def test_the_legacy_questions_table_is_counted_and_never_translated(self, temp_dir):
+    def _questions_db(self, seeds_dir, rows):
+        """A legacy store with the real pre-0.7 `questions` schema."""
+        build_db(seeds_dir, [seed("seeds-a1")]).close()
+        conn = sqlite3.connect(seeds_dir / "seeds.db")
+        conn.execute(
+            "CREATE TABLE questions (id TEXT PRIMARY KEY, seed_id TEXT NOT NULL,"
+            " text TEXT NOT NULL, answer TEXT, status TEXT NOT NULL,"
+            " created_at TEXT NOT NULL, answered_at TEXT)"
+        )
+        conn.executemany("INSERT INTO questions VALUES (?,?,?,?,?,?,?)", rows)
+        conn.commit()
+        conn.close()
+
+    def test_a_legacy_question_becomes_a_question_seed(self, temp_dir):
+        """The table is NOT debris in a store 0.6's `import` never reached:
+        two on titan carried nine answered questions between them."""
+        seeds_dir = temp_dir / ".seeds"
+        self._questions_db(
+            seeds_dir,
+            [
+                (
+                    "q-1",
+                    "seeds-a1",
+                    "Should we skip ADI generators?",
+                    "Yes — every column is NULL.",
+                    "answered",
+                    "2026-02-12T18:11:53+00:00",
+                    "2026-02-12T18:19:16+00:00",
+                )
+            ],
+        )
+        report = convert(seeds_dir)
+
+        assert "questions" not in report.dropped_legacy_rows
+        assert report.total == 2
+        record = read_seed_file(seed_files_dir(seeds_dir) / "q-1.md")
+        assert record.seed_type == "question"
+        assert record.title == "Should we skip ADI generators?"
+        # `seeds answer` puts the answer in the body and resolves the seed.
+        assert record.body.strip() == "Yes — every column is NULL."
+        assert record.status is SeedStatus.RESOLVED
+        assert record.resolved_at is not None
+        assert [
+            (edge.target_id, edge.rel_type.value) for edge in record.relationships
+        ] == [("seeds-a1", "questions")]
+
+    def test_an_unanswered_question_stays_open(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        self._questions_db(
+            seeds_dir,
+            [
+                (
+                    "q-1",
+                    "seeds-a1",
+                    "Still open?",
+                    None,
+                    "open",
+                    "2026-02-12T18:11:53+00:00",
+                    None,
+                )
+            ],
+        )
+        convert(seeds_dir)
+        record = read_seed_file(seed_files_dir(seeds_dir) / "q-1.md")
+        assert record.status is SeedStatus.CAPTURED
+        assert record.body == ""
+        assert record.resolved_at is None
+
+    def test_a_question_about_a_seed_the_store_lacks_is_not_invented(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        self._questions_db(
+            seeds_dir,
+            [
+                (
+                    "q-1",
+                    "seeds-gone",
+                    "Orphan?",
+                    None,
+                    "open",
+                    "2026-02-12T18:11:53+00:00",
+                    None,
+                )
+            ],
+        )
+        convert(seeds_dir)
+        assert not (seed_files_dir(seeds_dir) / "q-1.md").exists()
+
+    def test_a_questions_table_too_old_to_translate_is_dropped_and_counted(
+        self, temp_dir
+    ):
+        """Without `seed_id` a row cannot say what it asks ABOUT, and a
+        question-seed attached to nothing is worse than a reported drop."""
         seeds_dir = temp_dir / ".seeds"
         build_db(seeds_dir, [seed("seeds-a1")]).close()
         conn = sqlite3.connect(seeds_dir / "seeds.db")

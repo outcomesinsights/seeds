@@ -41,6 +41,7 @@ from seeds.models import (
     RelationType,
     Seed,
     SeedStatus,
+    SeedType,
     is_valid_prefix,
     now_utc,
 )
@@ -70,6 +71,11 @@ proceed — the reader refuses, naming the store and the table.
 
 Everything else the reader touches is in :data:`OPTIONAL_TABLES`.
 """
+
+_QUESTION_COLUMNS = frozenset(
+    {"id", "seed_id", "text", "answer", "status", "created_at", "answered_at"}
+)
+"""What a legacy ``questions`` row must carry to be translatable (§ convert)."""
 
 OPTIONAL_TABLES = frozenset({"relationships", "questions", "config"})
 """Legacy tables whose absence means "empty", not "broken".
@@ -240,6 +246,56 @@ class LegacyDatabase:
         conn = self._get_conn()
         rows = conn.execute("SELECT * FROM seeds ORDER BY id").fetchall()
         return [self._row_to_seed(row) for row in rows]
+
+    def list_questions(self) -> list[tuple[Seed, str]]:
+        """The legacy ``questions`` table, as question-seeds.
+
+        0.7 has no separate question object: a question IS a seed, typed
+        ``question``, carrying its answer as its body and a ``questions`` edge
+        to what it asks about. So the translation is total -- id, text, answer
+        and both timestamps all land -- and the row's ``seed_id`` becomes that
+        edge, which the caller materializes.
+
+        This used to be dropped wholesale, on the reading that the table was
+        debris left behind by 0.6's ``import``. That holds wherever ``import``
+        ran. It does not hold for a store that never reached v2: two on titan
+        carry nine question rows between them, none duplicated by any seed, and
+        several answered with real decisions. Dropping those is the one thing
+        this converter exists to make impossible.
+        """
+        if "questions" not in self._tables():
+            return []
+        conn = self._get_conn()
+        rows = conn.execute("SELECT * FROM questions ORDER BY id").fetchall()
+        if not rows:
+            return []
+        # A pre-0.7 store is whatever schema it happened to stop at, and a
+        # `questions` table too old to carry `seed_id` cannot say what its rows
+        # ask ABOUT -- which is the one thing the translation needs. Such a
+        # table is left to be reported as dropped, rather than translated into
+        # question-seeds attached to nothing.
+        if not _QUESTION_COLUMNS.issubset(rows[0].keys()):
+            return []
+        return [(self._row_to_question(row), row["seed_id"]) for row in rows]
+
+    @staticmethod
+    def _row_to_question(row: sqlite3.Row) -> Seed:
+        """One legacy question row as the seed 0.7 would have written."""
+        answered_at = _str_to_datetime(row["answered_at"])
+        created_at = _str_to_datetime(row["created_at"]) or now_utc()
+        # `seeds answer` puts the answer in the BODY and resolves the seed, so
+        # an answered question converts to a resolved seed with that body.
+        answered = (row["status"] or "").lower() == "answered"
+        return Seed(
+            id=row["id"],
+            title=row["text"],
+            content=row["answer"] or "",
+            status=SeedStatus.RESOLVED if answered else SeedStatus.CAPTURED,
+            seed_type=SeedType.QUESTION.value,
+            created_at=created_at,
+            updated_at=answered_at or created_at,
+            resolved_at=answered_at if answered else None,
+        )
 
     def get_relationships(self, seed_id: str) -> list[Relationship]:
         """Every readable relationship row naming ``seed_id`` at either end.
