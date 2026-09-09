@@ -949,3 +949,48 @@ class TestAutofencing:
         body = "Counts:\n  a    1\n  b    2\n\nAnd prose after.\n"
         once = format_body(body)
         assert format_body(once) == once
+
+
+class TestPlainScalarsMatchWhatAYamlEmitterWrites:
+    """Over-quoting is not free: a YAML emitter strips the quotes back off, and
+    the store then churns on every run. Found on a real title, 2026-09-09."""
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "~/.claude/CLAUDE.md is 3,499 words on every host",  # ~ is null ALONE
+            ".path and ordinary words",
+            "-path and ordinary words",  # `- item` is a sequence; `-item` is text
+            "?path and ordinary words",
+            ":path and ordinary words",
+            "--flag style",
+            "(paren words",
+            "<angle words",
+            "$dollar words",
+            "\\backslash words",
+        ],
+    )
+    def test_these_are_written_plain(self, value):
+        assert _encode_scalar(value) == value
+        assert _decode_scalar(None, "title", value, 1) == value
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "- dash then space",
+            "? question then space",
+            ": colon then space",
+            "#hash leading",
+            "*star leading",
+            "word: colon space",
+            "ends with a space ",
+            "~",  # null, when it is the WHOLE scalar
+            "yes",  # a YAML 1.1 bool: PyYAML's own loader reads it as True
+            "true",
+            "123",
+        ],
+    )
+    def test_these_still_get_quoted(self, value):
+        encoded = _encode_scalar(value)
+        assert encoded != value
+        assert _decode_scalar(None, "title", encoded, 1) == value

@@ -248,10 +248,23 @@ def expected_parent(seed_id: str) -> str | None:
 
 # --- Scalars -----------------------------------------------------------------
 
-# A plain scalar this module is willing to emit unquoted. Conservative on
-# purpose: anything another YAML reader might resolve to a non-string, or parse
-# as syntax, gets quoted instead.
-_PLAIN_SAFE_RE = re.compile(r"^[A-Za-z0-9_/][^\n]*$")
+# A plain scalar this module is willing to emit unquoted. Anything another YAML
+# reader might resolve to a non-string, or parse as syntax, gets quoted instead
+# -- but no more than that, because over-quoting is not free: a YAML emitter
+# strips the quotes back off, and the store then churns on every run.
+#
+# The first character carries the whole rule. Three groups, measured against
+# PyYAML's emitter (which is what `mdformat-frontmatter` 2.0.10 re-emits with):
+#
+#   never an indicator      . + = ( ) < ; ^ $ \ and the alphanumerics
+#   indicator ONLY before   - ? :   (`- item` is a sequence, `-item` is text)
+#     a space
+#   always an indicator     # * & ! | > ' " % @ ` [ ] { } ,  -- stay quoted
+#
+# `~` is its own case: YAML's null, but only when it is the ENTIRE scalar, so
+# `~/.claude/CLAUDE.md …` is ordinary text. That one is not theoretical --
+# home-manager-main found it churning on a real title (2026-09-09).
+_PLAIN_SAFE_RE = re.compile(r"^[A-Za-z0-9_/.+=()<;^$\\~]([^\n]*)$|^[-?:][^\s\n][^\n]*$")
 
 # Plain scalars YAML resolves to something other than a string. A title of
 # "42", "true" or "null" must be quoted or it stops being text.
@@ -268,7 +281,13 @@ _NON_STRING_PLAIN_RE = re.compile(
 
 # Indicator characters that start a non-plain YAML scalar, plus the flow
 # openers the format rejects outright (§4).
-_INDICATORS = "-?:,[]{}#&*!|>'\"%@`"
+_INDICATORS = ",[]{}#&*!|>'\"%@`"
+
+# `-`, `?` and `:` open a sequence entry, a complex key and a mapping value --
+# but only when a space follows. `-item` and `:path` are ordinary text, and a
+# YAML emitter writes them unquoted, so refusing them here would refuse what
+# the writer itself now emits.
+_SPACE_CONDITIONAL_INDICATORS = "-?:"
 
 # Characters a YAML double-quoted scalar cannot carry literally, so their
 # presence forces the double-quoted form: the single-quoted form has no escape
@@ -391,7 +410,9 @@ def _decode_scalar(
                 line=line,
             )
         return inner.replace("''", "'")
-    if raw[0] in _INDICATORS:
+    if raw[0] in _INDICATORS or (
+        raw[0] in _SPACE_CONDITIONAL_INDICATORS and (len(raw) == 1 or raw[1] == " ")
+    ):
         raise _fail(
             path,
             f"scalar starts with the YAML indicator {raw[0]!r}; quote it",
