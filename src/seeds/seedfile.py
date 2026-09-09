@@ -268,6 +268,22 @@ _PLAIN_SAFE_RE = re.compile(r"^[A-Za-z0-9_/.+=()<;^$\\~]([^\n]*)$|^[-?:][^\s\n][
 
 # Plain scalars YAML resolves to something other than a string. A title of
 # "42", "true" or "null" must be quoted or it stops being text.
+#
+# The yes/no/on/off group is quoted for a reason worth stating, because the
+# formatter disagrees and it is the one disagreement seeds keeps: YAML 1.1
+# reads them as booleans and YAML 1.2 dropped that, so which one a title means
+# depends entirely on who opens the file.
+#
+#   word          ruamel.yaml (1.2)   PyYAML (1.1)
+#   yes/no        str                 bool
+#   on/off        str                 bool
+#   true/false    bool                bool
+#
+# `mdformat-frontmatter` uses ruamel, so it strips the quotes back off nine
+# spellings -- yes, no, on, off, Yes, No, ON, OFF, YES -- and under ruamel that
+# is safe. Seeds still quotes them, because seeds does not get to choose which
+# library reads its files, and under a PyYAML reader a bare `yes` is boolean
+# True. Measured 2026-09-09; the churn this leaves is cosmetic and one-sided.
 _NON_STRING_PLAIN_RE = re.compile(
     r"""^(?:
         [-+]?\d+(?:\.\d*)?(?:[eE][-+]?\d+)?   # int / float

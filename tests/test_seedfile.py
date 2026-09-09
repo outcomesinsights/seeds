@@ -994,3 +994,28 @@ class TestPlainScalarsMatchWhatAYamlEmitterWrites:
         encoded = _encode_scalar(value)
         assert encoded != value
         assert _decode_scalar(None, "title", encoded, 1) == value
+
+
+class TestTheYamlOneOneBooleanWords:
+    """The one disagreement with the formatter that seeds keeps deliberately.
+
+    `mdformat-frontmatter` uses ruamel.yaml (YAML 1.2), which reads these as
+    strings and so strips the quotes off. Seeds keeps them because it does not
+    choose which library opens its files, and PyYAML (still YAML 1.1) reads a
+    bare `yes` as boolean True.
+    """
+
+    @pytest.mark.parametrize(
+        "word", ["yes", "no", "on", "off", "Yes", "No", "ON", "OFF", "YES"]
+    )
+    def test_the_1_1_boolean_words_stay_quoted(self, word):
+        assert _encode_scalar(word) == f"'{word}'"
+        assert _decode_scalar(None, "title", f"'{word}'", 1) == word
+
+    @pytest.mark.parametrize("word", ["true", "false", "null", "~"])
+    def test_the_words_both_versions_agree_on_stay_quoted_too(self, word):
+        assert _encode_scalar(word) == f"'{word}'"
+
+    @pytest.mark.parametrize("word", ["y", "n", "maybe", "yes please"])
+    def test_a_word_that_is_not_one_of_them_is_left_plain(self, word):
+        assert _encode_scalar(word) == word
