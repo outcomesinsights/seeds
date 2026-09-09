@@ -6,6 +6,102 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0a2] - 2026-09-09
+
+**An alpha, so the store's format can be exercised before it is frozen.**
+0.7 replaces the SQLite database and its tracked JSONL with one markdown file
+per seed — git is the store, `seeds check` is the verifier, and there is
+nothing left to sync. a2 adds the half that 0.7 had not reckoned with: the
+store now lives in the working tree, where every formatter in the repo can
+reach it.
+
+It reached it. A `prettier --write` over a repo left 54 of 1,324 seed files
+across 13 stores unparseable, in two ways nobody had predicted — a body-less
+file's trailing blank line stripped, and a `resolution:` scalar re-quoted from
+double to single. Both are fixed in the WRITER rather than by loosening the
+reader, because a store whose canonical form disagrees with the ecosystem's
+default formatter re-dirties itself on every run. The writer now formats every
+body with mdformat as it writes it, so a `mdformat .` over the repo is a no-op
+on `.seeds/` instead of a churn of every file — verified over all 1,324.
+
+Formatting a body reshapes unfenced literal text, so the writer fences its own:
+agents write nearly every seed body and there is nobody standing by to be asked.
+Where fencing cannot save a body, it is stored exactly as it came.
+
+### Added
+- Leave a converted store canonical, and cover two more escapes ([2ed3b03](https://github.com/outcomesinsights/seeds/commit/2ed3b038f6129f9620a77d4b555050d49d843b72))
+- The writer fences its own literal text ([848609d](https://github.com/outcomesinsights/seeds/commit/848609d4c4a6babf0268b6d666cb52bc9f9f7fe4))
+- Seeds normalize rewrites the store in canonical form ([d91fa23](https://github.com/outcomesinsights/seeds/commit/d91fa233df7457e1b826e09e6d7c18fd653251bc))
+- Tell agents to fence anything that must stay verbatim ([435e82c](https://github.com/outcomesinsights/seeds/commit/435e82cd97c64a20e669fc9fd0ff089f3d7d8543))
+- The writer formats every body with mdformat ([17c3c8c](https://github.com/outcomesinsights/seeds/commit/17c3c8c34de30b788e382560d4a94c68a2773b78))
+- Give `seeds create` --content-file and --content - ([c63d487](https://github.com/outcomesinsights/seeds/commit/c63d4870a5dbf89d76d61603ab67dd63b1f4beb7))
+- Add `winnow` — judge the verb's candidates and present findings ([355826a](https://github.com/outcomesinsights/seeds/commit/355826ab61d395e30b4e56684f0f67c41d65bfe0))
+- Add the `glean` skill — judge and present what a session worked out ([4c12668](https://github.com/outcomesinsights/seeds/commit/4c126689b4e8bd0b03ece4ac5b8fa00294b4f8ce))
+- Add the `cutting` skill for context-carrying topic capture ([d1558ae](https://github.com/outcomesinsights/seeds/commit/d1558ae545e7d5fb79ebdbf53b1c7afafe606805))
+- Add the `seeds winnow` verb — corpus audit of the thinking ([bc24b17](https://github.com/outcomesinsights/seeds/commit/bc24b17cbcfa268ac5642265ac2b7dba9c921135))
+- Add the `seeds glean` verb — candidates from a session transcript ([53d6a3f](https://github.com/outcomesinsights/seeds/commit/53d6a3f86dc1ed3c911d23d7820db094e6e1bb55))
+- Flag a seed body rewritten in place with a frozen updated_at ([86c99e5](https://github.com/outcomesinsights/seeds/commit/86c99e5a06e2b9f4a7f807ffc2f673259e5ff480))
+- Split a multi-line legacy title, and state the body's blank-line rule ([abb70fd](https://github.com/outcomesinsights/seeds/commit/abb70fdee1cc6f00f29daca4ab7c546908b79d56))
+- Differential harness proving 0.7 storage costs no behaviour ([5422856](https://github.com/outcomesinsights/seeds/commit/54228561a1a5be6699eb4c17b651d7816995a93b))
+- Gate flake.nix against pyproject.toml's dependency list ([725d613](https://github.com/outcomesinsights/seeds/commit/725d61372419bf238a6f2f2b68e65b9ee3030948))
+- Three smells for the store's format rules and its tooling ([b550f92](https://github.com/outcomesinsights/seeds/commit/b550f92b3c9c328e3195f3053d09dc24869767cf))
+- Make the unconverted-repo message the migration UX (seeds-4co.18) ([e71aef0](https://github.com/outcomesinsights/seeds/commit/e71aef0fafdf44b8803287a2440971f40794174d))
+- Stage the retired seeds.jsonl for deletion (seeds-4co.19) ([9c0fb46](https://github.com/outcomesinsights/seeds/commit/9c0fb462cb79456ce9ac10eaccfcb2c8f80fc739))
+- Convert the design database to the seed-file tree ([6694f84](https://github.com/outcomesinsights/seeds/commit/6694f84259a8f266ac5792bd8b8f0d340a0de5f5))
+- Add `seeds history`, a seed's evolution read out of git ([119c504](https://github.com/outcomesinsights/seeds/commit/119c5048edbf7d3a06628bdbb7b471c8791d3151))
+- Point every command at the tree and delete the SQLite layer ([9ff40ed](https://github.com/outcomesinsights/seeds/commit/9ff40ed873768d3955fd0d5ab9e5feb192b20b7f))
+- Add the tree-backed store and a read-only legacy SQLite reader ([e133fc7](https://github.com/outcomesinsights/seeds/commit/e133fc744da536b8edfbe4ac34a91d7ab072bb99))
+- Add `seeds export --json`, a stdout pipe for the corpus ([0960c77](https://github.com/outcomesinsights/seeds/commit/0960c770cb23eb942ecd335b74dfc408bcdb2d10))
+- Gate commits on seeds check, including the mass-rewrite shape ([cc1ee22](https://github.com/outcomesinsights/seeds/commit/cc1ee2285b762dc3fe6300e53b24abe7cd8c8b10))
+- Add the smells tier and the comparison against git ([487d97d](https://github.com/outcomesinsights/seeds/commit/487d97db67fedd069299c995f61813651c0b1db4))
+- Add seeds convert, the union-input converter ([2c4a4ed](https://github.com/outcomesinsights/seeds/commit/2c4a4ed186f215775dee828412dcbb8fb69693e1))
+- Add seeds check, the violations tier ([a603938](https://github.com/outcomesinsights/seeds/commit/a603938f0cfdd09efc7197b5833274b25d1307b8))
+- Add the seed-file reader/writer, the single door to .seeds/seeds/ ([a438564](https://github.com/outcomesinsights/seeds/commit/a438564eda1e0055484801c86c34a451fc4aefab))
+- Delete the web UI ([8b760e2](https://github.com/outcomesinsights/seeds/commit/8b760e2458148f7674b4924ca102694c2efd74c6))
+- Gate the CHANGELOG artifact, not just the generator ([a8ef784](https://github.com/outcomesinsights/seeds/commit/a8ef784604bc76a1647714b7d988f7843fadec86))
+
+### Changed
+- Declare ripgrep, which seeds search now needs at runtime ([3174b89](https://github.com/outcomesinsights/seeds/commit/3174b8972a6ad02e1c8e4a5f6ae1486053def1e7))
+
+### Documentation
+- A config above the store is shared state, and say so ([a03086b](https://github.com/outcomesinsights/seeds/commit/a03086b62d65d4d005e74be52d13a06e07acc680))
+- List all seven shipped skills, and gate the list ([a110418](https://github.com/outcomesinsights/seeds/commit/a1104188a29369608df1ec15fe2686123080865f))
+- Make seeds-to-beads write structured Source: lineage ([4328ca4](https://github.com/outcomesinsights/seeds/commit/4328ca42c2f76e4a6c8859fd7c97f48ae19b4433))
+- Teach the cross-repo rg recipe, stop export over-claiming (seeds-4co.20) ([f28c596](https://github.com/outcomesinsights/seeds/commit/f28c59655724870ac3e33ef525207818814f901f))
+- Mark the storage overhaul built and converted ([404a6b4](https://github.com/outcomesinsights/seeds/commit/404a6b493a6738104bfe2987b867b4fab7c312b5))
+- Stop naming a function that no longer exists ([3468390](https://github.com/outcomesinsights/seeds/commit/34683904a74f77db4aaa72364f8a108845df57be))
+- Point the command reference at the seed-file store ([2b17db5](https://github.com/outcomesinsights/seeds/commit/2b17db5be253371770e17642d62101f880a1f0b6))
+- Drop the vestigial 'answers' relation type, and the six fixtures ([694b142](https://github.com/outcomesinsights/seeds/commit/694b1420f76b17aa744eeb341d50d901a4a66550))
+- Rule empty bodies a smell, and give the prefix a home ([50b7646](https://github.com/outcomesinsights/seeds/commit/50b7646ca2386abf56b35c2dedf7f2058b84dc00))
+- Freeze the on-disk storage format ([98a56ae](https://github.com/outcomesinsights/seeds/commit/98a56ae8e85bb1c5638aa8fbeee57ae55f6dbfb7))
+- Settle ranked search, and fold three deletions into phase 5 ([861e6ac](https://github.com/outcomesinsights/seeds/commit/861e6ac08f3dc88602e64fb6f0d77b21cc7b2f7e))
+- The storage overhaul plan, and settle the last five open items ([139847b](https://github.com/outcomesinsights/seeds/commit/139847b044fe8140649784199198eb48019b6411))
+
+### Fixed
+- Inherit formatter options from above the store ([0537b19](https://github.com/outcomesinsights/seeds/commit/0537b1992fe2513e4cbd03516fea938130a10251))
+- Scalar quoting picks whichever form needs no escapes ([81fb86e](https://github.com/outcomesinsights/seeds/commit/81fb86ea400acc71a54f632e87b6faabc7c2bb3d))
+- A body-less seed file ends at the closing delimiter ([5f5b36c](https://github.com/outcomesinsights/seeds/commit/5f5b36c20a41b1d46399ccae905142692d27ec97))
+- Verify resolve-seeds-from-beads candidates against shipped code ([ade43d9](https://github.com/outcomesinsights/seeds/commit/ade43d9c507e85829368fee40d7213ffb0916066))
+- Name the refusal cause instead of printing 0.6's traceback ([83b2265](https://github.com/outcomesinsights/seeds/commit/83b2265439119640b6c7d159d3e794a6dfbdb1f9))
+- Read a legacy store missing an optional table as empty ([70e057a](https://github.com/outcomesinsights/seeds/commit/70e057a4e62722c7250b5726e5dd46228fa1df44))
+- Bead the seed-lineage over-claim found in seeds-187's first real run ([e92a57b](https://github.com/outcomesinsights/seeds/commit/e92a57b698046868b6c566a165078896dfc62dee))
+- Drop legacy 'answers' edges instead of crashing on them ([21a2b9e](https://github.com/outcomesinsights/seeds/commit/21a2b9e24228bd9109e4ac53f125fe391ea986fa))
+- Confirm unknown bead refs with bd before rejecting them ([218c279](https://github.com/outcomesinsights/seeds/commit/218c27966f2dc459af1c20426db9a5b1ac3d3d9c))
+- Exclude the seed store, which ruff started formatting on conversion ([56fcac6](https://github.com/outcomesinsights/seeds/commit/56fcac63868f11b3b8d6ea7723bea377ce2d7156))
+- Make the converter assert it converted anything ([b2798fc](https://github.com/outcomesinsights/seeds/commit/b2798fc3988a983e01d60b6aabee0c5a8b545e26))
+- Convert seeds-sdhc.1's floating supersede marker to a correction ([aeab343](https://github.com/outcomesinsights/seeds/commit/aeab3437b863a0ccb8645d78f587d2a4659fc6c7))
+- Gate uv.lock against pyproject, and let Dependabot update it ([866086d](https://github.com/outcomesinsights/seeds/commit/866086dd9c2ccb5a4c66b7c4da78e2b397e21494))
+- Restore the 83 titles clobbered by the attribution sweep ([1afc51c](https://github.com/outcomesinsights/seeds/commit/1afc51cdc59a5183e000308e1792ff44367f85b9))
+- Regenerate uv.lock, stale since the mypy floor bump ([6b62a37](https://github.com/outcomesinsights/seeds/commit/6b62a37ae4b48c6c26fd50d03b3d423cdcec446a))
+
+### Tooling
+- Bump to 0.7.0a1 for the shakedown, and accept PEP 440 alphas ([c5d1628](https://github.com/outcomesinsights/seeds/commit/c5d162894717d60035b94e9c6cfd6ba765108c5f))
+- One-off conversion-era audit of every store against its git history ([dfedd07](https://github.com/outcomesinsights/seeds/commit/dfedd07685b101da45b6c1fe43b762b4b87c12e9))
+- Close seeds-4co.16, and correct my overclaim about canonical bytes ([0658fb9](https://github.com/outcomesinsights/seeds/commit/0658fb98b5af34c5cec0d1fd3d6fb39f4a6a4ad9))
+- Resolve seeds-183 — cross-repo search is grep, and markdown serves it better ([43f173d](https://github.com/outcomesinsights/seeds/commit/43f173de52d4db94c4d709eb1a890d695d245c89))
+- File the flake.nix dependency-mirror gap, resolve the web-UI seed ([1b292cf](https://github.com/outcomesinsights/seeds/commit/1b292cf480dfc4bebc0be139cda950f8db86bf7c))
+- Update mypy requirement from >=2.3.0 to >=2.3.1 (#30) ([e789ac8](https://github.com/outcomesinsights/seeds/commit/e789ac8c1ab76d36911708e9f8f828ad6d0528ef))
+
 ## [0.6.0] - 2026-08-31
 
 **This release is about failing loudly.** 0.5.0 stopped seeds destroying
@@ -504,7 +600,8 @@ Initial public beta release.
 - **Experimental web UI**: `seeds serve` for read-only browsing of seeds and questions
 - **Doctor command**: `seeds doctor` for installation health checks
 
-[Unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a2...HEAD
+[0.7.0a2]: https://github.com/outcomesinsights/seeds/compare/v0.6.0...v0.7.0a2
 [0.6.0]: https://github.com/outcomesinsights/seeds/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/outcomesinsights/seeds/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/outcomesinsights/seeds/compare/v0.3.5...v0.4.0
