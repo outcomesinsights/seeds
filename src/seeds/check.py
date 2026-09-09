@@ -105,6 +105,8 @@ from seeds.seedfile import (
     FILE_SUFFIX,
     SeedFileError,
     SeedRecord,
+    _run_mdformat,
+    autofence,
     expected_parent,
     inverse_relation,
     is_valid_id,
@@ -684,6 +686,7 @@ def check_smells(seeds_dir: Path, *, now: datetime | None = None) -> list[Findin
     findings.extend(_duplicate_bodies(entries))
     findings.extend(_resolutions_without_a_terminal_status(entries))
     findings.extend(_non_canonical_files(entries))
+    findings.extend(_bodies_kept_verbatim(entries))
     findings.extend(_unexcluded_tool_configs(seeds_dir))
     return sorted(findings, key=lambda f: (str(f.path), f.code, f.message))
 
@@ -850,6 +853,56 @@ def _resolutions_without_a_terminal_status(
                     "is the previous conclusion and is worth keeping (§3). "
                     "Worth a look only if it is the status that is stale — "
                     "'seeds resolve' restamps both together"
+                ),
+                seed_id=record.id,
+            )
+        )
+    return findings
+
+
+def _bodies_kept_verbatim(
+    entries: Sequence[tuple[Path, SeedRecord]],
+) -> list[Finding]:
+    """A body the writer declined to format, because formatting would reshape it.
+
+    The writer fences a body's literal text and formats the rest, and where
+    neither can be done without changing what the body MEANS it stores the body
+    exactly as it came (§2). That is the right call, and it is invisible to
+    every other check here: ``format_body`` is a no-op on such a body, so
+    ``render_seed_file`` reproduces the file's bytes exactly and
+    ``non-canonical-bytes`` cannot fire. Not formatted AND not flagged is the
+    one combination worth naming, so this names it.
+
+    Found by home-manager-main, 2026-09-09, on a store where a body kept this
+    way produced no smell at all -- and this module had been documented as
+    reporting it. It did not.
+    """
+    findings = []
+    for path, record in entries:
+        if not record.body.strip():
+            continue
+        try:
+            formatted = _run_mdformat(autofence(record.body), path.parent.parent)
+        except Exception:  # a formatter failure is not this tier's business
+            continue
+        if formatted == record.body:
+            continue
+        findings.append(
+            Finding(
+                path=path,
+                code="body-kept-verbatim",
+                message=(
+                    "the body is stored exactly as it came, because formatting "
+                    "would change what it means -- so this file is deliberately "
+                    "NOT a fixed point of a plain `mdformat` run"
+                ),
+                remediation=(
+                    "usually literal text the writer's fencing could not reach: "
+                    "an unfenced sample whose `---` lines read as setext "
+                    "headings, or a hand-aligned block inside a list. Fence it "
+                    "by hand and the next write formats the rest normally. "
+                    "Leaving it is fine -- nothing is lost, and the body is "
+                    "exactly what was written"
                 ),
                 seed_id=record.id,
             )

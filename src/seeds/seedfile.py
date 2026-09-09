@@ -1081,8 +1081,11 @@ def format_body(body: str, seeds_dir: Path | None = None) -> str:
         return formatted
     # Fencing did not save it and formatting would reshape what it means, so
     # the body is stored exactly as it came. Lossless, and nobody is asked
-    # anything: `check --smells` reports the file as non-canonical-bytes,
-    # which is the visible end of a decision made silently here.
+    # anything: `check --smells` reports it as `body-kept-verbatim`, which is
+    # the visible end of a decision made silently here. NOT
+    # `non-canonical-bytes` -- that one cannot see this at all, because
+    # `format_body` is a no-op on such a body and `render_seed_file` therefore
+    # reproduces the file's bytes exactly.
     return body
 
 

@@ -137,8 +137,12 @@ Mechanically:
      Those are hand-indented quotations; every word survives, and a fence would
      be the wrong answer because they are prose.
   3. Where formatting would still change what the body *means*, the body is
-     stored exactly as it came. Lossless, and the file then reads as
-     `non-canonical-bytes` — the visible end of a decision made silently.
+     stored exactly as it came. Lossless, and reported by `check --smells` as
+     **`body-kept-verbatim`** — the visible end of a decision made silently.
+     Note it is *not* `non-canonical-bytes`: that check compares a file against
+     a render of itself, and the render of a body kept this way reproduces the
+     file exactly, so it is blind to precisely this case. `body-kept-verbatim`
+     exists because it was blind to it, on a real store, undetected.
 
   Measured over 1,293 non-empty bodies: 64 gained a fence, 2 were stored
   verbatim.
@@ -151,7 +155,7 @@ Mechanically:
 
   A store carrying a body in the third tier is deliberately **not** a fixed
   point of a bare formatter run — seeds is refusing to let it be reshaped — and
-  `check --smells` names those files as `non-canonical-bytes`.
+  `check --smells` names those files as `body-kept-verbatim`.
 
   **The formatter's escapes are kept, and `seeds search` reads them.** mdformat
   escapes `*`, `_`, `` ` ``, `[`, `]` and `<` in prose, so a `[[clc-97e]]`

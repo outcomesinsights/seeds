@@ -1829,7 +1829,7 @@ def _normalize_tree(
         before = path.read_text(encoding="utf-8")
         record = read_seed_file(path)
         # Fencing could not save it, so the body stays exactly as the sources
-        # held it. `check --smells` reports the file.
+        # held it. `check --smells` reports it as `body-kept-verbatim`.
         if (
             record.body
             and format_body(record.body, seeds_dir) == record.body

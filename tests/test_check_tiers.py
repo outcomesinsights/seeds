@@ -448,6 +448,25 @@ class TestNonCanonicalBytesSmell:
         assert codes(findings) == ["non-canonical-bytes"]
         assert "seeds-dv6r" in findings[0].remediation
 
+    def test_a_body_kept_verbatim_is_named(self, tmp_path):
+        """The third tier is otherwise invisible, which is why this exists.
+
+        `format_body` is a no-op on a body kept this way, so
+        `render_seed_file` reproduces the file's bytes exactly and
+        `non-canonical-bytes` CANNOT fire. Found on a real store, where such a
+        body produced no smell at all while the docs claimed it produced one.
+        """
+        body = "Front-matter shape:\n---\nproject: sequelizer\nstatus: draft\n---\n"
+        seeds_dir = store(tmp_path, record(body=body))
+        assert read_seed_file(self.path_of(seeds_dir)).body == body  # kept as-is
+        findings = check_smells(seeds_dir)
+        assert "body-kept-verbatim" in codes(findings)
+        assert "non-canonical-bytes" not in codes(findings)
+
+    def test_an_ordinary_body_is_not_named(self, tmp_path):
+        seeds_dir = store(tmp_path, record(body="Ordinary deliberation.\n"))
+        assert "body-kept-verbatim" not in codes(check_smells(seeds_dir))
+
     def test_a_body_rewritten_within_canonical_layout_is_NOT_caught(self, tmp_path):
         """The measured limit of this rule, pinned so nobody over-trusts it.
 
