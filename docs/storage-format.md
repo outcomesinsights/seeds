@@ -143,6 +143,16 @@ Mechanically:
   Measured over 1,293 non-empty bodies: 64 gained a fence, 2 were stored
   verbatim.
 
+  **To verify the no-op property, run `mdformat --check .seeds`** — scoped to
+  the store, and `--check` so it reports rather than writes. Do NOT point a
+  formatter at the repo root to test this: the claim is about `.seeds/`, and a
+  `prettify <repo-root>` in one repo reformatted 217 markdown files outside the
+  store that nobody had asked it to touch.
+
+  A store carrying a body in the third tier is deliberately **not** a fixed
+  point of a bare formatter run — seeds is refusing to let it be reshaped — and
+  `check --smells` names those files as `non-canonical-bytes`.
+
   **The formatter's escapes are kept, and `seeds search` reads them.** mdformat
   escapes `*`, `_`, `` ` ``, `[`, `]` and `<` in prose, so a `[[clc-97e]]`
   reference is stored `\[[clc-97e]\]` — 870 of them across 164 files. Seeds
