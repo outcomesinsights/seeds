@@ -1,11 +1,13 @@
 ---
 id: seeds-dv6r.1
 title: Prettier breaks 54 of 1,324 seed files; the fix is the writer, and there are two break classes not one
-status: captured
+status: resolved
 type: concern
 parent: seeds-dv6r
 created_at: 2026-09-08T21:02:17.201968+00:00
-updated_at: 2026-09-09T14:18:34.296989+00:00
+updated_at: 2026-09-09T21:31:15.333493+00:00
+resolved_at: 2026-09-09T21:31:15.333484+00:00
+resolution: 'Shipped as 0.7.0a2 and a3 across beads seeds-d4j, seeds-30o, seeds-bob, seeds-3xg, seeds-ynn. The store is now a fixed point of mdformat: 0 of 322 files change under either plugin version, and all 18 stores on titan are normalized. Efficacy: SIGNIFICANT tweaking, almost all inherent unknowns rather than planning misses — the frontmatter quote churn, the 16-shape over-quoting, the wiki-bracket and backslash escapes, and tier 3 being undetectable were each found by running this on a second machine with a different mdformat-frontmatter version, and none was reachable from inside this repo. The one real planning miss: this seed asserted a detector covered a case without testing that it did. Lesson: a fixed-point claim about an ecosystem tool cannot be verified in the repo that makes the claim.'
 tags:
   - storage
   - format
@@ -395,3 +397,69 @@ One caveat worth stating: an option that changes body layout (`wrap = 80`, say) 
 still idempotent and still safe, but turning it on reformats every body in the
 store at once. That is the operator's call, and `non-canonical-bytes` is the thing
 that reports it.
+
+## AS BUILT (2026-09-09) — where this landed differently, and what it cost
+
+Shipped as 0.7.0a2 and 0.7.0a3 across beads seeds-d4j, seeds-30o, seeds-bob,
+seeds-3xg and seeds-ynn. Five divergences from what is deliberated above, each
+because building it or running it somewhere else said otherwise.
+
+**The formatter is mdformat, not prettier, and prettier is no longer a master.**
+Everything above measures prettier because that was what `prettify` ran. Ryan
+moved `prettify` to mdformat the same day, so the fixed-point target changed
+under the work. What survives from the prettier measurements is the diagnosis,
+not the target.
+
+**The class-B quoting rule shipped inverted from the one worked out here.** The
+rule above is "single-quote when the value contains a double quote and needs no
+escape". What actually holds is PyYAML's, and an apostrophe is the deciding
+character: any value containing `'` goes DOUBLE-quoted. The first
+implementation followed this seed, and 49 files still churned. Then the
+over-quoting half — never suspected here — turned out to be 16 of 49 first
+characters, found by home-manager-main hitting the one that occurs in real
+data (a leading `~`, which is YAML's null only when it is the WHOLE scalar).
+
+**The tier-3 claim in this seed was false, and shipped false for a day.** It
+says a body kept verbatim "reads as `non-canonical-bytes` — the visible end of
+a decision made silently". It cannot: `format_body` is a no-op on such a body,
+so `render_seed_file` reproduces the file's bytes exactly and that check is
+blind to precisely the case it was documented as covering. Not formatted AND
+not flagged. `body-kept-verbatim` exists because home-manager-main followed the
+instruction, got an empty result, and said so.
+
+**Fencing became automatic, which this seed did not propose.** The rule as
+captured is an authoring rule — "anything that must stay verbatim gets a
+fence". Ruled otherwise: agents write every body and there is nobody to ask, so
+the writer fences its own literal runs. Recorded in seeds-dv6r.1.1.
+
+**A whole dimension is missing from this deliberation: the formatter's own
+version.** `mdformat-frontmatter` 2.0.10 (what nixpkgs pins) re-emits the
+frontmatter through ruamel.yaml; 2.1.2 leaves it alone. The store churned 103
+of 237 files on the other host and 0 here, on identical code, purely on that.
+Nothing above contemplates a formatter whose behaviour is version-dependent,
+and it is the single largest thing this seed did not see.
+
+## EFFICACY
+
+**Significant tweaking, and almost all of it was an inherent unknown rather
+than a planning miss.** The three writer fixes were specified well enough to
+build directly. What could not have been planned from inside this repo:
+
+- the frontmatter quote churn (needs a second machine with a different plugin
+  version);
+- the 16-shape over-quoting (needs a real corpus containing a leading `~`);
+- the wiki-bracket escapes, `[[clc-97e]]` -> `\[[clc-97e]\]`, 870 across 164
+  files (needs somebody to notice `seeds search` is ripgrep over raw files);
+- the backslash doubling, `C:\temp` -> `C:\\temp` (same);
+- tier 3 being undetectable (needs somebody to run the check I named and
+  report the empty result rather than assume they had misread it).
+
+Every one came from home-manager-main running this against a second store on a
+different plugin version. **The lesson worth carrying: a fixed-point claim
+about an ecosystem tool cannot be verified in the repo that makes the claim.**
+A better bead would have said "before believing the store is a fixed point, run
+it on a machine you did not develop it on, with whatever version that machine's
+package manager pins".
+
+The one genuine planning miss: this seed asserted a detector covered a case
+without testing that it did.

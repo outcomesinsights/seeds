@@ -1,10 +1,12 @@
 ---
 id: seeds-9gr8
 title: The converter's v1 remediation names a command that cannot be run, and the nearest one that can destroys the store
-status: captured
+status: resolved
 type: concern
 created_at: 2026-09-09T19:29:34.691858+00:00
-updated_at: 2026-09-09T19:29:34.691858+00:00
+updated_at: 2026-09-09T21:31:23.743631+00:00
+resolved_at: 2026-09-09T21:31:23.743602+00:00
+resolution: "Fixed in 215819d (bead seeds-s6w). The v1 refusal now names the path both real v1 stores were revived through — retire the JSONL with git rm --cached, convert from the database alone — and distinguishes the case it does not cover, a JSONL holding an id the database lacks. Both retired commands are gone and a test pins that uvx, 0.6.1, 'seeds import' and 'seeds sync' never reappear. Efficacy: NONE needed; the seed specified it well enough to build directly. The finding worth carrying is the general one in the body: a remediation string is code that never runs, so nothing catches it rotting — this one named a version never cut, of a package never published, and steered toward a command that truncates the file it was protecting."
 tags:
   - convert
   - legacy
