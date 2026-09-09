@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0a3] - 2026-09-09
+
+**Everything a2 got wrong about agreeing with the ecosystem, found by using
+it.** a2 made the store a fixed point of mdformat; a3 is what a day of running
+it against real repos and a second machine turned up.
+
+Three of the fixes are one shape: seeds writing a spelling no other tool
+writes. Scalars were quoted where a YAML emitter leaves them plain, and
+quoted the wrong way where it quotes — 16 of 49 shapes disagreed, and the
+reader had to learn what the writer now emits or seeds would have written
+files it could not read back. `seeds search` learned to read the formatter's
+escapes rather than seeds undoing them, since undoing them only churns
+against the next run.
+
+The other two are data. `seeds check --smells` could not see a body the writer
+had kept verbatim — the check compares a file against a render of itself, and
+such a file renders to exactly its own bytes, so it was blind to the one case
+it was documented as covering. And `seeds convert` dropped the legacy
+`questions` table wholesale: fine wherever 0.6's `import` had run, silent data
+loss for a store that never reached v2. Two such stores on this machine held
+nine answered questions between them.
+
+### Documentation
+- The yes/no group, and the right reason for quoting it ([9c31bc3](https://github.com/outcomesinsights/seeds/commit/9c31bc3923f799869034eac0fe89f4a500324af3))
+- Name the verification command, and scope it to the store ([0f73415](https://github.com/outcomesinsights/seeds/commit/0f73415c61f7321743ce96d51270136940c3cc8b))
+
+### Fixed
+- The v1 refusal now names a path that can actually be walked ([215819d](https://github.com/outcomesinsights/seeds/commit/215819d67924300b1722e00fc29c6dae092baf36))
+- Translate the legacy questions table instead of dropping it ([4b112b5](https://github.com/outcomesinsights/seeds/commit/4b112b5e73419b8040635bc426c52fb6ee7cebd6))
+- Stop over-quoting plain scalars, and read what that emits ([5fb8d50](https://github.com/outcomesinsights/seeds/commit/5fb8d5017fe3faf264db5856a7ff6e93a9b362df))
+- Name a body the writer kept verbatim ([6b9999c](https://github.com/outcomesinsights/seeds/commit/6b9999cab12ce35635721a19e3c1fc628ad12d14))
+- Emit the scalar quoting PyYAML does ([4582b43](https://github.com/outcomesinsights/seeds/commit/4582b430354e9c3c419018e9a85497e41399595c))
+- Satisfy mypy on the formatter path, and reject a bad extensions key ([8d13ec1](https://github.com/outcomesinsights/seeds/commit/8d13ec1d08316177a803190701a0798435c17cfc))
+
 ## [0.7.0a2] - 2026-09-09
 
 **An alpha, so the store's format can be exercised before it is frozen.**
@@ -600,7 +634,8 @@ Initial public beta release.
 - **Experimental web UI**: `seeds serve` for read-only browsing of seeds and questions
 - **Doctor command**: `seeds doctor` for installation health checks
 
-[Unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a2...HEAD
+[Unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a3...HEAD
+[0.7.0a3]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a2...v0.7.0a3
 [0.7.0a2]: https://github.com/outcomesinsights/seeds/compare/v0.6.0...v0.7.0a2
 [0.6.0]: https://github.com/outcomesinsights/seeds/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/outcomesinsights/seeds/compare/v0.4.0...v0.5.0
