@@ -1533,6 +1533,32 @@ class TestStrictSources:
         with pytest.raises(ConversionError, match="format_version"):
             convert(seeds_dir)
 
+    def test_the_v1_refusal_only_names_commands_that_can_be_run(self, temp_dir):
+        """A remediation string is code that never runs, so nothing catches it
+        rotting. This one named `uvx seeds==0.6.1`, of a version never tagged
+        and a package never published, and the nearest runnable alternative
+        (`seeds sync`) crashes on a v1 store AND truncates its JSONL to zero
+        rows — advice that destroys what it is trying to protect (seeds-9gr8).
+        """
+        seeds_dir = temp_dir / ".seeds"
+        stale = record("seeds-a1")
+        stale["format_version"] = 1
+        write_jsonl(seeds_dir, [stale])
+
+        with pytest.raises(ConversionError) as caught:
+            convert(seeds_dir)
+        message = str(caught.value)
+
+        assert "uvx" not in message
+        assert "0.6.1" not in message
+        assert "seeds import" not in message
+        assert "seeds sync" not in message
+        # The path that was actually walked for two real v1 stores.
+        assert "git rm --cached .seeds/seeds.jsonl" in message
+        assert "seeds convert" in message
+        # And the case that path does NOT cover.
+        assert "id seeds.db does not" in message
+
     def test_two_lines_for_one_id_are_refused_rather_than_guessed_at(self, temp_dir):
         seeds_dir = temp_dir / ".seeds"
         write_jsonl(

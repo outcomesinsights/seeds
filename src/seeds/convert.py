@@ -763,12 +763,21 @@ def _load_jsonl(
                 raise ConversionError(
                     f"{jsonl_path}: line {lineno} is format_version "
                     f"{data.get('format_version')!r}, and the converter reads "
-                    "version 2 only. A v1 record has to be migrated first, and "
-                    "seeds no longer can: `seeds import` was the migration "
-                    "(it turned a record's embedded questions into "
-                    "question-seeds with new ids) and it went with the store "
-                    "it wrote into. Run `uvx seeds==0.6.1 import` against this "
-                    "file, then convert"
+                    "version 2 only. The v1 -> v2 migration went with the "
+                    "store it wrote into, and nothing can run it now.\n\n"
+                    "Where seeds.db holds every id this file does -- the usual "
+                    "case, since the database was the live store and the JSONL "
+                    "its export -- retire the file and convert from the "
+                    "database alone, which carries the legacy questions table "
+                    "across:\n"
+                    "    git rm --cached .seeds/seeds.jsonl && rm "
+                    ".seeds/seeds.jsonl\n"
+                    "    seeds convert\n"
+                    "The file's git HISTORY stays, and `seeds history` still "
+                    "reads it for everything before a seed's converted_at.\n\n"
+                    "Where this file holds an id seeds.db does not, there is no "
+                    "automated path: that record exists only here, in a format "
+                    "nothing still reads, and recovering it is by hand"
                 )
             seed_id = data.get("id")
             if not isinstance(seed_id, str) or not is_valid_id(seed_id):
