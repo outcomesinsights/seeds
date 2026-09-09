@@ -1016,6 +1016,21 @@ class TestTheYamlOneOneBooleanWords:
     def test_the_words_both_versions_agree_on_stay_quoted_too(self, word):
         assert _encode_scalar(word) == f"'{word}'"
 
+    @pytest.mark.parametrize(
+        "word", ["yes", "no", "on", "off", "Yes", "ON", "true", "null"]
+    )
+    def test_reading_one_back_UNQUOTED_still_gives_text(self, word):
+        """The churn is survivable; misreading it would not be.
+
+        `mdformat-frontmatter` 2.0.10 strips the quotes off these, so a store
+        formatted by a CLI run comes back with a bare `title: yes`. Seeds never
+        type-resolves a scalar -- it reads its own YAML subset -- so the value
+        is still the STRING somebody wrote, where a YAML 1.1 loader would hand
+        back a bool. That is what makes the disagreement cosmetic rather than
+        corrupting, and it is the half worth pinning.
+        """
+        assert _decode_scalar(None, "title", word, 1) == word
+
     @pytest.mark.parametrize("word", ["y", "n", "maybe", "yes please"])
     def test_a_word_that_is_not_one_of_them_is_left_plain(self, word):
         assert _encode_scalar(word) == word
