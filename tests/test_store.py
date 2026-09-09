@@ -891,6 +891,18 @@ class TestSearchReadsTheFormatterSSpelling:
         assert re.search(pattern, "the code_set_catalog rule")
         assert re.search(pattern, r"the code\_set\_catalog rule")
 
+    def test_a_doubled_backslash_matches_either_spelling(self):
+        """mdformat doubles a backslash, so a seed quoting a Windows path, a
+        regex or a LaTeX fragment is unfindable by the text somebody reads."""
+        pattern = escape_tolerant(r"C:\\temp")
+        assert re.search(pattern, r"path C:\temp here")
+        assert re.search(pattern, r"path C:\\temp here")
+
+    def test_an_escaped_asterisk_matches_either_spelling(self):
+        pattern = escape_tolerant(r"mcp__clancey__\*")
+        assert re.search(pattern, "mcp__clancey__* tools")
+        assert re.search(pattern, r"mcp\_\_clancey\_\_\* tools")
+
     def test_regex_syntax_is_left_alone(self):
         assert escape_tolerant(r"^status: (captured|exploring)$") == (
             r"^status: (captured|exploring)$"

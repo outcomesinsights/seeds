@@ -84,7 +84,12 @@ TERMINAL_STATUSES = (SeedStatus.RESOLVED, SeedStatus.ABANDONED)
 # `\\[[clc-97e]\\]`. Nobody types the backslashes, so a search for the text
 # somebody read would miss the file it came from -- 870 such references across
 # 164 files when this was measured.
-_ESCAPED_IN_PROSE = "*_`[]<"
+# `<` is in the set for safety, not because it was seen to trigger: no shape
+# produced an escape for it, including a bare autolink. The backslash itself is
+# here because mdformat DOUBLES it -- `C:\temp` is stored `C:\\temp` -- so a
+# seed quoting a Windows path, a regex or a LaTeX fragment is unfindable by the
+# text somebody reads. Verified against mdformat 1.0.0.
+_ESCAPED_IN_PROSE = "*_`[]<\\"
 # Of those, the ones that are not regex metacharacters, so a BARE occurrence in
 # a pattern is unambiguously a literal and can be made tolerant too.
 _PLAIN_IN_REGEX = "_`"

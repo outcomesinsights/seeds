@@ -77,15 +77,18 @@ from seeds.legacy import (
 from seeds.models import RelationType, Seed, SeedStatus
 from seeds.seedfile import (
     FILE_SUFFIX,
+    MDFORMAT_CONFIG,
     SeedEdge,
     SeedFileError,
     SeedRecord,
     expected_parent,
+    format_body,
     is_valid_id,
     path_for_id,
     read_seed_file,
     render_seed_file,
     seed_files_dir,
+    write_mdformat_config,
     write_seed_file,
 )
 
@@ -1238,6 +1241,13 @@ class ConversionReport:
     stale_files: list[str] = field(default_factory=list)
     prefix_written: str | None = None
     verified: int = 0
+    #: Files the closing normalize pass rewrote, and the ids whose body it left
+    #: unformatted because formatting would have changed what the body means.
+    #: Reported rather than counted silently: a converting host is usually one
+    #: nobody is watching, and this is the one step that touches body text.
+    normalized: int = 0
+    mdformat_config_written: bool = False
+    left_verbatim: list[str] = field(default_factory=list)
     check_findings: list[Finding] = field(default_factory=list)
     #: Whether ``.seeds/seeds.jsonl``'s removal was staged for the next commit.
     jsonl_deletion_staged: bool = False
@@ -1790,8 +1800,45 @@ def convert(
     report.stale_files = _stale_files(out_dir, {u.record.id for u in unions})
     report.prefix_written = _write_config(seeds_dir, db_path, known)
     report.check_findings = _gate(seeds_dir, set(report.forks))
+    # Before `_retire_jsonl`, which computes the revert command and therefore
+    # has to know whether this run wrote the formatter config.
+    _normalize_tree(seeds_dir, [u.record.id for u in unions], report)
     _retire_jsonl(jsonl_path, report)
     return report
+
+
+def _normalize_tree(
+    seeds_dir: Path, seed_ids: list[str], report: ConversionReport
+) -> None:
+    """Bring the converted tree to the store's canonical form.
+
+    The write above is deliberately verbatim, because verification compares
+    every body against the raw stores byte for byte and that guarantee is worth
+    more than tidiness. This runs AFTER it passes, so a host converting for the
+    first time gets a canonical store from one command instead of a store that
+    the next `mdformat` run would churn.
+    """
+    config = seeds_dir / MDFORMAT_CONFIG
+    report.mdformat_config_written = not config.exists()
+    write_mdformat_config(seeds_dir)
+    assert config.exists()
+    # The ids this conversion wrote, never a glob: a stale file the conversion
+    # deliberately left alone is not necessarily a seed file at all, and
+    # reading one would fail the whole run.
+    for path in [path_for_id(seeds_dir, seed_id) for seed_id in sorted(seed_ids)]:
+        before = path.read_text(encoding="utf-8")
+        record = read_seed_file(path)
+        # Fencing could not save it, so the body stays exactly as the sources
+        # held it. `check --smells` reports the file.
+        if (
+            record.body
+            and format_body(record.body, seeds_dir) == record.body
+            and render_seed_file(record, seeds_dir) != before
+        ):
+            report.left_verbatim.append(record.id)
+        write_seed_file(path, record)
+        if path.read_text(encoding="utf-8") != before:
+            report.normalized += 1
 
 
 def _retire_jsonl(jsonl_path: Path, report: ConversionReport) -> None:
@@ -1843,6 +1890,8 @@ def _revert_command(report: ConversionReport, root: Path | None) -> str:
     parts.append(f"rm -rf {_display(report.out_dir, root)}")
     if report.prefix_written:
         parts.append(f"rm -f {_display(report.seeds_dir / 'config.yaml', root)}")
+    if report.mdformat_config_written:
+        parts.append(f"rm -f {_display(report.seeds_dir / MDFORMAT_CONFIG, root)}")
     return " && ".join(parts)
 
 

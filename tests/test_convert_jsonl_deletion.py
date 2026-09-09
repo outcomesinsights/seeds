@@ -131,7 +131,7 @@ class TestAllThreeConditionsHold:
 
         assert report.revert_command == (
             "git checkout HEAD -- .seeds/seeds.jsonl && rm -rf .seeds/seeds "
-            "&& rm -f .seeds/config.yaml"
+            "&& rm -f .seeds/config.yaml && rm -f .seeds/.mdformat.toml"
         )
 
     def test_that_revert_command_actually_reverts(self, tracked_store):
@@ -142,6 +142,7 @@ class TestAllThreeConditionsHold:
         git(repo, "checkout", "HEAD", "--", ".seeds/seeds.jsonl")
         shutil.rmtree(seed_files_dir(tracked_store))
         (tracked_store / "config.yaml").unlink()
+        (tracked_store / ".mdformat.toml").unlink()
 
         assert (tracked_store / JSONL_FILE).read_text(encoding="utf-8").strip()
         assert git(repo, "status", "--porcelain").stdout == ""
@@ -169,7 +170,8 @@ class TestEachConditionFailingLeavesTheFileAlone:
         assert (seeds_dir / JSONL_FILE).exists()
         assert "not inside a git work tree" in (report.jsonl_deletion_blocked or "")
         assert report.revert_command == (
-            "rm -rf .seeds/seeds && rm -f .seeds/config.yaml"
+            "rm -rf .seeds/seeds && rm -f .seeds/config.yaml "
+            "&& rm -f .seeds/.mdformat.toml"
         )
 
     def test_the_jsonl_is_untracked(self, temp_dir):
