@@ -1,6 +1,6 @@
 ---
 id: seeds-21
-title: "AI natural adoption: make tool as intuitive as Beads is for Claude"
+title: 'AI natural adoption: make tool as intuitive as Beads is for Claude'
 status: captured
 type: concern
 created_at: 2026-01-28T05:56:23.408310+00:00

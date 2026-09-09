@@ -1,6 +1,6 @@
 ---
 id: seeds-rlc2
-title: "DECISION (@aguynamedryan, 2026-08-25): drop the web UI — never used, never went anywhere"
+title: 'DECISION (@aguynamedryan, 2026-08-25): drop the web UI — never used, never went anywhere'
 status: resolved
 type: decision
 created_at: 2026-08-26T03:52:21.787224+00:00

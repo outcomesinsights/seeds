@@ -1,6 +1,6 @@
 ---
 id: seeds-68
-title: "Web UI: Render markdown content"
+title: 'Web UI: Render markdown content'
 status: captured
 type: idea
 created_at: 2026-02-06T16:17:05.323616+00:00

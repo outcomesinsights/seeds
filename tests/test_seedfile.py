@@ -192,9 +192,11 @@ class TestRender:
                 'A decision: he said "yes" today',
                 """'A decision: he said "yes" today'""",
             ),
+            # An apostrophe sends the whole value double-quoted -- PyYAML's
+            # rule, and so what a CLI run over the store leaves alone.
             (
                 'A decision: he said "yes" and it\'s fine',
-                """'A decision: he said "yes" and it''s fine'""",
+                '"A decision: he said \\"yes\\" and it\'s fine"',
             ),
             ("A decision: it's fine", '"A decision: it\'s fine"'),
             ('Two lines: a\nand a "quote"', '"Two lines: a\\nand a \\"quote\\""'),
@@ -248,17 +250,21 @@ class TestRender:
         ]
 
     def test_awkward_scalars_are_quoted(self):
-        """A title that would stop being a string, or would parse as syntax."""
+        """A title that would stop being a string, or would parse as syntax.
+
+        Single-quoted, because none of these needs a backslash escape and that
+        is the form every YAML emitter the store meets writes.
+        """
         for title, expected in [
-            ("42", '"42"'),
-            ("true", '"true"'),
-            ("null", '"null"'),
-            ("no", '"no"'),
-            ("Storage: the overhaul", '"Storage: the overhaul"'),
-            ("weight # 3", '"weight # 3"'),
-            ("[bracketed]", '"[bracketed]"'),
-            ("- leading dash", '"- leading dash"'),
-            ("trailing colon:", '"trailing colon:"'),
+            ("42", "'42'"),
+            ("true", "'true'"),
+            ("null", "'null'"),
+            ("no", "'no'"),
+            ("Storage: the overhaul", "'Storage: the overhaul'"),
+            ("weight # 3", "'weight # 3'"),
+            ("[bracketed]", "'[bracketed]'"),
+            ("- leading dash", "'- leading dash'"),
+            ("trailing colon:", "'trailing colon:'"),
         ]:
             record = minimal_record()
             record.title = title

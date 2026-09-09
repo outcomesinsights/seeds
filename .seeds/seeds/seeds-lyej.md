@@ -1,6 +1,6 @@
 ---
 id: seeds-lyej
-title: "Python floor moves to 3.11: 3.10 was never a chosen target, and StrEnum has silently required 3.11 since the vocabulary was opened"
+title: 'Python floor moves to 3.11: 3.10 was never a chosen target, and StrEnum has silently required 3.11 since the vocabulary was opened'
 status: captured
 type: decision
 created_at: 2026-08-29T02:28:02.104758+00:00

@@ -1,6 +1,6 @@
 ---
 id: seeds-66
-title: "Web UI: Nested/hierarchical view with indentation"
+title: 'Web UI: Nested/hierarchical view with indentation'
 status: captured
 type: idea
 created_at: 2026-02-06T16:17:03.802838+00:00

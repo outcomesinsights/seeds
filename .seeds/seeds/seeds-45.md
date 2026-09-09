@@ -1,6 +1,6 @@
 ---
 id: seeds-45
-title: "Concern: seed exploration may generate exponential growth without convergence"
+title: 'Concern: seed exploration may generate exponential growth without convergence'
 status: captured
 type: concern
 created_at: 2026-01-28T20:59:43.550599+00:00

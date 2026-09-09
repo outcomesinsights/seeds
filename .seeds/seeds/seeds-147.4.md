@@ -1,6 +1,6 @@
 ---
 id: seeds-147.4
-title: "Build spec: `seeds promote` verb + distillation skill (the lodestone output mode)"
+title: 'Build spec: `seeds promote` verb + distillation skill (the lodestone output mode)'
 status: resolved
 type: decision
 parent: seeds-147

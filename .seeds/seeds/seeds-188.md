@@ -1,6 +1,6 @@
 ---
 id: seeds-188
-title: "Split the journey post: defer the introspection + feedback-loop angle to post #4"
+title: 'Split the journey post: defer the introspection + feedback-loop angle to post #4'
 status: captured
 type: decision
 created_at: 2026-06-24T19:27:10.874499+00:00

@@ -1,6 +1,6 @@
 ---
 id: seeds-ebg1
-title: "Adversarial review of the append-only storage proposal: git is already the append-only store, and materializing it in the working tree bills every future reader"
+title: 'Adversarial review of the append-only storage proposal: git is already the append-only store, and materializing it in the working tree bills every future reader'
 status: captured
 type: concern
 created_at: 2026-08-28T17:09:27.758353+00:00

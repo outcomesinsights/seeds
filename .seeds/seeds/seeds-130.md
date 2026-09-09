@@ -1,6 +1,6 @@
 ---
 id: seeds-130
-title: "Project-aware gleaning: LLM needs project context to extract relevant seeds"
+title: 'Project-aware gleaning: LLM needs project context to extract relevant seeds'
 status: captured
 type: exploration
 created_at: 2026-03-12T20:01:43.553521+00:00

@@ -1,6 +1,6 @@
 ---
 id: seeds-168
-title: "Idea: position seeds as UPSTREAM of intent — the journey that produces it, including discarded paths"
+title: 'Idea: position seeds as UPSTREAM of intent — the journey that produces it, including discarded paths'
 status: exploring
 type: idea
 created_at: 2026-06-15T22:01:59.051112+00:00

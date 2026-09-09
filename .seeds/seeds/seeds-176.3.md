@@ -1,6 +1,6 @@
 ---
 id: seeds-176.3
-title: "Spine for the journey post: keeping the journey is cheap; doing something with it is optional and arrives later"
+title: 'Spine for the journey post: keeping the journey is cheap; doing something with it is optional and arrives later'
 status: captured
 type: idea
 parent: seeds-176

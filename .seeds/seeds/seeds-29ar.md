@@ -1,13 +1,13 @@
 ---
 id: seeds-29ar
-title: "Measured: 0.6 and 0.7 output is byte-identical for every reading command — the storage change is invisible where it counts"
+title: 'Measured: 0.6 and 0.7 output is byte-identical for every reading command — the storage change is invisible where it counts'
 status: captured
 type: exploration
 created_at: 2026-09-01T15:55:59.282047+00:00
 updated_at: 2026-09-01T15:56:09.110474+00:00
 tags:
   - storage
-  - "0.7"
+  - '0.7'
   - differential
   - evidence
   - no-degradation

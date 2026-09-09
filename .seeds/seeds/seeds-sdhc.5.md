@@ -13,7 +13,7 @@ tags:
   - rendering
   - conversion
   - measured
-  - "0.7"
+  - '0.7'
   - 2026-08-31
 relationships:
   - target_id: seeds-bp0s

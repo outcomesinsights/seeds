@@ -1,6 +1,6 @@
 ---
 id: seeds-89
-title: "Knowledge accumulation: formalizing investigation capture as a seeds pattern"
+title: 'Knowledge accumulation: formalizing investigation capture as a seeds pattern'
 status: captured
 type: exploration
 created_at: 2026-02-26T16:37:32.179511+00:00

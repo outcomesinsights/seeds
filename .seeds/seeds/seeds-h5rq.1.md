@@ -1,6 +1,6 @@
 ---
 id: seeds-h5rq.1
-title: "Ruled: a cutting carries a conversation excerpt, not a pointer to a forked session"
+title: 'Ruled: a cutting carries a conversation excerpt, not a pointer to a forked session'
 status: captured
 type: decision
 parent: seeds-h5rq

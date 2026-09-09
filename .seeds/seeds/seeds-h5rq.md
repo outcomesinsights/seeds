@@ -1,6 +1,6 @@
 ---
 id: seeds-h5rq
-title: "seeds cutting: context-carrying capture, the vegetative sibling of jot"
+title: 'seeds cutting: context-carrying capture, the vegetative sibling of jot'
 status: captured
 type: decision
 created_at: 2026-09-01T16:29:11.606858+00:00

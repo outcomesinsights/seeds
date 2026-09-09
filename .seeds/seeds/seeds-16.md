@@ -1,6 +1,6 @@
 ---
 id: seeds-16
-title: "Everything is a seed: polymorphic model (statement, topic, question)"
+title: 'Everything is a seed: polymorphic model (statement, topic, question)'
 status: captured
 type: decision
 created_at: 2026-01-28T05:55:39.401266+00:00

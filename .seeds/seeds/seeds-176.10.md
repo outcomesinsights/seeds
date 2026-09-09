@@ -1,6 +1,6 @@
 ---
 id: seeds-176.10
-title: "Concrete proof intent falls out: seeds-generated beads carry their intent unprompted"
+title: 'Concrete proof intent falls out: seeds-generated beads carry their intent unprompted'
 status: captured
 type: idea
 parent: seeds-176

@@ -1,6 +1,6 @@
 ---
 id: seeds-113
-title: "Empirical capture quality testing: gold-standard benchmarking for seed capture"
+title: 'Empirical capture quality testing: gold-standard benchmarking for seed capture'
 status: captured
 type: idea
 created_at: 2026-02-27T17:21:06.046007+00:00

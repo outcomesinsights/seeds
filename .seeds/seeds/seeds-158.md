@@ -1,6 +1,6 @@
 ---
 id: seeds-158
-title: "Resolved: seeds audits its own body of knowledge as `winnow` — all five flavors, edge-scoped detection"
+title: 'Resolved: seeds audits its own body of knowledge as `winnow` — all five flavors, edge-scoped detection'
 status: resolved
 type: question
 created_at: 2026-06-15T21:58:55.152165+00:00

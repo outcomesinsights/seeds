@@ -6,7 +6,7 @@ type: question
 created_at: 2026-05-22T17:00:01.260389+00:00
 updated_at: 2026-08-27T13:40:16.540055+00:00
 resolved_at: 2026-08-27T13:40:16.540047+00:00
-resolution: "Reframed by seeds-147.3: lodestones do not surface from seeds at all. They surface because the promoted line lives in always-loaded project context (CLAUDE.md / README) that the agent runtime injects every session — a stronger mechanism than any internal seeds view. Shipped as `trellis` (renamed from `promote` per seeds-198)."
+resolution: 'Reframed by seeds-147.3: lodestones do not surface from seeds at all. They surface because the promoted line lives in always-loaded project context (CLAUDE.md / README) that the agent runtime injects every session — a stronger mechanism than any internal seeds view. Shipped as `trellis` (renamed from `promote` per seeds-198).'
 relationships:
   - target_id: seeds-147
     rel_type: questions

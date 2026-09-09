@@ -1,6 +1,6 @@
 ---
 id: seeds-115
-title: "Link seeds to experiments: track prototypes and their outcomes"
+title: 'Link seeds to experiments: track prototypes and their outcomes'
 status: captured
 type: idea
 created_at: 2026-03-11T20:48:52.883062+00:00

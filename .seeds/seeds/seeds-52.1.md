@@ -1,6 +1,6 @@
 ---
 id: seeds-52.1
-title: "Review tagging: flag seeds for consultation with specific people or meetings"
+title: 'Review tagging: flag seeds for consultation with specific people or meetings'
 status: resolved
 type: idea
 parent: seeds-52

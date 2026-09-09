@@ -1,6 +1,6 @@
 ---
 id: seeds-ngez
-title: "Test git fixtures can brick the main repo: agent worktrees share .git/config, and a bad write is silent until git stops working"
+title: 'Test git fixtures can brick the main repo: agent worktrees share .git/config, and a bad write is silent until git stops working'
 status: resolved
 type: concern
 created_at: 2026-08-26T21:07:57.117604+00:00

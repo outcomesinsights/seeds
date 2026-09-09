@@ -1,6 +1,6 @@
 ---
 id: seeds-10
-title: "JSONL export format: nested vs referenced structure"
+title: 'JSONL export format: nested vs referenced structure'
 status: captured
 type: question
 created_at: 2026-01-28T05:54:11.304384+00:00

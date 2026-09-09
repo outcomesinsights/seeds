@@ -1,6 +1,6 @@
 ---
 id: seeds-19
-title: "Question closure: multiple answerers and explicit resolution"
+title: 'Question closure: multiple answerers and explicit resolution'
 status: abandoned
 type: idea
 created_at: 2026-01-28T05:56:22.251720+00:00

@@ -1,6 +1,6 @@
 ---
 id: seeds-aj6w
-title: "Add --add-tag / --remove-tag: wholesale --tags forces agents into lossy read-modify-write"
+title: 'Add --add-tag / --remove-tag: wholesale --tags forces agents into lossy read-modify-write'
 status: resolved
 type: idea
 created_at: 2026-08-10T17:27:28.209866+00:00

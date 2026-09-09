@@ -1,6 +1,6 @@
 ---
 id: seeds-58
-title: "Web UI: Detail view shows attached questions"
+title: 'Web UI: Detail view shows attached questions'
 status: captured
 type: decision
 created_at: 2026-02-05T21:29:30.741771+00:00

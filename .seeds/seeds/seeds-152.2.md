@@ -1,6 +1,6 @@
 ---
 id: seeds-152.2
-title: "Decision: skills shipped with seeds are prompt-macro scale, not workflow engines"
+title: 'Decision: skills shipped with seeds are prompt-macro scale, not workflow engines'
 status: captured
 type: decision
 parent: seeds-152

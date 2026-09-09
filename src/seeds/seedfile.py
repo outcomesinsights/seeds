@@ -279,10 +279,33 @@ _NEEDS_BACKSLASH_RE = re.compile(r"[\x00-\x1f\x7f\\]")
 def _encode_scalar(value: str) -> str:
     """Render ``value`` as a YAML scalar this module can read back exactly.
 
-    Plain when it is unambiguously plain, double-quoted otherwise. The
-    double-quoted form is produced with :func:`json.dumps`, whose output is a
-    valid YAML 1.2 double-quoted scalar; ``ensure_ascii=False`` keeps UTF-8 text
-    readable in the file instead of escaping it to ``\\uXXXX``.
+    Plain when it is unambiguously plain; otherwise **whichever quoting needs
+    no backslash escapes** -- single-quoted for anything a YAML emitter would
+    write that way, double-quoted only when the value carries a character the
+    single-quoted form cannot hold. The double-quoted form is produced with
+    :func:`json.dumps`, whose output is a valid YAML 1.2 double-quoted scalar;
+    ``ensure_ascii=False`` keeps UTF-8 text readable in the file instead of
+    escaping it to ``\\uXXXX``.
+
+    The rule is not a style preference; it is what keeps the store a fixed
+    point, and it is PyYAML's rule, measured rather than assumed:
+
+    ==========================  ================================
+    value                       emitted
+    ==========================  ================================
+    unambiguously plain         plain
+    contains an apostrophe      double-quoted (``json.dumps``)
+    needs a backslash escape    double-quoted
+    anything else needing       single-quoted
+    quotes
+    ==========================  ================================
+
+    ``mdformat-frontmatter`` 2.0.10 -- the version nixpkgs ships -- re-emits
+    the whole frontmatter block through PyYAML on any CLI run, so a store
+    written any other way churns on every `mdformat` over the repo: 200 titles
+    and 10 resolutions in one store of 237. Both forms read, so it was churn
+    rather than breakage. 2.1.2 leaves frontmatter alone entirely, so matching
+    PyYAML is correct under either version.
     """
     if (
         value
@@ -294,13 +317,12 @@ def _encode_scalar(value: str) -> str:
         and not value.endswith(":")
     ):
         return value
-    if '"' in value and not _NEEDS_BACKSLASH_RE.search(value):
-        # Whichever quoting needs no backslash escapes. A resolution that quotes
-        # somebody verbatim is full of double quotes and nothing else, and
-        # `"he said \"yes\""` is the one form a markdown formatter rewrites --
-        # measured on 10 files across the corpus, every one of them a hard parse
-        # error afterwards. The single-quoted form escapes only `'`, by doubling.
-        return "'" + value.replace("'", "''") + "'"
+    if "'" not in value and not _NEEDS_BACKSLASH_RE.search(value):
+        # Single-quoted, and never with a doubled `''`: an apostrophe sends the
+        # whole value double-quoted, which is what PyYAML emits and therefore
+        # what the store is measured against. The reader still ACCEPTS `''`,
+        # because other emitters write it and a file carrying one must read.
+        return "'" + value + "'"
     return json.dumps(value, ensure_ascii=False)
 
 

@@ -1,6 +1,6 @@
 ---
 id: seeds-17
-title: "Inbox pattern: capture fast, refine later, achieve inbox zero"
+title: 'Inbox pattern: capture fast, refine later, achieve inbox zero'
 status: abandoned
 type: idea
 created_at: 2026-01-28T05:55:39.976585+00:00

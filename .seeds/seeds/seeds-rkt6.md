@@ -11,7 +11,7 @@ tags:
   - stash
   - tooling
   - rollout
-  - "0.7"
+  - '0.7'
   - measured
   - 2026-09-02
 relationships:

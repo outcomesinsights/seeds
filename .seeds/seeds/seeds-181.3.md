@@ -1,6 +1,6 @@
 ---
 id: seeds-181.3
-title: "sower: survey each project before routing (cold-start understanding)"
+title: 'sower: survey each project before routing (cold-start understanding)'
 status: captured
 type: idea
 parent: seeds-181

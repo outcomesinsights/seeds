@@ -1,6 +1,6 @@
 ---
 id: seeds-02ur
-title: "Cleanup: 36 orphaned legacy rows in the questions table, unreferenced since the v2 question-seeds migration"
+title: 'Cleanup: 36 orphaned legacy rows in the questions table, unreferenced since the v2 question-seeds migration'
 status: captured
 type: idea
 created_at: 2026-08-26T04:02:54.250253+00:00

@@ -13,7 +13,7 @@ tags:
   - tend
   - check
   - format
-  - "0.7"
+  - '0.7'
   - 2026-08-31
 relationships:
   - target_id: seeds-sdhc.2

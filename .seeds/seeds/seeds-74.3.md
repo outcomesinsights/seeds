@@ -1,6 +1,6 @@
 ---
 id: seeds-74.3
-title: "Investigate: intent.build vs seeds"
+title: 'Investigate: intent.build vs seeds'
 status: captured
 type: exploration
 parent: seeds-74

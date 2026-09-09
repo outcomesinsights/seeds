@@ -1,6 +1,6 @@
 ---
 id: seeds-55
-title: "Web UI: Use Pico CSS for minimal styling"
+title: 'Web UI: Use Pico CSS for minimal styling'
 status: captured
 type: decision
 created_at: 2026-02-05T21:28:42.458402+00:00

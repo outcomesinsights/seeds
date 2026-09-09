@@ -1,6 +1,6 @@
 ---
 id: seeds-14
-title: "Mind racing problem: capturing tangents without losing focus"
+title: 'Mind racing problem: capturing tangents without losing focus'
 status: captured
 type: concern
 created_at: 2026-01-28T05:55:38.391240+00:00

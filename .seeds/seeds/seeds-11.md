@@ -1,6 +1,6 @@
 ---
 id: seeds-11
-title: "Preserving deliberation: fear of AI overwriting without recording why"
+title: 'Preserving deliberation: fear of AI overwriting without recording why'
 status: deferred
 type: concern
 created_at: 2026-01-28T05:54:11.679638+00:00

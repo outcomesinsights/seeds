@@ -1,6 +1,6 @@
 ---
 id: seeds-sdhc
-title: "Storage direction after the Maildir turn: per-seed directories, a MUTABLE body holding current understanding, history from git log -p, and metadata as a collapse-log"
+title: 'Storage direction after the Maildir turn: per-seed directories, a MUTABLE body holding current understanding, history from git log -p, and metadata as a collapse-log'
 status: captured
 type: decision
 created_at: 2026-08-28T17:36:24.994445+00:00

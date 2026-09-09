@@ -1,6 +1,6 @@
 ---
 id: seeds-151
-title: "Observation: agents treat user-provided context as gospel rather than checking assumptions"
+title: 'Observation: agents treat user-provided context as gospel rather than checking assumptions'
 status: captured
 type: idea
 created_at: 2026-05-22T17:13:08.291458+00:00

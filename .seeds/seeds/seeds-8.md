@@ -1,6 +1,6 @@
 ---
 id: seeds-8
-title: "Resolution mechanics: how does resolving work for different seed types?"
+title: 'Resolution mechanics: how does resolving work for different seed types?'
 status: captured
 type: question
 created_at: 2026-01-28T05:54:10.461591+00:00

@@ -1,6 +1,6 @@
 ---
 id: seeds-63
-title: "Validation: AI follows workflow patterns when described in prompt"
+title: 'Validation: AI follows workflow patterns when described in prompt'
 status: captured
 type: decision
 created_at: 2026-02-06T00:09:38.081156+00:00

@@ -1,6 +1,6 @@
 ---
 id: seeds-159
-title: "Concern: resolved deliberation can go stale — staleness AND contradiction among resolved seeds"
+title: 'Concern: resolved deliberation can go stale — staleness AND contradiction among resolved seeds'
 status: resolved
 type: concern
 created_at: 2026-06-15T21:58:55.309000+00:00

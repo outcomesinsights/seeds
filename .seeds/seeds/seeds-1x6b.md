@@ -1,6 +1,6 @@
 ---
 id: seeds-1x6b
-title: "First external bug report (@markdanese): one bad JSONL record silently froze sync for a month, and doctor said it was fine"
+title: 'First external bug report (@markdanese): one bad JSONL record silently froze sync for a month, and doctor said it was fine'
 status: captured
 type: concern
 created_at: 2026-08-28T13:05:57.565844+00:00

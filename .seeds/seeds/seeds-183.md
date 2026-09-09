@@ -1,6 +1,6 @@
 ---
 id: seeds-183
-title: "seeds: do we need a single-location / cross-project way to query all seeds?"
+title: 'seeds: do we need a single-location / cross-project way to query all seeds?'
 status: resolved
 type: question
 created_at: 2026-06-23T20:43:33.749099+00:00

@@ -1,6 +1,6 @@
 ---
 id: seeds-x6m0
-title: "Seed walkthrough format: prose context block + AskUserQuestion chips, scoped to a related set — validated on the seeds-147 cluster"
+title: 'Seed walkthrough format: prose context block + AskUserQuestion chips, scoped to a related set — validated on the seeds-147 cluster'
 status: captured
 type: decision
 created_at: 2026-08-27T13:41:42.138187+00:00

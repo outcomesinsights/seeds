@@ -1,6 +1,6 @@
 ---
 id: seeds-59
-title: "Web UI: Want to bind to 0.0.0.0 for remote access"
+title: 'Web UI: Want to bind to 0.0.0.0 for remote access'
 status: captured
 type: idea
 created_at: 2026-02-05T21:34:03.443273+00:00

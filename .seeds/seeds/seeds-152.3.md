@@ -1,6 +1,6 @@
 ---
 id: seeds-152.3
-title: "Decision: install seeds skills as a Claude Code plugin (option 2) if feasible, else as a packaged copy command (option 1)"
+title: 'Decision: install seeds skills as a Claude Code plugin (option 2) if feasible, else as a packaged copy command (option 1)'
 status: resolved
 type: decision
 parent: seeds-152

@@ -1,6 +1,6 @@
 ---
 id: seeds-62
-title: "Idea: domain templates that scaffold seed structures"
+title: 'Idea: domain templates that scaffold seed structures'
 status: captured
 type: idea
 created_at: 2026-02-05T21:43:13.399226+00:00

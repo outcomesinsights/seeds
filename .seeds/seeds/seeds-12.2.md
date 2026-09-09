@@ -1,6 +1,6 @@
 ---
 id: seeds-12.2
-title: "Seeds as philosophy vs tool: the deliberation layer argument"
+title: 'Seeds as philosophy vs tool: the deliberation layer argument'
 status: captured
 type: exploration
 parent: seeds-12

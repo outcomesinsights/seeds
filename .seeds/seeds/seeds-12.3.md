@@ -1,6 +1,6 @@
 ---
 id: seeds-12.3
-title: "GitHub issues as a seeds source: bidirectional sync between seeds and GitHub Issues"
+title: 'GitHub issues as a seeds source: bidirectional sync between seeds and GitHub Issues'
 status: captured
 type: exploration
 parent: seeds-12

@@ -1,6 +1,6 @@
 ---
 id: seeds-160
-title: "Idea: retrospective outcome — did the resolved decision actually pan out?"
+title: 'Idea: retrospective outcome — did the resolved decision actually pan out?'
 status: deferred
 type: idea
 created_at: 2026-06-15T21:58:55.455330+00:00

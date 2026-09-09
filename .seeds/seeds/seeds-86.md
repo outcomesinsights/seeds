@@ -1,6 +1,6 @@
 ---
 id: seeds-86
-title: "Ephemeral vs persistent: beads wisps applied to seeds"
+title: 'Ephemeral vs persistent: beads wisps applied to seeds'
 status: captured
 type: idea
 created_at: 2026-02-24T17:05:47.446866+00:00

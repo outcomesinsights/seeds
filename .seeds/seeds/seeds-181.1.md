@@ -1,6 +1,6 @@
 ---
 id: seeds-181.1
-title: "sower: the routing engine — ingest a transcript, identify projects, create/update seeds, route"
+title: 'sower: the routing engine — ingest a transcript, identify projects, create/update seeds, route'
 status: captured
 type: exploration
 parent: seeds-181

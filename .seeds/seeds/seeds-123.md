@@ -1,12 +1,12 @@
 ---
 id: seeds-123
-title: "ID prefix convention: project name, not entity type"
+title: 'ID prefix convention: project name, not entity type'
 status: resolved
 type: decision
 created_at: 2026-03-12T15:19:08.064413+00:00
 updated_at: 2026-03-20T20:43:20.143263+00:00
 resolved_at: 2026-03-20T20:43:20.143256+00:00
-resolution: "Confirmed: project name prefix, not entity type. Combined with sequential ID decision (seed-d023f612) — IDs will be seeds-1, seeds-2, etc."
+resolution: 'Confirmed: project name prefix, not entity type. Combined with sequential ID decision (seed-d023f612) — IDs will be seeds-1, seeds-2, etc.'
 tags:
   - model
   - architecture

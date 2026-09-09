@@ -1,6 +1,6 @@
 ---
 id: seeds-lcfa.1
-title: "The rickety multi-host sync splits into two problems: nothing runs the import, and the import that does run is whole-record LWW"
+title: 'The rickety multi-host sync splits into two problems: nothing runs the import, and the import that does run is whole-record LWW'
 status: captured
 type: exploration
 parent: seeds-lcfa

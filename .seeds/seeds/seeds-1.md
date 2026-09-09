@@ -1,6 +1,6 @@
 ---
 id: seeds-1
-title: "Granularity question: how fine-grained should seeds be?"
+title: 'Granularity question: how fine-grained should seeds be?'
 status: resolved
 type: question
 created_at: 2026-01-28T05:54:00.742995+00:00

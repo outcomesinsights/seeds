@@ -1,13 +1,13 @@
 ---
 id: seeds-175.3
-title: "RESOLVED — Prose mechanics: blockquote the monologue, plant-pun close, no journey framing"
+title: 'RESOLVED — Prose mechanics: blockquote the monologue, plant-pun close, no journey framing'
 status: resolved
 type: decision
 parent: seeds-175
 created_at: 2026-06-17T16:39:52.991131+00:00
 updated_at: 2026-06-17T16:41:24.654484+00:00
 resolved_at: 2026-06-17T16:41:24.654468+00:00
-resolution: "Apply all three prose decisions: blockquote the monologue, plant-pun close, strip all journey framing."
+resolution: 'Apply all three prose decisions: blockquote the monologue, plant-pun close, strip all journey framing.'
 tags:
   - blog
   - prose

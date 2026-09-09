@@ -1,6 +1,6 @@
 ---
 id: seeds-54
-title: "Web UI: Use Flask for Python web framework"
+title: 'Web UI: Use Flask for Python web framework'
 status: captured
 type: decision
 created_at: 2026-02-05T21:28:41.193634+00:00

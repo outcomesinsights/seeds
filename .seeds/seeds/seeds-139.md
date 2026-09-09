@@ -1,6 +1,6 @@
 ---
 id: seeds-139
-title: "Lodestone seeds: should certain seeds govern project vision?"
+title: 'Lodestone seeds: should certain seeds govern project vision?'
 status: resolved
 type: idea
 created_at: 2026-05-05T15:24:20.243898+00:00

@@ -1,6 +1,6 @@
 ---
 id: seeds-6
-title: "Relationship types: what relationships do we need?"
+title: 'Relationship types: what relationships do we need?'
 status: exploring
 type: exploration
 created_at: 2026-01-28T05:54:02.752699+00:00

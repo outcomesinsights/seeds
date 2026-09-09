@@ -1,6 +1,6 @@
 ---
 id: seeds-124
-title: "Relationship type discovery: organic refinement of relates-to edges"
+title: 'Relationship type discovery: organic refinement of relates-to edges'
 status: captured
 type: decision
 created_at: 2026-03-12T15:19:16.241102+00:00

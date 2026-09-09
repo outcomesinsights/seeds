@@ -1,6 +1,6 @@
 ---
 id: seeds-152.5
-title: "Ratified: seeds skills stay thin skills over hardened CLI cores (deterministic→verb, judgment→skill)"
+title: 'Ratified: seeds skills stay thin skills over hardened CLI cores (deterministic→verb, judgment→skill)'
 status: resolved
 type: decision
 parent: seeds-152

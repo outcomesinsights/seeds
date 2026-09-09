@@ -1,6 +1,6 @@
 ---
 id: seeds-57
-title: "Web UI: Default port 53362"
+title: 'Web UI: Default port 53362'
 status: captured
 type: decision
 created_at: 2026-02-05T21:28:44.885816+00:00

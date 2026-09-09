@@ -1,6 +1,6 @@
 ---
 id: seeds-161
-title: "Concern: seeds captures the prescriptive journey well but under-captures what we LEARNED by trying"
+title: 'Concern: seeds captures the prescriptive journey well but under-captures what we LEARNED by trying'
 status: deferred
 type: concern
 created_at: 2026-06-15T21:58:55.600505+00:00

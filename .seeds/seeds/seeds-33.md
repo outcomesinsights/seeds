@@ -1,6 +1,6 @@
 ---
 id: seeds-33
-title: "Unclear: how are answers recorded? Part of question seed? Separate associated seed?"
+title: 'Unclear: how are answers recorded? Part of question seed? Separate associated seed?'
 status: abandoned
 type: idea
 created_at: 2026-01-28T17:30:19.866206+00:00

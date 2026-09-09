@@ -1,6 +1,6 @@
 ---
 id: seeds-lcfa.3
-title: "Dolt ledger: measured gains and costs for seeds specifically (titan, 2026-08-25)"
+title: 'Dolt ledger: measured gains and costs for seeds specifically (titan, 2026-08-25)'
 status: captured
 type: exploration
 parent: seeds-lcfa

@@ -1,6 +1,6 @@
 ---
 id: seeds-12
-title: "Beads integration: handoff from seeds to beads for implementation"
+title: 'Beads integration: handoff from seeds to beads for implementation'
 status: exploring
 type: idea
 created_at: 2026-01-28T05:54:12.048719+00:00

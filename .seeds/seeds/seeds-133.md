@@ -1,6 +1,6 @@
 ---
 id: seeds-133
-title: "Concern: verbatim source preservation vs feasibility"
+title: 'Concern: verbatim source preservation vs feasibility'
 status: captured
 type: concern
 created_at: 2026-03-12T20:02:21.150836+00:00

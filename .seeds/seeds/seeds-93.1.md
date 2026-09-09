@@ -1,6 +1,6 @@
 ---
 id: seeds-93.1
-title: "Pre-commit hooks: lint, format, and full test suite before every commit"
+title: 'Pre-commit hooks: lint, format, and full test suite before every commit'
 status: resolved
 type: decision
 parent: seeds-93

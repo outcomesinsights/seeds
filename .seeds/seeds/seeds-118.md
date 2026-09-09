@@ -1,6 +1,6 @@
 ---
 id: seeds-118
-title: "Specification graduation: spec-ready lifecycle state for deliberation completion"
+title: 'Specification graduation: spec-ready lifecycle state for deliberation completion'
 status: captured
 type: idea
 created_at: 2026-03-11T20:48:56.219952+00:00

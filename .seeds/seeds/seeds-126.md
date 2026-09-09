@@ -1,6 +1,6 @@
 ---
 id: seeds-126
-title: "Source document ingestion: the inbox model"
+title: 'Source document ingestion: the inbox model'
 status: captured
 type: exploration
 created_at: 2026-03-12T19:00:28.382547+00:00

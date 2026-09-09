@@ -1,6 +1,6 @@
 ---
 id: seeds-4
-title: "Source materials: transcripts and documents as input"
+title: 'Source materials: transcripts and documents as input'
 status: exploring
 type: idea
 created_at: 2026-01-28T05:54:01.882137+00:00

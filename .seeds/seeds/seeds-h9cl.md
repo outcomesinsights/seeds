@@ -1,6 +1,6 @@
 ---
 id: seeds-h9cl
-title: "Seed type is write-once: no CLI route to change it, single or bulk"
+title: 'Seed type is write-once: no CLI route to change it, single or bulk'
 status: resolved
 type: decision
 created_at: 2026-08-28T13:59:39.774761+00:00

@@ -1,6 +1,6 @@
 ---
 id: seeds-7
-title: "AI role: participant vs facilitator in deliberation?"
+title: 'AI role: participant vs facilitator in deliberation?'
 status: captured
 type: question
 created_at: 2026-01-28T05:54:10.099256+00:00

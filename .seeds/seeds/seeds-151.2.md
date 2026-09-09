@@ -1,6 +1,6 @@
 ---
 id: seeds-151.2
-title: "Refinement: the closer pattern only works user-initiated; agent self-invocation makes it performative"
+title: 'Refinement: the closer pattern only works user-initiated; agent self-invocation makes it performative'
 status: captured
 type: idea
 parent: seeds-151

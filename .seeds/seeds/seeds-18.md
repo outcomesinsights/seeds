@@ -1,6 +1,6 @@
 ---
 id: seeds-18
-title: "Learn from own planning: watch how we design seeds to inform seeds"
+title: 'Learn from own planning: watch how we design seeds to inform seeds'
 status: abandoned
 type: idea
 created_at: 2026-01-28T05:55:40.502005+00:00

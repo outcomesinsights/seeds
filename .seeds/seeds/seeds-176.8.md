@@ -1,6 +1,6 @@
 ---
 id: seeds-176.8
-title: "Origin: seeds answers what should we build, not what can we build (@markdanese; a response to plan files)"
+title: 'Origin: seeds answers what should we build, not what can we build (@markdanese; a response to plan files)'
 status: captured
 type: idea
 parent: seeds-176

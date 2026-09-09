@@ -1,6 +1,6 @@
 ---
 id: seeds-177
-title: "seeds capability: capture code-review feedback and feed it back into the originating deliberation"
+title: 'seeds capability: capture code-review feedback and feed it back into the originating deliberation'
 status: captured
 type: idea
 created_at: 2026-06-17T18:14:15.011910+00:00

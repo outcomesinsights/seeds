@@ -1,6 +1,6 @@
 ---
 id: seeds-169
-title: "Question: do agents actually consume seeds? Trace whether seed intent reaches the beads/agents that implement"
+title: 'Question: do agents actually consume seeds? Trace whether seed intent reaches the beads/agents that implement'
 status: resolved
 type: question
 created_at: 2026-06-15T22:01:59.182458+00:00

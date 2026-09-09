@@ -1,13 +1,13 @@
 ---
 id: seeds-ngez.1
-title: "Harden the git test sandbox: enforce the single door, and close the HOME-based config paths"
+title: 'Harden the git test sandbox: enforce the single door, and close the HOME-based config paths'
 status: resolved
 type: decision
 parent: seeds-ngez
 created_at: 2026-08-26T22:08:55.449652+00:00
 updated_at: 2026-08-31T21:35:01.470738+00:00
 resolved_at: 2026-08-31T21:35:01.470730+00:00
-resolution: "Shipped (bead seeds-3xs). Both decisions held. DECISION 1 (do not wholesale-mock git) was kept, and the reasoning proved out: the sandbox catches git doing things we did not predict, which a mock by definition cannot. The HOME-based config paths are closed as a category rather than one path — tests/githelpers.py sets GIT_CONFIG_GLOBAL=/dev/null, GIT_CONFIG_NOSYSTEM, HOME and XDG_CONFIG_HOME at the sandbox — and the single door is enforced by tests/test_git_single_door.py. Efficacy: none; the seed specified both gaps precisely enough to build from."
+resolution: 'Shipped (bead seeds-3xs). Both decisions held. DECISION 1 (do not wholesale-mock git) was kept, and the reasoning proved out: the sandbox catches git doing things we did not predict, which a mock by definition cannot. The HOME-based config paths are closed as a category rather than one path — tests/githelpers.py sets GIT_CONFIG_GLOBAL=/dev/null, GIT_CONFIG_NOSYSTEM, HOME and XDG_CONFIG_HOME at the sandbox — and the single door is enforced by tests/test_git_single_door.py. Efficacy: none; the seed specified both gaps precisely enough to build from.'
 tags:
   - testing
   - git

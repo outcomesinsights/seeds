@@ -1,6 +1,6 @@
 ---
 id: seeds-143
-title: "Prime guidance: describe primitives, not prescribe workflows"
+title: 'Prime guidance: describe primitives, not prescribe workflows'
 status: resolved
 type: decision
 created_at: 2026-05-18T16:44:28.520608+00:00

@@ -1,6 +1,6 @@
 ---
 id: seeds-50
-title: "Idea: periodic coherence check - do seeds tell a story or scattered fragments?"
+title: 'Idea: periodic coherence check - do seeds tell a story or scattered fragments?'
 status: captured
 type: idea
 created_at: 2026-01-28T21:00:23.250669+00:00

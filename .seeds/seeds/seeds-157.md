@@ -1,6 +1,6 @@
 ---
 id: seeds-157
-title: "Decision: multi-contributor attribution via git blame, not in-schema authorship"
+title: 'Decision: multi-contributor attribution via git blame, not in-schema authorship'
 status: captured
 type: decision
 created_at: 2026-06-15T20:43:59.376210+00:00

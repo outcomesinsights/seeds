@@ -1,6 +1,6 @@
 ---
 id: seeds-56
-title: "Web UI: Read-only to start"
+title: 'Web UI: Read-only to start'
 status: captured
 type: decision
 created_at: 2026-02-05T21:28:43.656439+00:00

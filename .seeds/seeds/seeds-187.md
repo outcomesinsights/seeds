@@ -1,6 +1,6 @@
 ---
 id: seeds-187
-title: "Skill: resolve-seeds-from-beads — close the loop after implementation"
+title: 'Skill: resolve-seeds-from-beads — close the loop after implementation'
 status: resolved
 type: idea
 created_at: 2026-06-24T17:55:15.892952+00:00

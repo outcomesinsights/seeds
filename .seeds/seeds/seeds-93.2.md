@@ -1,6 +1,6 @@
 ---
 id: seeds-93.2
-title: "Comprehensive test coverage: identify gaps and fill them before public beta"
+title: 'Comprehensive test coverage: identify gaps and fill them before public beta'
 status: resolved
 type: decision
 parent: seeds-93

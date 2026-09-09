@@ -7,7 +7,7 @@ parent: seeds-152
 created_at: 2026-05-27T19:05:16.254643+00:00
 updated_at: 2026-08-31T21:34:46.737334+00:00
 resolved_at: 2026-08-31T21:34:46.737325+00:00
-resolution: "Shipped (beads seeds-3p4, seeds-738, seeds-pfx) as the seeds-to-beads skill, carrying the pattern this seed described: separate actionable scope from context, decompose into self-contained beads with concrete paths and mechanical acceptance criteria, record dependencies, and land on a clean tree. Efficacy: none. Refinements arrived later as their own seeds rather than as tweaks — seeds-186 (intent-capture guidance) and seeds-w42l (consult the user on unsettled decisions), both still open."
+resolution: 'Shipped (beads seeds-3p4, seeds-738, seeds-pfx) as the seeds-to-beads skill, carrying the pattern this seed described: separate actionable scope from context, decompose into self-contained beads with concrete paths and mechanical acceptance criteria, record dependencies, and land on a clean tree. Efficacy: none. Refinements arrived later as their own seeds rather than as tweaks — seeds-186 (intent-capture guidance) and seeds-w42l (consult the user on unsettled decisions), both still open.'
 tags:
   - skill
   - workflow

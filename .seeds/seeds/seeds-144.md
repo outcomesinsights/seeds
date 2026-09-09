@@ -1,6 +1,6 @@
 ---
 id: seeds-144
-title: "Automate release tooling: changelog generation, release notes, version coordination"
+title: 'Automate release tooling: changelog generation, release notes, version coordination'
 status: resolved
 type: decision
 created_at: 2026-05-18T17:25:02.036395+00:00

@@ -1,6 +1,6 @@
 ---
 id: seeds-128
-title: "Concern: how much of a library should a seeds database carry?"
+title: 'Concern: how much of a library should a seeds database carry?'
 status: captured
 type: concern
 created_at: 2026-03-12T20:01:02.889220+00:00

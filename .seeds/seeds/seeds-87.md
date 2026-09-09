@@ -1,6 +1,6 @@
 ---
 id: seeds-87
-title: "Dynamic prime: inject live deliberation state into AI context"
+title: 'Dynamic prime: inject live deliberation state into AI context'
 status: captured
 type: idea
 created_at: 2026-02-24T17:05:47.732381+00:00

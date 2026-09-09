@@ -1,6 +1,6 @@
 ---
 id: seeds-176.4
-title: "Available, not lived: the could-do program as a platform for others — not my itch, but available"
+title: 'Available, not lived: the could-do program as a platform for others — not my itch, but available'
 status: captured
 type: idea
 parent: seeds-176

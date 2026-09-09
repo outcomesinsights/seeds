@@ -1,6 +1,6 @@
 ---
 id: seeds-lcfa.4
-title: "Python-friendly alternatives to Dolt: cr-sqlite, the SQLite session extension, and git-as-merge-engine"
+title: 'Python-friendly alternatives to Dolt: cr-sqlite, the SQLite session extension, and git-as-merge-engine'
 status: captured
 type: exploration
 parent: seeds-lcfa

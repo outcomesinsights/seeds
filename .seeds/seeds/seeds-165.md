@@ -1,6 +1,6 @@
 ---
 id: seeds-165
-title: "Concern: the candor paradox — does knowing deliberation is captured make it more performed?"
+title: 'Concern: the candor paradox — does knowing deliberation is captured make it more performed?'
 status: deferred
 type: concern
 created_at: 2026-06-15T22:00:39.766079+00:00

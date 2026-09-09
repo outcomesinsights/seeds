@@ -1,6 +1,6 @@
 ---
 id: seeds-3
-title: "Mobile/remote capture: using seeds away from screen"
+title: 'Mobile/remote capture: using seeds away from screen'
 status: deferred
 type: idea
 created_at: 2026-01-28T05:54:01.527555+00:00

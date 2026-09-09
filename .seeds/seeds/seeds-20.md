@@ -1,6 +1,6 @@
 ---
 id: seeds-20
-title: "Explicit vs possible relationships: confirmed vs AI-suggested"
+title: 'Explicit vs possible relationships: confirmed vs AI-suggested'
 status: deferred
 type: idea
 created_at: 2026-01-28T05:56:22.814297+00:00

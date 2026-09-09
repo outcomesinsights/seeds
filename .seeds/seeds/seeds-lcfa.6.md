@@ -1,6 +1,6 @@
 ---
 id: seeds-lcfa.6
-title: "Per-seed files + DuckDB: the split is right, but DuckDB is a cross-project READER, not a replacement store"
+title: 'Per-seed files + DuckDB: the split is right, but DuckDB is a cross-project READER, not a replacement store'
 status: captured
 type: exploration
 parent: seeds-lcfa

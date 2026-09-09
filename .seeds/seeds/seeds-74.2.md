@@ -1,6 +1,6 @@
 ---
 id: seeds-74.2
-title: "Resolved: capture is hybrid — cutting (proactive) + glean (retrospective)"
+title: 'Resolved: capture is hybrid — cutting (proactive) + glean (retrospective)'
 status: resolved
 type: exploration
 parent: seeds-74

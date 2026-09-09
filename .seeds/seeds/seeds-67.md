@@ -1,6 +1,6 @@
 ---
 id: seeds-67
-title: "Web UI: Toggle between nested and flat view"
+title: 'Web UI: Toggle between nested and flat view'
 status: captured
 type: idea
 created_at: 2026-02-06T16:17:04.925924+00:00

@@ -1,12 +1,12 @@
 ---
 id: seeds-166
-title: "Idea (declined): proactive corpus extraction — reconstruct deliberation from non-deliberation artifacts"
+title: 'Idea (declined): proactive corpus extraction — reconstruct deliberation from non-deliberation artifacts'
 status: resolved
 type: idea
 created_at: 2026-06-15T22:00:39.891839+00:00
 updated_at: 2026-08-31T20:02:42.337339+00:00
 resolved_at: 2026-06-15T22:01:58.791305+00:00
-resolution: "Declined as a boundary. Reconstruction-from-residue is low-value for this workflow: seeds sources live, cheap capture (AI + Zoom transcription), not inference from code/git/old artifacts. Ryan deliberately does not back-infer pre-seeds decisions on his decades-old system — that information is assumed lost to time."
+resolution: 'Declined as a boundary. Reconstruction-from-residue is low-value for this workflow: seeds sources live, cheap capture (AI + Zoom transcription), not inference from code/git/old artifacts. Ryan deliberately does not back-infer pre-seeds decisions on his decades-old system — that information is assumed lost to time.'
 tags:
   - gleaning
   - extraction

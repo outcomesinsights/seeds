@@ -1,6 +1,6 @@
 ---
 id: seeds-142
-title: "Transcript-incorporation workflow: dedupe-and-create against existing seeds (recurring use case)"
+title: 'Transcript-incorporation workflow: dedupe-and-create against existing seeds (recurring use case)'
 status: captured
 type: exploration
 created_at: 2026-05-18T15:57:25.771304+00:00

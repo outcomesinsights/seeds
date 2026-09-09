@@ -1,6 +1,6 @@
 ---
 id: seeds-125
-title: "Terminology: gleaning as the agriculture metaphor for seed extraction"
+title: 'Terminology: gleaning as the agriculture metaphor for seed extraction'
 status: captured
 type: idea
 created_at: 2026-03-12T19:00:12.606718+00:00

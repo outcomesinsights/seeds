@@ -1,6 +1,6 @@
 ---
 id: seeds-182
-title: "seeds: emit a high-level self-summary of a repo (interesting / recent / popular) for external routers"
+title: 'seeds: emit a high-level self-summary of a repo (interesting / recent / popular) for external routers'
 status: captured
 type: idea
 created_at: 2026-06-23T20:43:33.572245+00:00

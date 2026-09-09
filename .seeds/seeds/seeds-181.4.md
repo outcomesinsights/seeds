@@ -1,6 +1,6 @@
 ---
 id: seeds-181.4
-title: "sower: meeting the tool halfway — self-labeling projects vs how much to adapt my speaking style"
+title: 'sower: meeting the tool halfway — self-labeling projects vs how much to adapt my speaking style'
 status: captured
 type: concern
 parent: seeds-181

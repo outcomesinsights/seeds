@@ -1,6 +1,6 @@
 ---
 id: seeds-47
-title: "AI friction: hesitation to capture in real-time, kept asking permission instead of just recording"
+title: 'AI friction: hesitation to capture in real-time, kept asking permission instead of just recording'
 status: abandoned
 type: concern
 created_at: 2026-01-28T21:00:19.625272+00:00

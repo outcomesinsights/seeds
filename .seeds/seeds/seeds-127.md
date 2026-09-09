@@ -1,6 +1,6 @@
 ---
 id: seeds-127
-title: "Concern: privacy, copyright, and proprietary data in source documents"
+title: 'Concern: privacy, copyright, and proprietary data in source documents'
 status: captured
 type: concern
 created_at: 2026-03-12T19:00:43.469674+00:00

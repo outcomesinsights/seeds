@@ -6,7 +6,7 @@ type: concern
 created_at: 2026-08-26T18:02:05.442796+00:00
 updated_at: 2026-08-31T20:02:48.005975+00:00
 resolved_at: 2026-08-26T19:38:40.125221+00:00
-resolution: "Fixed in daf5e2a (bead seeds-btr): answer refuses a re-answer by default, --replace discards, --append revises, reusing _guard_content_replacement. resolved_at re-stamps on every successful path. Efficacy: minor tweaking, PLANNING MISS — the bead said reuse the shared helper without noticing the helper carried caller-specific prose, which produced seeds-3dkj. Better bead: before reusing a shared helper, check whether any of its OUTPUT is caller-specific."
+resolution: 'Fixed in daf5e2a (bead seeds-btr): answer refuses a re-answer by default, --replace discards, --append revises, reusing _guard_content_replacement. resolved_at re-stamps on every successful path. Efficacy: minor tweaking, PLANNING MISS — the bead said reuse the shared helper without noticing the helper carried caller-specific prose, which produced seeds-3dkj. Better bead: before reusing a shared helper, check whether any of its OUTPUT is caller-specific.'
 tags:
   - bug
   - answer

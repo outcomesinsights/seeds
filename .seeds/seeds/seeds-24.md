@@ -1,6 +1,6 @@
 ---
 id: seeds-24
-title: "Deliberation complete criteria: when is a topic fully deliberated?"
+title: 'Deliberation complete criteria: when is a topic fully deliberated?'
 status: abandoned
 type: question
 created_at: 2026-01-28T05:56:25.097845+00:00

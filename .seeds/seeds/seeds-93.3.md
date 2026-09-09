@@ -1,6 +1,6 @@
 ---
 id: seeds-93.3
-title: "Dependabot auto-merge: enable after CI is solid"
+title: 'Dependabot auto-merge: enable after CI is solid'
 status: resolved
 type: idea
 parent: seeds-93

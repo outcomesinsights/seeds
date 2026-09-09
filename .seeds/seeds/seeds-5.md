@@ -1,6 +1,6 @@
 ---
 id: seeds-5
-title: "Constraints and inputs: are they seeds or metadata?"
+title: 'Constraints and inputs: are they seeds or metadata?'
 status: captured
 type: question
 created_at: 2026-01-28T05:54:02.344871+00:00

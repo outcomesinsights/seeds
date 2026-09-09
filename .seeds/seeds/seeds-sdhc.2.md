@@ -14,7 +14,7 @@ tags:
   - plausibility
   - parse-policy
   - hook
-  - "0.7"
+  - '0.7'
   - 2026-08-31
 relationships:
   - target_id: seeds-wurl

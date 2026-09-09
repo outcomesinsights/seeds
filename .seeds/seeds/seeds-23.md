@@ -1,6 +1,6 @@
 ---
 id: seeds-23
-title: "Verbal cues for AI parsing: specific phrasing to hint at intent"
+title: 'Verbal cues for AI parsing: specific phrasing to hint at intent'
 status: deferred
 type: idea
 created_at: 2026-01-28T05:56:24.548442+00:00

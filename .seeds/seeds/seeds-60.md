@@ -1,6 +1,6 @@
 ---
 id: seeds-60
-title: "Feedback: seeds great for ad-hoc but lacks completeness checking"
+title: 'Feedback: seeds great for ad-hoc but lacks completeness checking'
 status: captured
 type: concern
 created_at: 2026-02-05T21:43:03.052122+00:00

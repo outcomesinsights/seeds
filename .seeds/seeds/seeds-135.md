@@ -1,12 +1,12 @@
 ---
 id: seeds-135
-title: "ID format: should seeds use sequential IDs instead of hex hashes?"
+title: 'ID format: should seeds use sequential IDs instead of hex hashes?'
 status: resolved
 type: decision
 created_at: 2026-03-20T20:18:19.975197+00:00
 updated_at: 2026-03-20T20:43:18.756589+00:00
 resolved_at: 2026-03-20T20:43:18.756581+00:00
-resolution: "Option 6: sequential IDs with project prefix (seeds-1, seeds-2). Single-user for now; concurrency concerns acknowledged but deferred. Existing hex IDs will be remapped in a one-time migration."
+resolution: 'Option 6: sequential IDs with project prefix (seeds-1, seeds-2). Single-user for now; concurrency concerns acknowledged but deferred. Existing hex IDs will be remapped in a one-time migration.'
 tags:
   - model
   - architecture

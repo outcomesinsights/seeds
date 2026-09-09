@@ -1,6 +1,6 @@
 ---
 id: seeds-61
-title: "ETL workflow pattern: hierarchical seed structure"
+title: 'ETL workflow pattern: hierarchical seed structure'
 status: captured
 type: exploration
 created_at: 2026-02-05T21:43:08.458592+00:00

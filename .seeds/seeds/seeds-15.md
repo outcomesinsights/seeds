@@ -1,6 +1,6 @@
 ---
 id: seeds-15
-title: "Domain-agnostic design: software, RPGs, house projects, life decisions"
+title: 'Domain-agnostic design: software, RPGs, house projects, life decisions'
 status: deferred
 type: idea
 created_at: 2026-01-28T05:55:38.878483+00:00

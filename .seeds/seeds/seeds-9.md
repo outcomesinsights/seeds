@@ -1,6 +1,6 @@
 ---
 id: seeds-9
-title: "Options modeling: how to handle alternatives and proposals"
+title: 'Options modeling: how to handle alternatives and proposals'
 status: captured
 type: exploration
 created_at: 2026-01-28T05:54:10.848060+00:00

@@ -1,6 +1,6 @@
 ---
 id: seeds-176
-title: "Next blog post: the payoff of capturing the journey"
+title: 'Next blog post: the payoff of capturing the journey'
 status: captured
 type: idea
 created_at: 2026-06-17T16:38:14.872811+00:00

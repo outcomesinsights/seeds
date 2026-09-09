@@ -7,7 +7,7 @@ parent: seeds-147
 created_at: 2026-06-27T03:29:43.603883+00:00
 updated_at: 2026-08-31T20:02:41.287189+00:00
 resolved_at: 2026-08-27T13:40:29.183904+00:00
-resolution: "Fork landed on (A) resolve-and-reference, not (B) perpetually-active — the resolve-reluctance was distrust of resolution, not a real requirement to stay open. Fix recorded in seeds-147.3 and shipped: the decision is carried forward into durable context by `trellis`, and resolved seeds stay inside the audit family (seeds-159 / seeds-160 / seeds-164). The behavioural signature this seed identified — hesitation-to-resolve as the promotion signal — survives as a useful heuristic. Body says `promote` throughout; shipped as `trellis`, renamed per seeds-198."
+resolution: 'Fork landed on (A) resolve-and-reference, not (B) perpetually-active — the resolve-reluctance was distrust of resolution, not a real requirement to stay open. Fix recorded in seeds-147.3 and shipped: the decision is carried forward into durable context by `trellis`, and resolved seeds stay inside the audit family (seeds-159 / seeds-160 / seeds-164). The behavioural signature this seed identified — hesitation-to-resolve as the promotion signal — survives as a useful heuristic. Body says `promote` throughout; shipped as `trellis`, renamed per seeds-198.'
 tags:
   - lodestone
   - lived

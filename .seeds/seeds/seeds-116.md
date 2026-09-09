@@ -1,6 +1,6 @@
 ---
 id: seeds-116
-title: "Capture agent reasoning: solve the reasoning compression problem"
+title: 'Capture agent reasoning: solve the reasoning compression problem'
 status: captured
 type: idea
 created_at: 2026-03-11T20:48:54.642336+00:00

@@ -7,7 +7,7 @@ parent: seeds-142
 created_at: 2026-05-18T15:57:57.742823+00:00
 updated_at: 2026-08-31T21:34:29.302047+00:00
 resolved_at: 2026-08-31T21:34:29.302040+00:00
-resolution: "Shipped (bead seeds-0vs): create and update scan title/content for <prefix>-NNN patterns and refuse unknown ids, with --allow-unknown-refs as the deliberate override. Efficacy: none. Known limit, recorded separately in seeds-6hj5: shape-based validation cannot catch a hallucinated base36 id that happens to be well-formed, only one that names nothing."
+resolution: 'Shipped (bead seeds-0vs): create and update scan title/content for <prefix>-NNN patterns and refuse unknown ids, with --allow-unknown-refs as the deliberate override. Efficacy: none. Known limit, recorded separately in seeds-6hj5: shape-based validation cannot catch a hallucinated base36 id that happens to be well-formed, only one that names nothing.'
 tags:
   - ai-ux
   - capture-gap

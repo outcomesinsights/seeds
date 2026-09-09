@@ -1,6 +1,6 @@
 ---
 id: seeds-51
-title: "Observation: tool surfaces its own design issues through usage friction"
+title: 'Observation: tool surfaces its own design issues through usage friction'
 status: captured
 type: idea
 created_at: 2026-01-28T21:00:24.509574+00:00

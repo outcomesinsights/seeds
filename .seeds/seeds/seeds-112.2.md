@@ -1,6 +1,6 @@
 ---
 id: seeds-112.2
-title: "Workflow friction: capturing mid-conversation has a cost agents skip"
+title: 'Workflow friction: capturing mid-conversation has a cost agents skip'
 status: captured
 type: exploration
 parent: seeds-112

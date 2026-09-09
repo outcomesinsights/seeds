@@ -1,6 +1,6 @@
 ---
 id: seeds-13
-title: "Tag vocabulary: limited predefined tags per project"
+title: 'Tag vocabulary: limited predefined tags per project'
 status: captured
 type: idea
 created_at: 2026-01-28T05:55:37.916695+00:00

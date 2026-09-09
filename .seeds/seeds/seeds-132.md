@@ -1,6 +1,6 @@
 ---
 id: seeds-132
-title: "Decision: user is gatekeeper for source document safety, not seeds"
+title: 'Decision: user is gatekeeper for source document safety, not seeds'
 status: captured
 type: decision
 created_at: 2026-03-12T20:02:06.749399+00:00

@@ -1,6 +1,6 @@
 ---
 id: seeds-65
-title: "Web UI: Column sorting for all columns"
+title: 'Web UI: Column sorting for all columns'
 status: captured
 type: idea
 created_at: 2026-02-06T16:17:03.158885+00:00

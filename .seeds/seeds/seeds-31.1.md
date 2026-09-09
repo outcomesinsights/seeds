@@ -1,6 +1,6 @@
 ---
 id: seeds-31.1
-title: "Decision: seeds show --output-file writes to temp file, returns path"
+title: 'Decision: seeds show --output-file writes to temp file, returns path'
 status: resolved
 type: idea
 parent: seeds-31

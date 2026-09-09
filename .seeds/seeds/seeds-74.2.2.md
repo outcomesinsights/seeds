@@ -1,6 +1,6 @@
 ---
 id: seeds-74.2.2
-title: "Hybrid approach: explicit callouts + end-of-session sweep"
+title: 'Hybrid approach: explicit callouts + end-of-session sweep'
 status: resolved
 type: decision
 parent: seeds-74.2

@@ -1,6 +1,6 @@
 ---
 id: seeds-131
-title: "Re-ingestion: source documents should be revisitable as project context evolves"
+title: 'Re-ingestion: source documents should be revisitable as project context evolves'
 status: captured
 type: idea
 created_at: 2026-03-12T20:01:55.444027+00:00

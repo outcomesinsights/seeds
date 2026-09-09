@@ -1,6 +1,6 @@
 ---
 id: seeds-69
-title: "Web UI: Prettify markdown before rendering (fix LLM formatting issues)"
+title: 'Web UI: Prettify markdown before rendering (fix LLM formatting issues)'
 status: captured
 type: idea
 created_at: 2026-02-06T16:17:05.716769+00:00

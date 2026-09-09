@@ -1,6 +1,6 @@
 ---
 id: seeds-152.1
-title: "Skill: ingest a live user utterance into new/updated seeds"
+title: 'Skill: ingest a live user utterance into new/updated seeds'
 status: captured
 type: idea
 parent: seeds-152

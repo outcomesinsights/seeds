@@ -1,6 +1,6 @@
 ---
 id: seeds-lcfa.1.1
-title: "Immediate cheap win: wire seeds sync into git hooks so the DB stops needing to be refreshed by hand"
+title: 'Immediate cheap win: wire seeds sync into git hooks so the DB stops needing to be refreshed by hand'
 status: captured
 type: idea
 parent: seeds-lcfa.1

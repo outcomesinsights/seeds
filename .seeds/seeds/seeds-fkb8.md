@@ -1,6 +1,6 @@
 ---
 id: seeds-fkb8
-title: "The storage smell named precisely: the derived store is authorized to destroy the durable one, and JSONL is the wrong format for a file agents edit"
+title: 'The storage smell named precisely: the derived store is authorized to destroy the durable one, and JSONL is the wrong format for a file agents edit'
 status: captured
 type: exploration
 created_at: 2026-08-28T16:32:53.991031+00:00

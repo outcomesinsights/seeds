@@ -1,6 +1,6 @@
 ---
 id: seeds-181.2
-title: "sower: project registry + cross-server/location awareness (personal + professional)"
+title: 'sower: project registry + cross-server/location awareness (personal + professional)'
 status: captured
 type: idea
 parent: seeds-181

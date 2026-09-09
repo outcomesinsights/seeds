@@ -1,6 +1,6 @@
 ---
 id: seeds-147.1
-title: "Risk: lodestones may over-channel agent reasoning and suppress fruitful exploration"
+title: 'Risk: lodestones may over-channel agent reasoning and suppress fruitful exploration'
 status: captured
 type: concern
 parent: seeds-147

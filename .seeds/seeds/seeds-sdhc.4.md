@@ -1,6 +1,6 @@
 ---
 id: seeds-sdhc.4
-title: "Filenames carry identity only: relationships live at both ends and hierarchy in a parent field, with check enforcing both"
+title: 'Filenames carry identity only: relationships live at both ends and hierarchy in a parent field, with check enforcing both'
 status: captured
 type: decision
 parent: seeds-sdhc
@@ -13,7 +13,7 @@ tags:
   - frontmatter
   - check
   - symmetry
-  - "0.7"
+  - '0.7'
   - 2026-08-31
 relationships:
   - target_id: seeds-sdhc.2
