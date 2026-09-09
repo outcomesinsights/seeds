@@ -106,7 +106,14 @@ Mechanically:
   The options live in **`.seeds/.mdformat.toml`**, which the writer reads and
   which mdformat itself discovers — it searches upward from each file's own
   directory, so the config is scoped to the store and the repo's other
-  markdown keeps mdformat's defaults. The two therefore run the same
+  markdown keeps mdformat's defaults. **A store carrying no config of its own
+  inherits from above**, because the writer walks the same path mdformat
+  would; nearest wins. That makes a `~/.mdformat.toml` shared state between
+  seeds and every other markdown tool on the machine — one decision living in
+  two repos. Changing `number` or `extensions` there rewrites seed bodies in
+  every store that has not been normalized yet. That is the design working,
+  not a leak: the alternative is seeds writing under one set of options while
+  a plain `mdformat` run rewrites under another. The two therefore run the same
   formatter by construction rather than by being configured alike. Its
   `extensions` allowlist is load-bearing twice over: it neutralizes a plugin
   the operator happens to have installed, and it must name `frontmatter`,
