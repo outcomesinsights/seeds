@@ -893,16 +893,25 @@ def mdformat_options(seeds_dir: Path | None) -> dict[str, object]:
     also scopes the config to the store: the repo's other markdown is
     untouched by it.
 
-    An absent file means mdformat's own defaults.
+    When the store carries no config of its own the search continues UPWARD,
+    exactly as mdformat's does, because a config further up still governs a
+    plain `mdformat` run over these files -- a user-level `~/.mdformat.toml`
+    governs every markdown file under `$HOME` on the machine. Stopping at the
+    store would leave seeds writing under mdformat's defaults while the CLI
+    wrote under that config, which is the divergence this whole file exists to
+    prevent. Nothing found anywhere means mdformat's own defaults.
     """
     if seeds_dir is None:
         return {}
-    config = Path(seeds_dir) / MDFORMAT_CONFIG
-    try:
-        mtime = config.stat().st_mtime_ns
-    except OSError:
-        return {}
-    return dict(_mdformat_options_cached(str(config), mtime))
+    directory = Path(seeds_dir).resolve()
+    for candidate in [directory, *directory.parents]:
+        config = candidate / MDFORMAT_CONFIG
+        try:
+            mtime = config.stat().st_mtime_ns
+        except OSError:
+            continue
+        return dict(_mdformat_options_cached(str(config), mtime))
+    return {}
 
 
 MDFORMAT_CONFIG_TEMPLATE = """\

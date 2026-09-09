@@ -56,6 +56,7 @@ from seeds.models import (
     sanitize_prefix,
 )
 from seeds.seedfile import (
+    MDFORMAT_CONFIG,
     SeedFileError,
     SeedRecord,
     read_seed_file,
@@ -1689,7 +1690,12 @@ def normalize(ctx: Context, dry_run: bool) -> None:
     Run it after upgrading seeds, and after any bump to the pinned formatter.
     """
     store = ctx.get_store()
-    config = write_mdformat_config(store.seeds_dir)
+    config = store.seeds_dir / MDFORMAT_CONFIG
+    if not dry_run:
+        # A dry run writes nothing, the config included -- it is a change to
+        # the store like any other, and creating it would change what the
+        # very next real run then produces.
+        config = write_mdformat_config(store.seeds_dir)
     files = sorted(store.files_dir.glob("*.md"))
     changed = []
     for path in files:

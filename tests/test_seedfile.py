@@ -866,6 +866,22 @@ class TestTheStoreIsAFixedPointOfItsFormatter:
         body = "---\n\ntext\n"
         assert format_body(body, tmp_path).startswith("______")
 
+    def test_options_are_inherited_from_an_ancestor(self, tmp_path):
+        """mdformat walks upward from each file, so a config above the store
+        still governs a plain `mdformat` run over it. Stopping at the store
+        would leave seeds writing under different options than the CLI."""
+        (tmp_path / ".mdformat.toml").write_text("number = true\n", encoding="utf-8")
+        store = tmp_path / "repo" / ".seeds"
+        store.mkdir(parents=True)
+        assert mdformat_options(store) == {"number": True}
+
+    def test_the_nearer_config_wins(self, tmp_path):
+        (tmp_path / ".mdformat.toml").write_text("number = true\n", encoding="utf-8")
+        store = tmp_path / "repo" / ".seeds"
+        store.mkdir(parents=True)
+        (store / ".mdformat.toml").write_text("number = false\n", encoding="utf-8")
+        assert mdformat_options(store) == {"number": False}
+
     def test_an_absent_config_means_mdformat_s_defaults(self, tmp_path):
         assert mdformat_options(tmp_path) == {}
         assert mdformat_options(None) == {}
