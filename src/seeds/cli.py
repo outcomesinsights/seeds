@@ -851,8 +851,15 @@ def format_seed_detail(
 @main.command()
 @click.argument("query")
 @click.option("--all", "include_all", is_flag=True, help="Include resolved/abandoned")
+@click.option(
+    "--literal",
+    "-F",
+    is_flag=True,
+    help="Match QUERY as literal text, not a regex. Use it to paste a "
+    "reference exactly as it appears in a file.",
+)
 @pass_context
-def search(ctx: Context, query: str, include_all: bool) -> None:
+def search(ctx: Context, query: str, include_all: bool, literal: bool) -> None:
     """Search seed files with ripgrep.
 
     QUERY is a ripgrep regular expression, matched case-insensitively over the
@@ -864,6 +871,15 @@ def search(ctx: Context, query: str, include_all: bool) -> None:
       - Phrases:       seeds search 'agent reasoning'
       - Alternation:   seeds search 'agent|sweep'
       - Anchors, classes, and the rest of the regex vocabulary all work.
+      - Literal text:  seeds search -F '\\[[clc-97e]\\]'
+
+    **Use `-F` for anything pasted out of a seed file.** The formatter escapes
+    brackets, so a reference is STORED as `\\[[clc-97e]\\]` -- and pasting
+    that as a regex reads `[clc-97e]` as a character class, which matches any
+    file containing a `[9]` and returns a small, plausible, entirely wrong
+    result set. Measured on a real store: two confident hits, neither of which
+    mentioned the reference at all. `-F` matches the text, and still finds it
+    whichever way the formatter spelled it.
 
     This replaced an FTS5 index, and the difference worth knowing is that there
     is no stemmer: 'merging' no longer finds 'merge'. What FTS uniquely
@@ -873,7 +889,7 @@ def search(ctx: Context, query: str, include_all: bool) -> None:
     store = ctx.get_store()
 
     try:
-        results = store.search(query, include_terminal=include_all)
+        results = store.search(query, include_terminal=include_all, literal=literal)
     except StoreError as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)

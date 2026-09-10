@@ -29,6 +29,7 @@ to name its first one.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -533,7 +534,13 @@ class Store:
 
     # -- Search (bead seeds-4co.10) -----------------------------------------
 
-    def search(self, query: str, *, include_terminal: bool = False) -> list[SeedRecord]:
+    def search(
+        self,
+        query: str,
+        *,
+        include_terminal: bool = False,
+        literal: bool = False,
+    ) -> list[SeedRecord]:
         """Seeds whose file matches ``query``, via ripgrep.
 
         The status filter is part of the ripgrep pass rather than a Python
@@ -547,6 +554,8 @@ class Store:
         "merge") and ranking. Recall is not the casualty: on a real query grep
         returned 72 hits to FTS's 77 and found one FTS missed.
         """
+        if literal:
+            query = re.escape(query)
         return sorted(
             (
                 record

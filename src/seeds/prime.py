@@ -110,6 +110,12 @@ alignment are not markdown constructs; a fence is.
 - `seeds recent [--since=7d]` - Recently touched (any status)
 - `seeds search '<regex>'` - ripgrep over the seed files (case-insensitive; no stemming, so search for the stem: `merg` finds both `merge` and `merging`)
 
+**Searching for a REFERENCE: use `seeds search -F`.** The formatter escapes
+brackets, so `[[clc-97e]]` is stored `\\[[clc-97e]\\]`. Pasting that as a regex
+reads `[clc-97e]` as a character class and returns a small, plausible, entirely
+wrong result set — measured: two confident hits, neither mentioning the
+reference. `-F` matches the text and finds it whichever way it was spelled.
+
 ### Searching Across Repos (use ripgrep directly — there is no seeds verb)
 
 A seed is a markdown file, so searching *many* projects at once is one glob over

@@ -958,3 +958,39 @@ class TestRenamePrefixLeavesOtherStoresAlone:
         body = read_seed_file(seeds_dir_of(store) / "oigh-a1b2.md").body
         assert "oigh-a1b2" in body
         assert "seeds-a1b2" not in body
+
+
+class TestLiteralSearch:
+    """seeds-34c's sibling, found by clc-main: the store holds a spelling that
+    is not a valid regex for itself, so the obvious user action — copy what you
+    see in the file and search for it — returns confident false positives."""
+
+    def _store(self, tmp_path, bodies):
+        seeds_dir = tmp_path / ".seeds"
+        (seeds_dir / "seeds").mkdir(parents=True)
+        (seeds_dir / "config.yaml").write_text("prefix: t\n", encoding="utf-8")
+        for index, body in enumerate(bodies):
+            (seeds_dir / "seeds" / f"t-a{index}b2.md").write_text(
+                f"---\nid: t-a{index}b2\ntitle: A seed\nstatus: captured\n"
+                "type: idea\ncreated_at: 2026-01-01T00:00:00+00:00\n"
+                "updated_at: 2026-01-01T00:00:00+00:00\n---\n\n" + body + "\n",
+                encoding="utf-8",
+            )
+        return Store(seeds_dir)
+
+    def test_a_pasted_reference_matches_the_file_it_came_from(self, tmp_path):
+        store = self._store(tmp_path, [r"See \[[t-xh9]\] for detail."])
+        # Pasted exactly as the formatter stored it.
+        assert [r.id for r in store.search(r"\[[t-xh9]\]", literal=True)] == ["t-a0b2"]
+
+    def test_it_finds_the_reference_however_the_formatter_spelled_it(self, tmp_path):
+        store = self._store(tmp_path, [r"See \[[t-xh9]\] here.", "See [[t-xh9]] here."])
+        found = {r.id for r in store.search("[[t-xh9]]", literal=True)}
+        assert found == {"t-a0b2", "t-a1b2"}
+
+    def test_without_literal_a_character_class_matches_the_wrong_file(self, tmp_path):
+        """The measured failure: `[t-xh9]` is a class, so a file carrying a
+        bare `[9]` matches and the reference it names appears nowhere in it."""
+        store = self._store(tmp_path, ["An unrelated note about item [9]."])
+        assert [r.id for r in store.search(r"\[[t-xh9]\]")] == ["t-a0b2"]
+        assert store.search(r"\[[t-xh9]\]", literal=True) == []
