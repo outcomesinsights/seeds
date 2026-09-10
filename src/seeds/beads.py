@@ -29,6 +29,8 @@ import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
+from seeds.gitstage import subprocess_env
+
 BEADS_DIR = ".beads"
 BEADS_ISSUES_FILE = "issues.jsonl"
 
@@ -125,6 +127,11 @@ def query_bead_ids(seeds_dir: Path, refs: Sequence[str]) -> set[str] | None:
         completed = subprocess.run(
             [executable, "show", *refs, "--json"],
             cwd=seeds_dir.parent,
+            # `bd` shells out to git itself, and an inherited GIT_DIR outranks
+            # both cwd and an explicit `git -C` -- so without this, a `bd show`
+            # from inside a hook reads whichever repo the hook is committing
+            # in, not this one. Same seam as gitstage's, for the same reason.
+            env=subprocess_env(),
             stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,

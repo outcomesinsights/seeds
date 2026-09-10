@@ -6,7 +6,7 @@ tests/test_git_single_door.py), and for the same reason: the hardening below is
 easy to write once and easy to forget the second time, and a second copy is how
 the 2026-08-26 incident happened.
 
-**The hook contract.** :func:`_subprocess_env` strips the repo-pinning ``GIT_*``
+**The hook contract.** :func:`subprocess_env` strips the repo-pinning ``GIT_*``
 variables. A hook -- and anything the hook spawns -- inherits ``GIT_DIR`` and
 friends pointing at the commit in progress, so a subprocess that asks a question
 about some *other* directory gets an answer about the wrong repository.
@@ -61,7 +61,7 @@ _GIT_REPO_ENV_VARS = (
 )
 
 
-def _subprocess_env() -> dict[str, str]:
+def subprocess_env() -> dict[str, str]:
     """The current environment with repo-pinning GIT_* variables removed."""
     return {k: v for k, v in os.environ.items() if k not in _GIT_REPO_ENV_VARS}
 
@@ -79,7 +79,7 @@ def git_text(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
             capture_output=True,
             text=True,
             check=False,
-            env=_subprocess_env(),
+            env=subprocess_env(),
         )
     except OSError as exc:  # git not installed, cwd gone
         raise GitUnavailable(f"could not run git: {exc}") from exc
@@ -101,7 +101,7 @@ def git_bytes(
             capture_output=True,
             check=False,
             input=stdin,
-            env=_subprocess_env(),
+            env=subprocess_env(),
         )
     except OSError as exc:
         raise GitUnavailable(f"could not run git: {exc}") from exc

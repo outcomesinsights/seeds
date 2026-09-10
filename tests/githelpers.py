@@ -9,7 +9,7 @@ with the main repo, so a plain ``git config <k> <v>`` from inside one lands in
 the shared file. That was the third time this class of leak bit the suite, so
 the containment here is deliberately belt-and-braces:
 
-* ``_subprocess_env()`` (from ``seeds.gitstage``) strips the six repo-pinning
+* ``subprocess_env()`` (from ``seeds.gitstage``) strips the six repo-pinning
   ``GIT_*`` variables git exports into hooks. That is production behaviour
   ``seeds sync`` genuinely needs, and it is right here for the same reason:
   running this suite as this repo's own pre-commit ``pytest`` hook otherwise
@@ -32,7 +32,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from seeds.gitstage import _subprocess_env
+from seeds.gitstage import subprocess_env
 
 # The identity every throwaway repo gets. Named constants rather than inline
 # literals so the session guard in conftest.py can recognise these exact
@@ -67,7 +67,7 @@ def git_env(cwd: Path) -> dict[str, str]:
     resolving upward to the real repo and writing its config.
     """
     sandbox = Path(cwd).resolve().parent
-    env = _subprocess_env()
+    env = subprocess_env()
     for name in _IDENTITY_ENV_VARS:
         env.pop(name, None)
     env["GIT_CEILING_DIRECTORIES"] = str(sandbox)
