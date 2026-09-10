@@ -3267,3 +3267,36 @@ class TestNormalizeRefusesToMixAReformatIn:
             assert result.exit_code == 0
         finally:
             os.chdir(original)
+
+
+class TestAppendCanComeFromStdin:
+    """The route that was missing, and the one agents actually need.
+
+    `seeds create --content-file` existed; `--append` took TEXT only, so the
+    only way to add several hundred words was argv or `cat >>` straight into
+    the file — and that second one bypasses the writer, so the body is never
+    formatted. Measured on a real store: the only four files wanting a reformat
+    were the four seeds written that day by exactly that route.
+    """
+
+    def test_appending_from_stdin_leaves_the_store_canonical(
+        self, cli_runner, initialized_env
+    ):
+        created = cli_runner.invoke(main, ["create", "-t", "A seed", "-c", "first"])
+        assert created.exit_code == 0
+        seed_id = created.output.split("Created seed: ")[1].split()[0]
+
+        appended = cli_runner.invoke(
+            main,
+            ["update", seed_id, "--append", "-"],
+            input="more text\n\n- a bullet\n- another\n",
+        )
+        assert appended.exit_code == 0
+
+        body = cli_runner.invoke(main, ["show", seed_id]).output
+        assert "more text" in body
+        assert "a bullet" in body
+        # The point: it went through the writer, so it is already formatted.
+        assert cli_runner.invoke(main, ["normalize", "--dry-run"]).output.startswith(
+            "1 seed file(s), 0 would be rewritten."
+        )

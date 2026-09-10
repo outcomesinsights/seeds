@@ -132,6 +132,17 @@ you mean (a habitat's root, `~/projects/<org>/`, or `..` from a sibling repo).
 - Bodies referencing unknown `<prefix>-...` IDs are rejected, base36 hash IDs included; existing seeds, beads and a short allowlist of prose terms all count as known; pass `--allow-unknown-refs` to override
 - Bead IDs are checked against a sibling `.beads/issues.jsonl`, and anything it does not vouch for is confirmed with `bd` itself before being called unknown -- that export is throttled, so a bead created seconds ago is real and missing from it
 
+**A LONG BODY GOES THROUGH THE CLI, NEVER `cat >>`.** `seeds create -t "..."
+--content-file body.md` takes a body from a file, and both `--content -` and
+`--append -` read from stdin, so `seeds update <id> --append - < more.md`
+appends a long passage without it ever touching argv. Appending raw text
+to `.seeds/seeds/<id>.md` with a heredoc bypasses the writer, so the body is
+never formatted and the file lands off the store's canonical form -- measured
+on a real store, where the only four files wanting a reformat were the four
+seeds written that day by exactly that route. `seeds check --smells` reports
+such a file as `non-canonical-bytes`; `seeds check` alone will not, because
+canonicality is a smell and never a violation.
+
 ### Updating
 - `seeds explore <id>` - Start working on a seed
 - `seeds resolve <id> --resolution="what happened"` - Mark as resolved with outcome

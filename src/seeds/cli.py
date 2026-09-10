@@ -1245,7 +1245,13 @@ def trellis(
         "seed does not carry it; cannot be combined with --tags)"
     ),
 )
-@click.option("--append", "-a", "append_text", help="Append to content")
+@click.option(
+    "--append",
+    "-a",
+    "append_text",
+    metavar="TEXT",
+    help="Append to content. Pass - to read the appendix from stdin.",
+)
 @click.option(
     "--replace",
     is_flag=True,
@@ -1303,6 +1309,14 @@ def update(
     record = get_seed_or_exit(store, seed_id)
 
     content = _resolve_content(content, content_file)
+    if append_text == STDIN_SENTINEL:
+        # The same sentinel `--content` uses, for the same reason: an appendix
+        # is a body too, and the route it arrived by is not a different kind of
+        # update. Without this the only way to append a long passage is argv or
+        # `cat >> .seeds/seeds/<id>.md`, and that second one bypasses the
+        # writer entirely -- measured on a real store, where the only four
+        # files wanting a reformat were the four written that way that day.
+        append_text = sys.stdin.read().rstrip("\n")
 
     _validate_id_refs(store, [title, content, append_text], allow_unknown_refs)
     _reject_ambiguous_tag_flags(tags, add_tags, remove_tags)
