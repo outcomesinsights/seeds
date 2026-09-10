@@ -1,4 +1,4 @@
 sync:
     mode: dolt-native
-
+    remote: "git+https://github.com/outcomesinsights/seeds.git"
 export.auto: false
