@@ -53,3 +53,7 @@ claude_stuff/
 # Nix build outputs (flake.nix / flake.lock are tracked; `result` symlinks are not)
 result
 result-*
+
+# Beads export — derived. The Dolt remote at refs/dolt/data is the store
+# and the backup; this file is kept on disk for local grep only.
+.beads/issues.jsonl

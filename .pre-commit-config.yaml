@@ -106,7 +106,7 @@ repos:
       # index.lock race the native auto-export hits.
       - id: beads-export
         name: beads export (db -> tracked JSONL)
-        entry: bash -c 'bd export -o .beads/issues.jsonl && git add .beads/issues.jsonl'
+        entry: bash -c 'bd export -o .beads/issues.jsonl'
         language: system
         pass_filenames: false
         always_run: true
