@@ -28,6 +28,7 @@ from seeds.check import (
 )
 from seeds.convert import ConversionError, convert
 from seeds.convert import format_report as format_conversion_report
+from seeds.gitstage import git_text
 from seeds.glean import (
     AUTO_TAG,
     GleanError,
@@ -1670,6 +1671,48 @@ def prime(no_digest: bool, digest_limit: int) -> None:
     )
 
 
+def _display_path(path: Path) -> str:
+    """``path`` relative to the working directory when it is under it.
+
+    The output is meant to be pasted into a `git commit -- …`, so it has to be
+    a path git will accept from where the operator is standing.
+    """
+    try:
+        return str(path.resolve().relative_to(Path.cwd()))
+    except ValueError:
+        return str(path)
+
+
+def _refuse_a_dirty_store(seeds_dir: Path) -> None:
+    """Refuse to reformat a store that has uncommitted changes.
+
+    A reformat mixed into somebody's uncommitted seed produces a commit
+    labelled "reformat, not an edit" that is neither, and it is exactly the
+    commit nobody reads line by line. Ruled by three sessions independently on
+    2026-09-10, each having nearly done it: the guard belongs in the tool, not
+    in the instructions somebody has to remember.
+
+    Only the STORE is checked, not the whole tree. Measured across the fleet
+    the same day: of five stores wanting a pass, four sat in trees carrying
+    unrelated dirt -- a journal file, a beads log -- and refusing those would
+    make the command unusable. The wider tree is handled by naming the files
+    to commit rather than by refusing.
+    """
+    try:
+        completed = git_text(seeds_dir, "status", "--porcelain", "--", str(seeds_dir))
+    except GitUnavailable:
+        return  # not a work tree, or no git: nothing to protect
+    if completed.returncode != 0 or not completed.stdout.strip():
+        return
+    names = [line[3:] for line in completed.stdout.strip().split("\n")][:5]
+    raise click.ClickException(
+        "the store has uncommitted changes, so a reformat would be mixed into "
+        "them:\n  " + "\n  ".join(names) + "\n\nCommit or stash those first. A "
+        "reformat has to land on its own, or the commit that says 'reformat, "
+        "not an edit' is both."
+    )
+
+
 @main.command()
 @click.option(
     "--dry-run",
@@ -1690,6 +1733,8 @@ def normalize(ctx: Context, dry_run: bool) -> None:
     Run it after upgrading seeds, and after any bump to the pinned formatter.
     """
     store = ctx.get_store()
+    if not dry_run:
+        _refuse_a_dirty_store(store.seeds_dir)
     config = store.seeds_dir / MDFORMAT_CONFIG
     if not dry_run:
         # A dry run writes nothing, the config included -- it is a change to
@@ -1711,11 +1756,21 @@ def normalize(ctx: Context, dry_run: bool) -> None:
     verb = "would be rewritten" if dry_run else "rewritten"
     click.echo(f"{len(files)} seed file(s), {len(changed)} {verb}.")
     for path in changed:
-        click.echo(f"  {path.name}")
+        click.echo(f"  {_display_path(path)}")
     if changed and not dry_run:
-        click.echo("Commit this on its own -- it is a reformat, not an edit.")
+        # Named as PATHS, and with the command spelled out, because the obvious
+        # thing to type next -- `git add .seeds` -- is wrong. A seed written by
+        # somebody else DURING this run lands in the same directory, and a
+        # directory add sweeps it into a commit labelled "reformat" that looks
+        # tidy and passes every check. Measured: clc-main's tree was clean at
+        # the start and a stranger's seed appeared about a minute in.
+        click.echo("\nCommit exactly these, and nothing else -- it is a")
+        click.echo("reformat, not an edit, and the store may have been written")
+        click.echo("to while this ran:\n")
+        quoted = " ".join(_display_path(path) for path in changed)
+        click.echo(f"    git commit -m 'chore(seeds): normalize' -- {quoted}")
     if config.exists():
-        click.echo(f"Formatter config: {config}")
+        click.echo(f"\nFormatter config: {config}")
 
 
 @main.command()

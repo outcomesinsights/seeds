@@ -26,6 +26,7 @@ from tests.beadshelpers import (
     install_fake_bd,
     make_beads_workspace,
 )
+from tests.githelpers import git_init
 
 
 def _extract_created_id(output: str) -> str:
@@ -3230,3 +3231,39 @@ class TestSkillsInstall:
             "seeds-marketplace",
         ] in argvs
         assert any(a[:3] == ["claude", "plugin", "uninstall"] for a in argvs)
+
+
+class TestNormalizeRefusesToMixAReformatIn:
+    """Ruled 2026-09-10 after three sessions each nearly swept somebody's
+    uncommitted seed into a commit labelled "reformat, not an edit"."""
+
+    def test_it_refuses_when_the_store_is_dirty(self, cli_runner, tmp_path):
+        repo = tmp_path / "repo"
+        (repo / ".seeds" / "seeds").mkdir(parents=True)
+        git_init(repo)
+        original = os.getcwd()
+        os.chdir(repo)
+        try:
+            assert cli_runner.invoke(main, ["init", "--prefix", "t"]).exit_code == 0
+            cli_runner.invoke(main, ["jot", "A thought"])
+            result = cli_runner.invoke(main, ["normalize"])
+            assert result.exit_code != 0
+            assert "uncommitted changes" in result.output
+            assert "reformat has to land on its own" in result.output
+        finally:
+            os.chdir(original)
+
+    def test_a_dry_run_is_allowed_on_a_dirty_store(self, cli_runner, tmp_path):
+        """It writes nothing, so there is nothing to mix in."""
+        repo = tmp_path / "repo"
+        (repo / ".seeds" / "seeds").mkdir(parents=True)
+        git_init(repo)
+        original = os.getcwd()
+        os.chdir(repo)
+        try:
+            cli_runner.invoke(main, ["init", "--prefix", "t"])
+            cli_runner.invoke(main, ["jot", "A thought"])
+            result = cli_runner.invoke(main, ["normalize", "--dry-run"])
+            assert result.exit_code == 0
+        finally:
+            os.chdir(original)
