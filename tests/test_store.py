@@ -863,6 +863,11 @@ class TestAtomicWrites:
         assert store.path_for("seed-test").read_bytes() == before
 
 
+def seeds_dir_of(store):
+    """The directory holding a store's seed files."""
+    return store.files_dir
+
+
 def _store_with(tmp_path, body):
     """A one-seed store whose body is written to disk verbatim."""
     seeds_dir = tmp_path / ".seeds"
@@ -911,3 +916,45 @@ class TestSearchReadsTheFormatterSSpelling:
     def test_it_finds_a_seed_whose_reference_the_formatter_escaped(self, tmp_path):
         store = _store_with(tmp_path, r"See \[[clc-97e]\]: 70 papers.")
         assert [record.id for record in store.search(r"\[\[clc-97e\]\]")] == ["t-1"]
+
+
+class TestRenamePrefixLeavesOtherStoresAlone:
+    """seeds-34c. A store carrying the prefix `seeds` is disproportionately
+    likely to be one that WRITES about seeds, and so to cite the seeds repo's
+    own ids in prose — which is exactly the store somebody renames."""
+
+    def _store(self, tmp_path, body):
+        seeds_dir = tmp_path / ".seeds"
+        (seeds_dir / "seeds").mkdir(parents=True)
+        (seeds_dir / "config.yaml").write_text("prefix: seeds\n", encoding="utf-8")
+        (seeds_dir / "seeds" / "seeds-a1b2.md").write_text(
+            "---\nid: seeds-a1b2\ntitle: About the seeds tool\nstatus: captured\n"
+            "type: idea\ncreated_at: 2026-01-01T00:00:00+00:00\n"
+            "updated_at: 2026-01-01T00:00:00+00:00\n---\n\n" + body + "\n",
+            encoding="utf-8",
+        )
+        return Store(seeds_dir)
+
+    def test_a_citation_of_another_stores_id_is_not_rewritten(self, tmp_path):
+        store = self._store(
+            tmp_path,
+            "Recorded as seeds-112 in the seeds project, and the seeds-12.x "
+            "family. Named explicitly in seeds-60 too.",
+        )
+        store.rename_prefix("oigh")
+
+        # Inventoried rather than eyeballed: six prose changes across 58
+        # renamed files is what made this invisible in review the first time.
+        body = read_seed_file(seeds_dir_of(store) / "oigh-a1b2.md").body
+        assert "seeds-112" in body
+        assert "seeds-12.x" in body
+        assert "seeds-60" in body
+        assert "oigh-112" not in body
+        assert "oigh-60" not in body
+
+    def test_this_stores_own_ids_are_still_rewritten(self, tmp_path):
+        store = self._store(tmp_path, "This seed is seeds-a1b2, see it.")
+        store.rename_prefix("oigh")
+        body = read_seed_file(seeds_dir_of(store) / "oigh-a1b2.md").body
+        assert "oigh-a1b2" in body
+        assert "seeds-a1b2" not in body

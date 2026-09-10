@@ -140,19 +140,28 @@ def _id_ref_pattern(old_prefix: str) -> re.Pattern[str]:
 def _is_id_ref(suffix: str, old_prefix: str, known_ids: Container[str]) -> bool:
     """Decide whether a matched ``<old_prefix>-<suffix>`` token is a real ID ref.
 
-    A purely numeric suffix is always treated as a reference: that is the
-    grandfathered sequential scheme, and matching it unconditionally keeps
-    references to since-deleted seeds rewritable.
-
-    A hash-shaped suffix counts only when the ID is in ``known_ids``. No
+    **Every suffix is judged the same way: membership in ``known_ids``.** No
     heuristic can separate a base36 hash from an English word by shape
-    ('seeds-related' is valid base36), so membership in the database is the
-    only sound test. ``known_ids`` holds top-level IDs; a child reference is
-    judged by its parent.
+    ('seeds-related' is valid base36), so membership in the store is the only
+    sound test. ``known_ids`` holds top-level IDs; a child reference is judged
+    by its parent.
+
+    A numeric suffix used to short-circuit to ``True``, on the reasoning that
+    matching it unconditionally "keeps references to since-deleted seeds
+    rewritable". It protected a case seeds cannot produce -- there is no delete
+    verb, and ``Store.delete`` is called by nothing but its own tests; a seed is
+    abandoned, never removed (§7, nothing is destroyed). What it did produce is
+    silent corruption of ANOTHER store's ids: renaming a store off the prefix
+    ``seeds`` rewrote five prose citations of the seeds repo's own ids into
+    references that have never existed, and ``seeds check`` cannot see it
+    because the results are syntactically perfect (seeds-34c).
+
+    That failure is selected for by the situation that motivates the command.
+    The prefix people most want to rename away from is ``seeds`` itself, and a
+    store carrying it is disproportionately likely to be one that WRITES about
+    seeds, and so to cite this repo's ids in prose.
     """
     top = suffix.split(".", 1)[0]
-    if top.isdigit():
-        return True
     return f"{old_prefix}-{top}" in known_ids
 
 

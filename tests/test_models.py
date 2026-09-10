@@ -294,24 +294,29 @@ class TestRewriteIdRefs:
     """Tests for rewrite_id_refs."""
 
     def test_simple_reference(self):
-        text, count = rewrite_id_refs("see seeds-7", "seeds", "myproj")
+        text, count = rewrite_id_refs("see seeds-7", "seeds", "myproj", {"seeds-7"})
         assert text == "see myproj-7"
         assert count == 1
 
     def test_multiple_references(self):
         text, count = rewrite_id_refs(
-            "seeds-1 and seeds-2 and seeds-3", "seeds", "myproj"
+            "seeds-1 and seeds-2 and seeds-3",
+            "seeds",
+            "myproj",
+            {"seeds-1", "seeds-2", "seeds-3"},
         )
         assert text == "myproj-1 and myproj-2 and myproj-3"
         assert count == 3
 
     def test_child_id_reference(self):
-        text, count = rewrite_id_refs("see seeds-7.1.2", "seeds", "myproj")
+        text, count = rewrite_id_refs("see seeds-7.1.2", "seeds", "myproj", {"seeds-7"})
         assert text == "see myproj-7.1.2"
         assert count == 1
 
     def test_markdown_link(self):
-        text, count = rewrite_id_refs("See [seeds-7](url)", "seeds", "myproj")
+        text, count = rewrite_id_refs(
+            "See [seeds-7](url)", "seeds", "myproj", {"seeds-7"}
+        )
         assert text == "See [myproj-7](url)"
         assert count == 1
 
@@ -321,13 +326,17 @@ class TestRewriteIdRefs:
         assert count == 0
 
     def test_does_not_touch_inside_word(self):
-        text, count = rewrite_id_refs("see myseeds-7 here", "seeds", "myproj")
+        text, count = rewrite_id_refs(
+            "see myseeds-7 here", "seeds", "myproj", {"seeds-7"}
+        )
         # Preceded by 's' (alphanumeric) → no match.
         assert text == "see myseeds-7 here"
         assert count == 0
 
     def test_does_not_touch_trailing_word(self):
-        text, count = rewrite_id_refs("see seeds-7-banana", "seeds", "myproj")
+        text, count = rewrite_id_refs(
+            "see seeds-7-banana", "seeds", "myproj", {"seeds-7"}
+        )
         # Followed by '-' (in our exclusion class) → no match.
         assert text == "see seeds-7-banana"
         assert count == 0
@@ -338,12 +347,14 @@ class TestRewriteIdRefs:
         assert count == 0
 
     def test_idempotent(self):
-        once, _ = rewrite_id_refs("see seeds-7", "seeds", "myproj")
-        twice, _ = rewrite_id_refs(once, "seeds", "myproj")
+        once, _ = rewrite_id_refs("see seeds-7", "seeds", "myproj", {"seeds-7"})
+        twice, _ = rewrite_id_refs(once, "seeds", "myproj", {"seeds-7"})
         assert once == twice
 
     def test_hyphenated_prefix(self):
-        text, count = rewrite_id_refs("see my-proj-7 here", "my-proj", "different")
+        text, count = rewrite_id_refs(
+            "see my-proj-7 here", "my-proj", "different", {"my-proj-7"}
+        )
         assert text == "see different-7 here"
         assert count == 1
 
@@ -375,15 +386,22 @@ class TestRewriteIdRefs:
         assert text == "see myproj-k3n7.1"
         assert count == 1
 
-    def test_numeric_ref_does_not_need_known_ids(self):
-        """Sequential refs are rewritten even for since-deleted seeds."""
-        text, count = rewrite_id_refs("see seeds-7", "seeds", "myproj", {"seeds-k3n7"})
-        assert text == "see myproj-7"
-        assert count == 1
+    def test_a_numeric_ref_ALSO_needs_known_ids(self):
+        """It used to short-circuit to True, "to keep references to
+        since-deleted seeds rewritable" — protecting a case seeds cannot
+        produce, since nothing deletes a seed. What it did produce was silent
+        rewriting of ANOTHER store's ids (seeds-34c): renaming a store off the
+        prefix `seeds` turned prose citations of the seeds repo's own ids into
+        references that have never existed."""
+        text, count = rewrite_id_refs(
+            "Recorded as seeds-112 in the seeds project", "seeds", "myproj"
+        )
+        assert text == "Recorded as seeds-112 in the seeds project"
+        assert count == 0
 
     def test_all_digit_hash_ref_is_rewritten(self):
         """'seeds-060' parses as a number, so it rewrites either way."""
-        text, count = rewrite_id_refs("see seeds-060", "seeds", "myproj")
+        text, count = rewrite_id_refs("see seeds-060", "seeds", "myproj", {"seeds-060"})
         assert text == "see myproj-060"
         assert count == 1
 
@@ -392,7 +410,9 @@ class TestIterIdRefSnippets:
     """Tests for iter_id_ref_snippets."""
 
     def test_basic_snippet(self):
-        pairs = iter_id_ref_snippets("see seeds-7 now", "seeds", "myproj")
+        pairs = iter_id_ref_snippets(
+            "see seeds-7 now", "seeds", "myproj", known_ids={"seeds-7"}
+        )
         assert pairs == [("see seeds-7 now", "see myproj-7 now")]
 
     def test_no_matches_returns_empty(self):
@@ -400,7 +420,12 @@ class TestIterIdRefSnippets:
         assert pairs == []
 
     def test_multiple_pairs(self):
-        pairs = iter_id_ref_snippets("first seeds-1 then seeds-2", "seeds", "myproj")
+        pairs = iter_id_ref_snippets(
+            "first seeds-1 then seeds-2",
+            "seeds",
+            "myproj",
+            known_ids={"seeds-1", "seeds-2"},
+        )
         assert len(pairs) == 2
         assert "seeds-1" in pairs[0][0]
         assert "myproj-1" in pairs[0][1]
@@ -409,7 +434,9 @@ class TestIterIdRefSnippets:
 
     def test_ellipsis_marker_for_long_context(self):
         text = "x" * 200 + " seeds-7 " + "y" * 200
-        pairs = iter_id_ref_snippets(text, "seeds", "myproj", ctx=10)
+        pairs = iter_id_ref_snippets(
+            text, "seeds", "myproj", ctx=10, known_ids={"seeds-7"}
+        )
         assert pairs[0][0].startswith("…")
         assert pairs[0][0].endswith("…")
 
@@ -418,6 +445,7 @@ class TestIterIdRefSnippets:
             "line one\nline two seeds-7 line three\nlast",
             "seeds",
             "myproj",
+            known_ids={"seeds-7"},
         )
         assert "\n" not in pairs[0][0]
         assert "\n" not in pairs[0][1]
