@@ -463,6 +463,26 @@ class TestNonCanonicalBytesSmell:
         assert "body-kept-verbatim" in codes(findings)
         assert "non-canonical-bytes" not in codes(findings)
 
+    def test_a_merely_STALE_body_is_not_named(self, tmp_path):
+        """The half that was missing, and it mislabelled three real files.
+
+        A body written by an OLDER seeds and not yet normalized is one the
+        formatter would change — but the writer did not decline it, and calling
+        it "stored exactly as it came, because formatting would change what it
+        means" is a lie about a file whose only problem is its age. `seeds
+        normalize` fixes such a file; a permanent exception does not.
+        """
+        seeds_dir = store(tmp_path, record(body="settled\n"))
+        path = self.path_of(seeds_dir)
+        # Bullets an older writer emitted and the current one would normalize.
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("settled\n", "text\n+ a\n+ b\n"),
+            encoding="utf-8",
+        )
+        findings = codes(check_smells(seeds_dir))
+        assert "body-kept-verbatim" not in findings
+        assert "non-canonical-bytes" in findings  # stale, and named as stale
+
     def test_an_ordinary_body_is_not_named(self, tmp_path):
         seeds_dir = store(tmp_path, record(body="Ordinary deliberation.\n"))
         assert "body-kept-verbatim" not in codes(check_smells(seeds_dir))

@@ -108,6 +108,7 @@ from seeds.seedfile import (
     _run_mdformat,
     autofence,
     expected_parent,
+    format_body,
     inverse_relation,
     is_valid_id,
     parse_seed_file,
@@ -882,10 +883,17 @@ def _bodies_kept_verbatim(
         if not record.body.strip():
             continue
         try:
-            formatted = _run_mdformat(autofence(record.body), path.parent.parent)
+            declined = format_body(record.body, path.parent.parent) == record.body
+            reshaped = _run_mdformat(autofence(record.body), path.parent.parent)
         except Exception:  # a formatter failure is not this tier's business
             continue
-        if formatted == record.body:
+        # BOTH halves are the finding. `reshaped != body` alone fires on a file
+        # that is merely STALE -- written by an older seeds and not yet
+        # normalized -- and calling that "stored exactly as it came, because
+        # formatting would change what it means" is a lie about a file whose
+        # only problem is its age. Three of four files reported this way on a
+        # real store were exactly that, and `seeds normalize` fixes them.
+        if reshaped == record.body or not declined:
             continue
         findings.append(
             Finding(
