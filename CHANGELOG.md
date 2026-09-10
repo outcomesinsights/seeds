@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0a4] - 2026-09-10
+
+**The store stops being able to hold a seed that a formatter rejects.** a2 made
+the store a fixed point of mdformat and a3 corrected how it spells things; a4
+removes the last exception, which was the writer opting a body out of formatting
+altogether. That exception is now empty on every store measured — 0 bodies,
+down from 4 reported and 3 genuine.
+
+Both bodies it existed for are fenced at the source instead. A fork's git
+conflict markers: `=======` is also a setext heading underline, so unfenced they
+read as a heading and a formatter returns `# \<<\<<\<<< database`. And an
+unfenced YAML sample — a label, a `---`, the sample, a `---` — parses as a
+heading whose text is the whole sample, which formatting joins onto one `## …`
+line. The tell there is the SPAN, not the content: markdown-it reports a
+five-line heading, and nobody writes one of those.
+
+The detector for that exception was also over-reporting. It fired on any body a
+formatter would change, which includes one an older seeds wrote and nobody has
+normalized — calling a merely stale file "stored exactly as it came, because
+formatting would change what it means". Three quarters of the evidence that
+prompted this release was that mislabel.
+
+### Fixed
+- Fence the fork block and the mislabelled setext block ([afbccb1](https://github.com/outcomesinsights/seeds/commit/afbccb1f11caaf9b7e69ea75415ffbd40d0c9f28))
+- Body-kept-verbatim was naming files that are merely stale ([a3d43ea](https://github.com/outcomesinsights/seeds/commit/a3d43ea7437186a0a01baf3b4a0f0463b8a545e6))
+- Sanitize the environment for the `bd` seam too ([1f4e9f0](https://github.com/outcomesinsights/seeds/commit/1f4e9f09f34bb40201391197c82a9e0f0ddd8183))
+- Judge a numeric id reference like every other one ([6dceddd](https://github.com/outcomesinsights/seeds/commit/6dceddd8f38d1f1171f657011ae9ba275e7df205))
+
 ## [0.7.0a3] - 2026-09-09
 
 **Everything a2 got wrong about agreeing with the ecosystem, found by using
@@ -634,7 +662,8 @@ Initial public beta release.
 - **Experimental web UI**: `seeds serve` for read-only browsing of seeds and questions
 - **Doctor command**: `seeds doctor` for installation health checks
 
-[Unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a3...HEAD
+[Unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a4...HEAD
+[0.7.0a4]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a3...v0.7.0a4
 [0.7.0a3]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a2...v0.7.0a3
 [0.7.0a2]: https://github.com/outcomesinsights/seeds/compare/v0.6.0...v0.7.0a2
 [0.6.0]: https://github.com/outcomesinsights/seeds/compare/v0.5.0...v0.6.0

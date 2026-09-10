@@ -43,6 +43,9 @@ sort_commits = "newest"
 commit_parsers = [
     # Skip noise that isn't user-facing
     { message = "^chore\\(beads\\)", skip = true },
+    # `bd:` is the beads CLI's own auto-commit prefix, not a conventional type.
+    # It writes config the tool manages for itself; nothing here is shipped.
+    { message = "^bd:", skip = true },
     { message = "^chore\\(seeds[a-z0-9.,_-]*\\)", skip = true },
     { message = "^chore: bump version", skip = true },
     { message = "^chore: pick up ruff", skip = true },
