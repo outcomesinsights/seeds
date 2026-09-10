@@ -313,7 +313,13 @@ def fork_body(db_body: str, jsonl_body: str) -> str:
     if bottom:
         lines.append(bottom)
     lines.append(f">>>>>>> {_JSONL_LABEL}")
-    return "\n".join(lines) + "\n"
+    # FENCED, because the markers are the one thing here a formatter must not
+    # touch: `=======` is also a setext heading underline, so an unfenced block
+    # reads as a heading and `<<<<<<< database` comes back as
+    # `# \<<\<<\<<< database`. Inside a fence the bytes are preserved exactly,
+    # every marker still starts its own line where merge tooling looks for it,
+    # and the store needs no permanent exception to stay canonical.
+    return "```\n" + "\n".join(lines) + "\n```\n"
 
 
 # --- The legacy title split --------------------------------------------------

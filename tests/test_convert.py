@@ -51,7 +51,7 @@ from seeds.legacy import (
     LegacyRelationTypeError,
 )
 from seeds.models import RelationType, Seed, SeedStatus
-from seeds.seedfile import read_seed_file, seed_files_dir
+from seeds.seedfile import format_body, read_seed_file, seed_files_dir
 from tests.githelpers import git, git_init
 from tests.legacyhelpers import (
     LegacyWriter,
@@ -214,20 +214,32 @@ class TestClassify:
 
 class TestForkBody:
     def test_carries_both_bodies_between_git_markers(self):
+        """Fenced: `=======` is also a setext heading underline, so an unfenced
+        block is read as a heading and the formatter rewrites the markers."""
         body = fork_body("left\n", "right\n")
         assert body == (
+            "```\n"
             "<<<<<<< database (.seeds/seeds.db)\n"
             "left\n"
             "=======\n"
             "right\n"
             ">>>>>>> on disk (.seeds/seeds.jsonl)\n"
+            "```\n"
         )
 
-    def test_an_empty_side_still_renders_three_markers(self):
-        body = fork_body("", "right\n")
-        assert body.splitlines()[0].startswith("<<<<<<< ")
-        assert "=======" in body
-        assert body.splitlines()[-1].startswith(">>>>>>> ")
+    def test_every_marker_still_starts_its_own_line(self):
+        """Which is where merge tooling looks for them, fence or no fence."""
+        lines = fork_body("", "right\n").splitlines()
+        assert lines[0] == "```" and lines[-1] == "```"
+        assert lines[1].startswith("<<<<<<< ")
+        assert "=======" in lines
+        assert lines[-2].startswith(">>>>>>> ")
+
+    def test_the_fenced_block_survives_the_writer_untouched(self):
+        """The point of the fence: no permanent exception is needed to keep a
+        fork file's bytes, because formatting preserves a fence exactly."""
+        body = fork_body("left\n", "right\n")
+        assert format_body(body) == body
 
 
 # --- The synthetic four-case repo --------------------------------------------

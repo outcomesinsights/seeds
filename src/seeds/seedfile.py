@@ -1051,6 +1051,34 @@ def _top_level_paragraphs(body: str) -> list[tuple[int, int]]:
     ]
 
 
+#: A setext heading is one line of text and an underline: a span of 2. Anything
+#: longer is not a heading somebody wrote, it is data underneath a line of `---`
+#: or `===` that CommonMark read as an underline.
+_SETEXT_HEADING_SPAN = 2
+
+
+def _mislabelled_setext_blocks(body: str) -> list[tuple[int, int]]:
+    """Line ranges of "headings" that are really literal text.
+
+    A `---` line is a setext underline, so an unfenced YAML sample -- the
+    common shape, a label ending in `:` and then a `---`-delimited block --
+    parses as a heading whose text is the whole sample. Formatting then joins
+    five lines of YAML onto one `## …` line: equivalent HTML, and unreadable
+    as the sample it was.
+
+    The test is the span, not the content. Nobody writes a five-line heading.
+    """
+    return [
+        (token.map[0], token.map[1])
+        for token in _reader().parse(body)
+        if token.type == "heading_open"
+        and token.level == 0
+        and token.markup in ("-", "=")
+        and token.map
+        and token.map[1] - token.map[0] > _SETEXT_HEADING_SPAN
+    ]
+
+
 @functools.lru_cache(maxsize=1)
 def _reader() -> MarkdownIt:
     return MarkdownIt("commonmark").enable(["table", "strikethrough"])
@@ -1067,6 +1095,11 @@ def autofence(body: str) -> str:
     verifying that a pre-0.7 body landed verbatim.
     """
     lines = body.split("\n")
+    for start, end in reversed(_mislabelled_setext_blocks(body)):
+        # The whole block, underline included: every line of it is the literal.
+        lines[start:end] = ["```", *lines[start:end], "```"]
+    body = "\n".join(lines)
+    lines = body.split("\n")
     for start, end in reversed(_top_level_paragraphs(body)):
         block = lines[start:end]
         text = "\n".join(block).rstrip("\n") + "\n"
@@ -1081,13 +1114,41 @@ def autofence(body: str) -> str:
     return "\n".join(lines)
 
 
+# A git conflict block, which `seeds convert` writes for a fork so ordinary
+# merge tooling can resolve it. It must never be formatted: `=======` is ALSO a
+# setext heading underline, so a formatter reads the whole block as a heading
+# and rewrites `<<<<<<< database` to `# \<<\<<\<<< database`. Measured.
+_CONFLICT_MARKER_RE = re.compile(r"^(<{7}|={7}|>{7})(?: |$)", re.MULTILINE)
+
+
+_PRE_RE = re.compile(r"<pre>.*?</pre>", re.DOTALL)
+
+
+def _collapse_outside_pre(html: str) -> str:
+    """Collapse whitespace runs, except inside ``<pre>`` where it IS content.
+
+    Whitespace between HTML elements is insignificant, so a heading whose
+    source spans two lines renders the same as one joined onto a single line --
+    which is exactly what a formatter does to a setext heading, and the only
+    thing that kept several ordinary bodies out of the store's canonical form.
+    """
+    parts: list[str] = []
+    last = 0
+    for match in _PRE_RE.finditer(html):
+        parts.append(re.sub(r"\s+", " ", html[last : match.start()]))
+        parts.append(match.group())
+        last = match.end()
+    parts.append(re.sub(r"\s+", " ", html[last:]))
+    return "".join(parts)
+
+
 def _renders_the_same(before: str, after: str, *, ignore_spacing: bool = False) -> bool:
     """Whether two markdown texts mean the same thing to a CommonMark reader."""
     reader = _reader()
     first: str = reader.render(before)
     second: str = reader.render(after)
     if ignore_spacing:
-        first, second = re.sub(r"[ \t]+", " ", first), re.sub(r"[ \t]+", " ", second)
+        first, second = _collapse_outside_pre(first), _collapse_outside_pre(second)
     return first == second
 
 
@@ -1106,6 +1167,10 @@ def format_body(body: str, seeds_dir: Path | None = None) -> str:
     """
     if not body.strip():
         return ""
+    if _CONFLICT_MARKER_RE.search(body):
+        # Never formatted, whatever the rendering says: the markers are for
+        # git, not for a reader, and a formatter destroys them.
+        return body
     fenced = autofence(body)
     formatted = _run_mdformat(fenced, seeds_dir)
     # Against the FENCED text, not the original: fencing is supposed to change

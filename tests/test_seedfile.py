@@ -933,11 +933,26 @@ class TestAutofencing:
         assert "```" not in out
         assert "a long quotation that runs" in out
 
-    def test_a_body_formatting_would_reshape_is_stored_verbatim(self):
-        """Nobody is asked anything: the body is kept exactly, and the file
-        reads as non-canonical-bytes, which is the visible end of it."""
+    def test_an_unfenced_yaml_sample_is_fenced_not_kept_verbatim(self):
+        """`---` is a setext underline, so CommonMark reads the whole sample as
+        a heading and a formatter joins it onto one `## …` line. The tell is the
+        SPAN: nobody writes a four-line heading. Fencing it keeps the sample
+        readable AND leaves the store a fixed point — it used to be stored
+        verbatim instead, which bought the reader nothing and cost the store its
+        no-op property."""
         body = "Front-matter shape:\n---\nproject: sequelizer\nstatus: draft\n---\n"
-        assert format_body(body) == body
+        out = format_body(body)
+        assert "```" in out
+        assert "project: sequelizer" in out
+        assert "status: draft" in out
+        # And it settles: formatting the result again changes nothing.
+        assert format_body(out) == out
+
+    def test_a_real_setext_heading_is_left_alone(self):
+        """One line of text plus an underline is a heading somebody wrote."""
+        out = format_body("A real heading\n---\n\nAnd prose under it.\n")
+        assert "```" not in out
+        assert "A real heading" in out
 
     def test_a_list_is_left_alone(self):
         """Detection reads markdown-it's tokens, so anything nested -- a list
