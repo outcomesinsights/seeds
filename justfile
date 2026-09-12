@@ -5,7 +5,7 @@ test:
 # (canonical; pyproject derives it) plus the two Claude Code plugin manifests.
 # Usage: just bump-version 0.3.2
 bump-version VERSION:
-    @uv run python scripts/bump_version.py {{VERSION}}
+    @uv run python scripts/bump_version.py {{ VERSION }}
 
 # git-cliff drives [Unreleased] and future versions in CHANGELOG.md;
 # v0.1.0–v0.3.0 sections are intentionally hand-written. See cliff.toml.
@@ -30,7 +30,7 @@ changelog-preview:
 # Same explicit range, same reason — this is the recipe that generates the notes
 # that actually ship, so it is the one that must not silently drop commits.
 changelog-release VERSION:
-    @git-cliff "$(git describe --tags --abbrev=0)..HEAD" --tag {{VERSION}}
+    @git-cliff "$(git describe --tags --abbrev=0)..HEAD" --tag {{ VERSION }}
 
 # Sanity check — re-render the latest tagged release from history.
 # `--latest` renders a closed tag..tag range rather than walking back from an
@@ -56,7 +56,7 @@ changelog-latest:
 #
 # Optional argument overrides the range (default: <latest tag>..HEAD).
 changelog-coverage RANGE="":
-    @uv run python scripts/changelog_coverage.py {{RANGE}}
+    @uv run python scripts/changelog_coverage.py {{ RANGE }}
 
 # Release GATE, second half: prove the section you just WROTE into CHANGELOG.md
 # matches the notes git-cliff generates. `changelog-coverage` gates the
@@ -75,7 +75,7 @@ changelog-coverage RANGE="":
 #
 # Usage: just changelog-section 0.7.0   (optional second arg overrides the range)
 changelog-section VERSION RANGE="":
-    @uv run python scripts/changelog_coverage.py --section {{VERSION}} {{RANGE}}
+    @uv run python scripts/changelog_coverage.py --section {{ VERSION }} {{ RANGE }}
 
 # Gate: prove flake.nix's runtime dependency list still mirrors pyproject.toml's
 # [project.dependencies]. Exits non-zero and NAMES the mismatched dependency.
@@ -122,7 +122,7 @@ flake-deps:
 #
 # Usage: just differential ~/projects/outins/vocabulary_formats ~/projects/outins/epc
 differential *REPOS:
-    @uv run python scripts/differential_harness.py {{REPOS}}
+    @uv run python scripts/differential_harness.py {{ REPOS }}
 
 # The allowlist and the written justification for each entry.
 differential-allowlist:
@@ -138,6 +138,34 @@ differential-allowlist:
 #
 # Usage: just differential-selftest ~/projects/outins/vocabulary_formats
 differential-selftest REPO:
-    @uv run python scripts/differential_harness.py {{REPO}} --inject drop-seed --no-cross-repo
-    @uv run python scripts/differential_harness.py {{REPO}} --inject mutate-title --no-cross-repo
-    @uv run python scripts/differential_harness.py {{REPO}} --inject truncate-body --no-cross-repo
+    @uv run python scripts/differential_harness.py {{ REPO }} --inject drop-seed --no-cross-repo
+    @uv run python scripts/differential_harness.py {{ REPO }} --inject mutate-title --no-cross-repo
+    @uv run python scripts/differential_harness.py {{ REPO }} --inject truncate-body --no-cross-repo
+
+# Rewrite files to canonical format. Run deliberately; never from a hook.
+fmt:
+    uv run ruff format .
+    git ls-files "*.nix" | xargs -r nixfmt
+    just --fmt --unstable
+    git ls-files "*.md" | xargs -r mdformat
+
+# Report format drift without changing anything. This is what the hooks run —
+# a formatter that rewrites files mid-commit changes what you already reviewed.
+fmt-check:
+    uv run ruff format --check .
+    git ls-files "*.nix" | xargs -r nixfmt --check
+    just --fmt --check --unstable
+    git ls-files "*.md" | xargs -r mdformat --check
+
+# Full local CI equivalent — run this before pushing.
+# The recipe IS the contract: if CI runs a check and this does not, the gate is
+# decorative (see ~/.config/home-manager/docs/ci-gates.md).
+ci: fmt-check test
+
+# What actually runs before a push. Defaults to the complete `ci`; point it at
+# something smaller ONLY where running complete CI locally is impractical.
+pre-push: ci
+
+# Runs on every commit, so it must stay FAST — a sub-minute budget. Tests belong
+# here when they fit; lint alone when they do not. fmt-check never rewrites.
+pre-commit: fmt-check

@@ -228,3 +228,10 @@ repos:
         stages: [pre-push]
         pass_filenames: false
         always_run: true
+      - id: just-ci
+        name: just ci (full local CI gate)
+        entry: just ci
+        language: system
+        pass_filenames: false
+        always_run: true   # without this pre-commit reports it Skipped when nothing staged matches
+        stages: [pre-push]
