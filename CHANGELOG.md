@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0a5] - 2026-09-11
+
+**Not a public release.** Like every 0.7.0aN, this is an internal alpha on the
+`0.7.0` branch: `main` is still the 0.6.x line, nothing here is on PyPI, and the
+only consumers are this machine's own stores via a pinned flake input. The
+format is still being exercised, which is the point.
+
+Everything in a5 was found by USING a4 across 21 stores, and every one of the
+four came from another session hitting it rather than from testing here.
+
+Two are the store defending itself against its own tooling. `seeds normalize`
+now refuses a dirty store and prints the exact path-scoped `git commit -- …`,
+after three sessions each nearly swept somebody's uncommitted seed into a
+commit labelled "reformat, not an edit" — and one of them showed that checking
+the tree is clean at the START is not enough, because a stranger's seed landed
+a minute into its run. And an unreadable seed is now a message naming the file
+and pointing at `seeds check`, where five commands previously died with a
+traceback on a single malformed file.
+
+Two are routes that did not exist. `seeds update <id> --append -` reads a body
+from stdin, which closes the mechanism behind the daily drift: agents built long
+seeds with `seeds create` and then `cat >>` straight into the file, bypassing the
+writer entirely, so a store normalized in the morning wanted a pass by evening
+with no stale file involved. And `seeds search -F` matches a pasted reference
+as literal text — the store holds `\[[clc-97e]\]`, which as a regex reads
+`[clc-97e]` as a character class and returned two confident hits that mentioned
+the reference nowhere.
+
+### Added
+- -F matches a reference as text, not as a regex ([7dc8210](https://github.com/outcomesinsights/seeds/commit/7dc821087a4d76df55c5b1614641b293d7cc04ca))
+- --append reads stdin, and prime says to use it ([3a72c1e](https://github.com/outcomesinsights/seeds/commit/3a72c1e10ad3ade23236b54188a90787cf7c738d))
+
+### Fixed
+- An unreadable seed is a message, not a traceback ([f3dad23](https://github.com/outcomesinsights/seeds/commit/f3dad23aa6b271ac2f962e71cf385e1dad93bab9))
+- Refuse a dirty store, and name the files to commit ([b34b922](https://github.com/outcomesinsights/seeds/commit/b34b922ab5de5ccbac64f972d1fa727c929f491a))
+
 ## [0.7.0a4] - 2026-09-10
 
 **The store stops being able to hold a seed that a formatter rejects.** a2 made
@@ -662,7 +698,8 @@ Initial public beta release.
 - **Experimental web UI**: `seeds serve` for read-only browsing of seeds and questions
 - **Doctor command**: `seeds doctor` for installation health checks
 
-[Unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a4...HEAD
+[Unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a5...HEAD
+[0.7.0a5]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a4...v0.7.0a5
 [0.7.0a4]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a3...v0.7.0a4
 [0.7.0a3]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a2...v0.7.0a3
 [0.7.0a2]: https://github.com/outcomesinsights/seeds/compare/v0.6.0...v0.7.0a2
