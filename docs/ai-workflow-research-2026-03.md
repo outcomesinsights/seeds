@@ -3,7 +3,7 @@
 > Harvested 2026-03-11 from various blog posts, articles, and HN discussions.
 > Purpose: Inform seeds design by understanding how people currently plan, deliberate, and track decisions when working with AI coding agents.
 
----
+______________________________________________________________________
 
 ## Theme 1: Specification-First Development
 
@@ -21,7 +21,7 @@ Multiple practitioners describe a pattern where **planning documents precede imp
 
 **Seeds relevance**: Seeds could serve as the deliberation layer that sits *above* specs. Where specs describe what to build, seeds capture the why, the alternatives considered, and the questions that need answering before a spec is ready.
 
----
+______________________________________________________________________
 
 ## Theme 2: Deliberation Artifacts & Decision Tracking
 
@@ -39,7 +39,7 @@ People are recognizing that **AI-generated code obscures decision rationale** an
 
 **Seeds relevance**: This is the core gap seeds addresses. The deliberation artifacts people are creating ad-hoc (markdown files, changelogs with prompts) are exactly what seeds could formalize with its lifecycle (captured → exploring → resolved) and question-tracking.
 
----
+______________________________________________________________________
 
 ## Theme 3: Human Role Shifts to Curation & Judgment
 
@@ -57,7 +57,7 @@ With code generation becoming cheap, **the bottleneck moves to deciding what to 
 
 **Seeds relevance**: Seeds' lifecycle model (captured → exploring → deferred → resolved/abandoned) maps directly to this curation role. The "abandon" state is especially important — it's the explicit "no" that becomes harder to say when code is cheap.
 
----
+______________________________________________________________________
 
 ## Theme 4: Experimental Prototyping Changes Cost-Benefit Thinking
 
@@ -73,7 +73,7 @@ When code is cheap to produce, **deliberation can shift from upfront analysis to
 
 **Seeds relevance**: The "jot" command already supports this — low-friction capture of "what if we tried X?" But seeds could also support linking a seed to an experimental prototype, tracking the outcome of cheap experiments.
 
----
+______________________________________________________________________
 
 ## Theme 5: Multi-Agent Deliberation & Oversight Patterns
 
@@ -91,7 +91,7 @@ People are developing structured patterns for how agents and humans interact dur
 
 **Seeds relevance**: Seeds could be the place where these multi-agent deliberation artifacts land. When you ask multiple models to critique a plan, the critiques and responses could be captured as questions and answers on a seed.
 
----
+______________________________________________________________________
 
 ## Theme 6: Task Decomposition & Intentional Structure
 
@@ -109,19 +109,21 @@ Effective AI collaboration requires **breaking work into well-defined, observabl
 
 **Seeds relevance**: Seeds' hierarchical structure (parent/child seeds) already supports decomposition. The "blocked" concept (can't resolve parent until children resolve) enforces this structure.
 
----
+______________________________________________________________________
 
 ## Summary: What This Means for Seeds
 
 The research reveals a clear gap in the AI-assisted development workflow: **people need better tools for the deliberation phase that sits between "I have an idea" and "here's the spec."**
 
 Current ad-hoc approaches include:
+
 1. Markdown files (project.md, plan.md, spec.md) manually managed
 2. Prompt logs in version control
 3. Agent conversation traces as documentation
 4. Multi-agent review workflows with no formal artifact capture
 
 Seeds is well-positioned to formalize this because it already has:
+
 - Low-friction capture (`jot`)
 - Lifecycle tracking (captured → exploring → resolved/abandoned)
 - Question attachment and answer tracking
@@ -129,6 +131,7 @@ Seeds is well-positioned to formalize this because it already has:
 - Git-backed persistence
 
 Potential areas to explore based on this research:
+
 - **Link seeds to experiments**: When "code is cheap," seeds could track which ideas were prototyped and what the outcome was
 - **Capture agent reasoning**: Seeds could store distilled reasoning from agent sessions, solving the "reasoning compression" problem
 - **Multi-perspective deliberation**: Seeds could capture critiques from different agents/sources as first-class objects

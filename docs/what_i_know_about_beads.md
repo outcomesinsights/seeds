@@ -14,7 +14,7 @@ A comprehensive analysis of [Beads](https://github.com/steveyegge/beads), Steve 
 8. [What Makes Beads Work for AI](#what-makes-beads-work-for-ai)
 9. [Lessons for ADR-Beads](#lessons-for-adr-beads)
 
----
+______________________________________________________________________
 
 ## The Problem Beads Solves
 
@@ -39,7 +39,7 @@ When Yegge gave Claude access to Beads for the first time, Claude said:
 
 This captures the core value proposition: **addressable, persistent, queryable work items**.
 
----
+______________________________________________________________________
 
 ## Philosophy and Design Principles
 
@@ -75,7 +75,7 @@ At the end of every session, the user tells their agent: "Let's land the plane."
 
 The next session: copy the `bd ready` output, paste, go. The agent immediately knows what to work on.
 
----
+______________________________________________________________________
 
 ## Architecture
 
@@ -83,12 +83,13 @@ The next session: copy the `bd ready` output, paste, go. The agent immediately k
 
 Beads uses a **hybrid storage model**:
 
-| Component | Purpose |
-|-----------|---------|
-| **SQLite** (`.beads/beads.db`) | Local cache for fast queries - enables database-like operations without loading entire project history |
+| Component                         | Purpose                                                                                                    |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **SQLite** (`.beads/beads.db`)    | Local cache for fast queries - enables database-like operations without loading entire project history     |
 | **JSONL** (`.beads/issues.jsonl`) | Git-friendly source of truth - one JSON object per line enables clean diffs and automatic merge resolution |
 
 This design gives you the best of both worlds:
+
 - Database performance for queries
 - Version control for collaboration
 - Git-native conflict resolution
@@ -98,6 +99,7 @@ This design gives you the best of both worlds:
 The BD daemon is a background process (LSP-style, one per workspace) that provides automatic synchronization:
 
 **Key characteristics:**
+
 - Communicates via Unix domain sockets (named pipes on Windows)
 - Memory usage: ~30-35MB typical
 - Auto-exports to JSONL after CRUD operations (500ms debounce)
@@ -105,6 +107,7 @@ The BD daemon is a background process (LSP-style, one per workspace) that provid
 - Triggers git commit/push if configured
 
 **Event flow:**
+
 1. RPC mutation → pushed to channel
 2. Listener picks up event → triggers debouncer
 3. After 500ms silence → export to JSONL
@@ -114,13 +117,14 @@ The BD daemon is a background process (LSP-style, one per workspace) that provid
 ### Hierarchical IDs
 
 Beads supports nested task structures:
+
 - `bd-a3f8` (Epic level)
 - `bd-a3f8.1` (Task level)
 - `bd-a3f8.1.1` (Subtask level)
 
 This provides collision-free namespacing while maintaining human-friendly structure.
 
----
+______________________________________________________________________
 
 ## The Claude Integration (Secret Sauce)
 
@@ -148,6 +152,7 @@ The integration is remarkably simple but extremely effective. In `~/.claude/sett
 ```
 
 This means:
+
 - **SessionStart**: Every time Claude starts a new session, `bd prime` runs and injects workflow context
 - **PreCompact**: Before Claude's context is compacted (summarized), `bd prime` runs to preserve critical workflow knowledge
 
@@ -179,6 +184,7 @@ This is the **key to making Claude understand Beads**. It outputs AI-optimized m
 1. **Automatic injection** - Claude doesn't have to remember to check Beads; the hooks ensure it's primed at the right moments
 
 2. **Contextual workflow** - The prime output adapts based on:
+
    - Whether MCP is active (brief vs. full output)
    - Whether git remote is configured (what sync commands to show)
    - Project-specific configuration
@@ -206,7 +212,7 @@ Run `bd prime` for workflow context.
 
 The key insight: **keep AGENTS.md lean** while `bd prime` provides up-to-date workflow details.
 
----
+______________________________________________________________________
 
 ## Data Model
 
@@ -241,26 +247,26 @@ Based on examining the JSONL format:
 
 ### Issue Types
 
-| Type | Purpose |
-|------|---------|
-| `bug` | Something broken |
-| `feature` | New functionality |
-| `task` | Work item (tests, docs, refactoring) |
-| `epic` | Large feature with subtasks |
-| `chore` | Maintenance (dependencies, tooling) |
-| `molecule` | Compound/swarm coordination |
-| `gate` | Async coordination point |
-| `agent` | Agent state tracking |
+| Type       | Purpose                              |
+| ---------- | ------------------------------------ |
+| `bug`      | Something broken                     |
+| `feature`  | New functionality                    |
+| `task`     | Work item (tests, docs, refactoring) |
+| `epic`     | Large feature with subtasks          |
+| `chore`    | Maintenance (dependencies, tooling)  |
+| `molecule` | Compound/swarm coordination          |
+| `gate`     | Async coordination point             |
+| `agent`    | Agent state tracking                 |
 
 ### Priority System
 
-| Priority | Meaning |
-|----------|---------|
-| 0 (P0) | Critical - security, data loss, broken builds |
-| 1 (P1) | High - major features, important bugs |
-| 2 (P2) | Medium - default, nice-to-have |
-| 3 (P3) | Low - polish, optimization |
-| 4 (P4) | Backlog - future ideas |
+| Priority | Meaning                                       |
+| -------- | --------------------------------------------- |
+| 0 (P0)   | Critical - security, data loss, broken builds |
+| 1 (P1)   | High - major features, important bugs         |
+| 2 (P2)   | Medium - default, nice-to-have                |
+| 3 (P3)   | Low - polish, optimization                    |
+| 4 (P4)   | Backlog - future ideas                        |
 
 **Important**: NOT "high"/"medium"/"low" - numeric values only.
 
@@ -268,14 +274,15 @@ Based on examining the JSONL format:
 
 Beads supports four types of relationships:
 
-| Type | Meaning |
-|------|---------|
-| `blocks` | Issue A must complete before Issue B can start |
-| `depends_on` | Issue B depends on Issue A (inverse of blocks) |
-| `relates_to` | Bidirectional loose coupling |
-| `parent/child` | Hierarchical containment (epics) |
+| Type           | Meaning                                        |
+| -------------- | ---------------------------------------------- |
+| `blocks`       | Issue A must complete before Issue B can start |
+| `depends_on`   | Issue B depends on Issue A (inverse of blocks) |
+| `relates_to`   | Bidirectional loose coupling                   |
+| `parent/child` | Hierarchical containment (epics)               |
 
 Commands:
+
 ```bash
 bd dep add <issue> <depends-on>    # Add dependency
 bd dep <issue> --blocks <blocked>  # Shorthand for blocking
@@ -283,7 +290,7 @@ bd dep relate <issue1> <issue2>    # Bidirectional link
 bd dep tree <issue>                # Show dependency tree
 ```
 
----
+______________________________________________________________________
 
 ## CLI Commands and Workflows
 
@@ -353,7 +360,7 @@ bd close <id>
 bd sync
 ```
 
----
+______________________________________________________________________
 
 ## Key Insights from the Community
 
@@ -377,13 +384,14 @@ This reflects a pivotal moment where AI creates tools to enhance its own capabil
 
 The integration of agent memory with code versioning distinguishes Beads from external memory databases or vector stores.
 
----
+______________________________________________________________________
 
 ## What Makes Beads Work for AI
 
 ### 1. Structured Data Over Natural Language
 
 Beads doesn't ask the AI to parse free-form text. Instead:
+
 - Discrete fields with defined types
 - Enum values for status and priority
 - Explicit relationships via dependency graph
@@ -391,6 +399,7 @@ Beads doesn't ask the AI to parse free-form text. Instead:
 ### 2. Queryable State
 
 Instead of loading an entire specification file:
+
 ```bash
 bd ready                          # What can I work on?
 bd blocked                        # What's stuck?
@@ -400,6 +409,7 @@ bd list --status=in_progress     # What am I doing?
 ### 3. Atomic Operations
 
 Every command does one thing:
+
 ```bash
 bd create    # Create
 bd update    # Update
@@ -412,6 +422,7 @@ No need to open an editor, parse a file, make changes, save, and hope nothing br
 ### 4. Automatic Context Injection
 
 The hooks ensure Claude always has the workflow context it needs:
+
 - `SessionStart` - fresh session gets primed
 - `PreCompact` - before context compression, critical info is preserved
 
@@ -426,7 +437,7 @@ The hooks ensure Claude always has the workflow context it needs:
 - History is preserved
 - Offline capable
 
----
+______________________________________________________________________
 
 ## Lessons for ADR-Beads
 
@@ -435,6 +446,7 @@ Based on this analysis, the key principles to apply to ADR-Beads:
 ### 1. Structured Fields, Not Markdown Sections
 
 Instead of:
+
 ```markdown
 ## Context
 [free-form text]
@@ -444,6 +456,7 @@ Instead of:
 ```
 
 Use discrete, typed fields:
+
 ```json
 {
   "context": "string",
@@ -467,6 +480,7 @@ Never require interactive editors.
 ### 3. Git-Backed with SQLite Cache
 
 Follow the exact same architecture:
+
 - `decisions.jsonl` for git-friendly storage
 - SQLite for fast local queries
 - Background daemon for sync
@@ -474,6 +488,7 @@ Follow the exact same architecture:
 ### 4. Hook-Based Context Injection
 
 Create an `adr prime` command that:
+
 - Outputs AI-optimized workflow context
 - Adapts based on MCP mode
 - Can be injected via Claude Code hooks
@@ -481,6 +496,7 @@ Create an `adr prime` command that:
 ### 5. Explicit Relationships
 
 First-class support for:
+
 - `supersedes` / `superseded_by`
 - `depends_on`
 - `enables`
@@ -509,24 +525,28 @@ adr blocked          # Decisions waiting on dependencies
 ### 8. Hash-Based IDs
 
 Prevent collisions in multi-branch workflows:
+
 - `adr-a1b2` instead of `adr-001`
 - Supports hierarchical: `adr-a1b2.1` for related decisions
 
----
+______________________________________________________________________
 
 ## Sources
 
 ### Official Beads Resources
+
 - [GitHub Repository](https://github.com/steveyegge/beads)
 - [AGENT_INSTRUCTIONS.md](https://github.com/steveyegge/beads/blob/main/AGENT_INSTRUCTIONS.md)
 
 ### Steve Yegge's Blog Posts
+
 - [Introducing Beads: A Coding Agent Memory System](https://steve-yegge.medium.com/introducing-beads-a-coding-agent-memory-system-637d7d92514a)
 - [The Beads Revolution: How I Built The TODO System That AI Agents Actually Want to Use](https://steve-yegge.medium.com/the-beads-revolution-how-i-built-the-todo-system-that-ai-agents-actually-want-to-use-228a5f9be2a9)
 - [Beads Best Practices](https://steve-yegge.medium.com/beads-best-practices-2db636b9760c)
 - [Beads Blows Up](https://steve-yegge.medium.com/beads-blows-up-a0a61bb889b4)
 
 ### Community Analysis
+
 - [YUV.AI: Beads: Git-Backed Memory for AI Agents](https://yuv.ai/blog/beads-git-backed-memory-for-ai-agents-that-actually-remembers)
 - [Paddo.dev: Beads: Memory for Your Coding Agents](https://paddo.dev/blog/beads-memory-for-coding-agents/)
 - [Better Stack: Beads Issue Tracker Guide](https://betterstack.com/community/guides/ai/beads-issue-tracker-ai-agents/)
@@ -534,4 +554,5 @@ Prevent collisions in multi-branch workflows:
 - [Hacker News Discussion](https://news.ycombinator.com/item?id=46075616)
 
 ### Related Projects
+
 - [Gas Town](https://www.dolthub.com/blog/2026-01-15-a-day-in-gas-town/) - Steve Yegge's agent orchestrator that uses Beads

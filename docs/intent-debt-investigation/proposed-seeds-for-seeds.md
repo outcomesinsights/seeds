@@ -6,7 +6,7 @@
 >
 > **A note to the reviewing agent (seeds).** Treat these as candidates from an outside reader, not as decisions. Each one names what it's *distinct from* in the existing backlog so you can confirm it isn't a duplicate; verify that against the current DB (this was read 2026-06-11 at 195 seeds — the backlog may have moved). Where a candidate overlaps an existing seed, prefer updating that seed over filing a new one. The framing, types, and tags are suggestions.
 
----
+______________________________________________________________________
 
 ## Proposed seed 1 — Resolved deliberation can go stale
 
@@ -22,6 +22,7 @@
 > The field names this directly. Meta's tribal-knowledge work warns that stale context is worse than none, and it re-validates its own context files on a schedule. The intent-debt framing treats externalized rationale as something that *erodes* over time, not just something present or absent.
 >
 > Open questions:
+>
 > - Should a resolved seed carry a light validity/confidence signal, or an optional "revisit-by" hint?
 > - When a new seed brushes against an old resolution, can the agent flag "this decision's premise may no longer hold"?
 > - Is staleness even detectable by the tool, or only assertable by a human revisiting?
@@ -30,7 +31,7 @@
 >
 > Risk to weigh: seeds is journey-capture, not a freshness monitor. A lightweight "revisit" affordance may be all that fits the ethos; a decay-detection engine would over-build.
 
----
+______________________________________________________________________
 
 ## Proposed seed 2 — The candor paradox (and the audit-log chilling effect)
 
@@ -50,7 +51,7 @@
 >
 > Distinct from seeds-127 / seeds-133 (privacy/copyright of ingested *source documents*) and seeds-153 (author-customization drift). This is about the candor of the *deliberation act itself*, which no current seed addresses.
 
----
+______________________________________________________________________
 
 ## Proposed seed 3 — Does seeds' structure help the agent reason, or fight it?
 
@@ -69,7 +70,7 @@
 >
 > What would resolve this: a concrete position on (a) whether seeds-42's graph DB is a "no" on these grounds, and (b) whether any agent-facing surface is currently over-structured.
 
----
+______________________________________________________________________
 
 ## Proposed seed 4 — Retrospective outcome: did the decision pan out?
 
@@ -83,13 +84,14 @@
 > seeds captures the resolution *at close* (seeds-134) and links experiments that *inform* a decision before it's made (seeds-115), but nothing revisits a resolved decision *afterward* to record whether it held up in production. The decision-journal field makes the point worth stealing: separate *decision quality* from *outcome luck* — a good decision can have a bad outcome and vice versa, and you only learn which by looking back. The intro post already describes this happening ad hoc ("resolved seeds occasionally get reopened because reality disagreed").
 >
 > Open questions:
+>
 > - A light "revisit" affordance on resolved seeds — a nudge, surfaced through the agent, to look back at a decision after some time?
 > - An optional `outcome` field distinct from `resolution`? ("resolution = what we decided; outcome = how it actually turned out.")
 > - Does an outcome scorecard conflict with seeds' journey-not-ledger ethos, or complete it?
 >
 > Keep it optional and agent-surfaced (I never run the CLI myself, so this can't depend on me remembering to revisit). Partly overlaps seeds-115, which is about experiment outcomes *before* the decision — this is the *post*-resolution, in-production variant.
 
----
+______________________________________________________________________
 
 ## Proposed seed 5 — Proactive corpus extraction (reconstruct deliberation nobody captured live)
 
@@ -103,6 +105,7 @@
 > Today's gleaning is reactive: the user places a source that already *contains* deliberation (a transcript, conversation, doc) in the inbox (seeds-126), and seeds extracts (seeds-74.2.4). Meta's pre-compute engine is a different mode: proactively sweep a *whole existing codebase or corpus* with a fleet of agents answering standardized questions — "what non-obvious patterns cause failures? what tribal knowledge is buried in comments?" — to reconstruct intent *nobody ever captured as deliberation*, packaged as compact context files.
 >
 > For seeds this would:
+>
 > - attack the completeness gap (seeds-60) from the other side — surface what was never considered by mining what already exists, rather than only capturing what was said out loud;
 > - give the knowledge-artifact concept (seeds-89/90/91) a concrete shape *and* a generation path (the compact "compass" file);
 > - extend gleaning from "ingest a deliberation source" to "reconstruct deliberation from a *non-deliberation* artifact" (raw code, configs, schemas).
@@ -111,7 +114,7 @@
 >
 > Open question: is reconstructed-after-the-fact deliberation second-class versus captured-live, and if so, how is it marked so a reader knows the difference?
 
----
+______________________________________________________________________
 
 ## Proposed seed 6 — Adopt the "intent debt" vocabulary as positioning
 
@@ -125,13 +128,14 @@
 > A peer-reviewed name now exists for seeds' reason to exist. Storey's Triple Debt Model defines *intent debt* = "the absence of externalized rationale that developers and AI agents need to work safely with code," living in artifacts — distinct from technical debt (in code) and cognitive debt (in people). That is seeds' thesis with academic backing, and it arrived *after* most of the seeds backlog was written.
 >
 > The intro post already nails the three-layer positioning (planning / execution / deliberation). "Intent debt" sharpens the *why now*, and the surrounding discourse is a ready-made narrative seeds can borrow:
+>
 > - capture and retrieval are cheap now (the post already says this);
 > - the implicit channels that used to carry intent — readable code, hallway talk, the veteran's memory — have gone dark (Osmani's "agents don't have hallways," the death of osmosis);
 > - McLuhan's "retrieval" frames the moment as software rediscovering RFCs / ADRs / IBIS, which is exactly seeds' lineage.
 >
 > This is low-effort, high-leverage and *not a code change*: a positioning/README note, and possibly a follow-up blog angle ("intent debt and the deliberation layer"). Formal competitive research was deferred for beta (seeds-101), but this is positioning language, not a landscape survey — a different, cheaper thing.
 
----
+______________________________________________________________________
 
 ## Deliberately *not* proposed (so the boundaries are explicit)
 

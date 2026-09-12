@@ -2,7 +2,7 @@
 
 > Ryan's response to the analysis documents in this directory — [`capturing-the-why-landscape.md`](capturing-the-why-landscape.md), [`capturing-the-why-seeds-evaluation.md`](capturing-the-why-seeds-evaluation.md), [`seeds-gap-analysis.md`](seeds-gap-analysis.md), and [`proposed-seeds-for-seeds.md`](proposed-seeds-for-seeds.md). Dictated 2026-06-15 and lightly edited for readability; the positions and the hedges are preserved as given. This is a reader's reaction, not a set of decisions — some of it is firm, some of it is me noticing things about my own usage that I hadn't noticed before. Where I'm unsure, I've left the uncertainty in on purpose.
 
----
+______________________________________________________________________
 
 ## 1. The headline: intent is the wrong unit — deliberation is upstream of it
 
@@ -22,7 +22,7 @@ One more thing that's been tickling me, and it cuts against my own framing a lit
 
 On Addy Osmani's "pay it down" section specifically: the strategies there are all still anemic when it comes to capturing well-formed intent. They're competent at the destination and silent on the road.
 
----
+______________________________________________________________________
 
 ## 2. Where seeds fits, in my own words
 
@@ -35,7 +35,7 @@ A few things I actually like, separate from the critique above:
 
 One honest uncertainty up front: **I can't speak to longevity.** seeds is five months old. We have no real evidence about whether it works *over years*. I'm operating on the assumption that it'll keep being handy, but that's an assumption, not a finding.
 
----
+______________________________________________________________________
 
 ## 3. On the ten cross-cutting tensions (Part III of the landscape)
 
@@ -47,9 +47,9 @@ The landscape closes with ten tensions "worth watching." Going through them in o
 
 **3. Upfront intent vs. emergent intent.** Both camps are right, and seeds should be *both worlds* — intent is prescribed *and* harvested. You have to have some idea of what you want before you start; you can't know everything you'll hit along the way. I fully agree with Dijkstra that knowing the spec ahead of time is impractical, and with Thorsten Ball that *building new software is learning* — which is exactly why deliberation matters: it captures the original approach, but also where approaches failed, why they were abandoned or changed, why there were pivots and re-evaluations, and the discoveries and insights gained en route.
 
-   The gardening metaphor actually holds here. We *plant* the seed — that's the prescriptive part. We have an idea, we talk about it in the abstract, we explore the feasibility of applying it to the system, and we get into concrete notions of what that application should look like. All of that is easily and appropriately captured in seeds.
+The gardening metaphor actually holds here. We *plant* the seed — that's the prescriptive part. We have an idea, we talk about it in the abstract, we explore the feasibility of applying it to the system, and we get into concrete notions of what that application should look like. All of that is easily and appropriately captured in seeds.
 
-   **But here's where I'm weak, and the document caught me on it:** once the idea has been *tried*, what did we learn? Honestly — **I'm not capturing learning as much as I'd like.** That's a genuinely interesting gap. It's not impossible; part of why it hasn't happened is that by the time we reach implementation I've usually already got a firm handle on what I want, and a lot of the learning came from the *deliberation* itself rather than from the build. I don't have many examples of needing to revisit an implementation decision, because so far we've stood by the decisions we made — they've proven correct enough not to need revisiting. I'm not claiming we make perfect software. We'll see how that plays out. (This is the same nerve the gap analysis hits with "retrospective outcome" — Gap 4 / proposed seed 4. It's a real soft spot.)
+**But here's where I'm weak, and the document caught me on it:** once the idea has been *tried*, what did we learn? Honestly — **I'm not capturing learning as much as I'd like.** That's a genuinely interesting gap. It's not impossible; part of why it hasn't happened is that by the time we reach implementation I've usually already got a firm handle on what I want, and a lot of the learning came from the *deliberation* itself rather than from the build. I don't have many examples of needing to revisit an implementation decision, because so far we've stood by the decisions we made — they've proven correct enough not to need revisiting. I'm not claiming we make perfect software. We'll see how that plays out. (This is the same nerve the gap analysis hits with "retrospective outcome" — Gap 4 / proposed seed 4. It's a real soft spot.)
 
 **4. Capture-at-source vs. reconstruct-after.** I don't think reconstructing intent from residue is going to be very helpful. I've applied seeds to a decades-old system, but the one thing I have *not* asked it to do is go back and infer the decisions made before seeds existed. My assumption is that that information is lost to time — those deliberations are almost completely gone, and even the artifacts we do have (GitHub issues, documents, maybe a few emails) don't capture with anything like the rigor of a transcribed meeting. We don't store reconstructions and we don't infer intent from code or git commits; we infer intent only from *explicitly stated ideas*. It hasn't been necessary. seeds is a tool for a brave new world in which **discussion capture is cheap and easy** — and that's what it sources to capture deliberation. (So I'm cooler on the Meta-style "proactive corpus extraction" idea — gap analysis Gap 5 / proposed seed 5 — than the document is. Reconstruction-from-residue is a different and weaker thing than capture-at-source.)
 
@@ -63,11 +63,11 @@ The landscape closes with ten tensions "worth watching." Going through them in o
 
 **9. Capture as avoidance.** Absolutely not. My entire purpose is to capture *in order to implement* — to capture the deliberation in order to reach resolution, and to make that as frictionless and as fast as possible. To be cutesy: "capture is avoidance" is true only in the sense that what I'm avoiding is *forgetting an idea*, or feeling obligated to fully pursue an idea the moment I have it. The whole point is that I can drop any half-formed thought in and trust it's locked away and available, and that the later exploration isn't lost either. That's not procrastination dressed as productivity — it's second-brain work, and I'm okay with second-brain work. The files.md test is "does the tool make thinking *happen*, or just make not-thinking feel organized?" For me the answer is clear: **the tool makes thinking happen.**
 
-   This also connects to something I value that the literature doesn't really name: seeds lets me **gauge my own cognitive capacity in the moment.** There are times I'm too tired to take on the entirety of what a feature needs from me cognitively. The choice in front of me becomes: do I break this feature into smaller parts my brain can handle right now, or do I *defer* the conversation to another time? And what I keep finding is that I end up *more* focused through a seeds interaction — my brain doesn't drift outside what's helpful, and when it does stray, I note the straying thought and return to the main thread faster. Even when I'm focused on a narrow slice of the system, I have the feeling that an agent using seeds still has access to the overarching ideas. That was part of the original hope: break deliberation about features into small manageable chunks the same way we break *code* into small manageable chunks — and postpone the heavy cognitive work not *indefinitely* (which would be the failure mode files.md warns about) but **until necessary.** That "until necessary" is the whole distinction.
+This also connects to something I value that the literature doesn't really name: seeds lets me **gauge my own cognitive capacity in the moment.** There are times I'm too tired to take on the entirety of what a feature needs from me cognitively. The choice in front of me becomes: do I break this feature into smaller parts my brain can handle right now, or do I *defer* the conversation to another time? And what I keep finding is that I end up *more* focused through a seeds interaction — my brain doesn't drift outside what's helpful, and when it does stray, I note the straying thought and return to the main thread faster. Even when I'm focused on a narrow slice of the system, I have the feeling that an agent using seeds still has access to the overarching ideas. That was part of the original hope: break deliberation about features into small manageable chunks the same way we break *code* into small manageable chunks — and postpone the heavy cognitive work not *indefinitely* (which would be the failure mode files.md warns about) but **until necessary.** That "until necessary" is the whole distinction.
 
 **10. The McLuhan retrieval.** I don't actually know what this one is getting at yet. Flagging it to look at later, not responding.
 
----
+______________________________________________________________________
 
 ## 4. The honest gaps, and what I should actually look into
 
@@ -79,7 +79,7 @@ Pulling the soft spots out of the above so they don't get lost in the prose:
 
 - **Longevity is unproven.** Five months in. Everything above is "true so far."
 
----
+______________________________________________________________________
 
 ## 5. Net read
 

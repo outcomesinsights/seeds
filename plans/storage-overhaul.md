@@ -36,27 +36,36 @@ Settled. Freeze it in `docs/storage-format.md` before any code is written.
   dots included (`seeds-lcfa.6.1.md`), so `seeds show <id>` computes its path and
   is a single file read. The filename carries identity and nothing else
   (`seeds-sdhc.4`).
+
 - **YAML frontmatter, block sequences for every multi-value field** — ruled on
   reading preference, and it happens to merge better, since one value per line
   means two hosts adding different tags touch different lines.
+
 - **`parent:` is an explicit field** even though the id is dotted, so
   `get_children` is never a glob that has to count dots to exclude grandchildren.
+
 - **Relationships are stored at both ends.** Only symmetric edge types may be;
   a directional type needs a named inverse at the far end (`seeds-sdhc.4`).
+
 - **Supersession is marked in place**, immediately after the heading it retires,
   with a mandatory reason clause (`seeds-sdhc.3`):
 
-      ## Dolt would give us cell-level merge
-      > [!SUPERSEDED] 2026-08-28 — ordinary git line-merge surfaces same-field
-      > collisions too, so the 120 MB dependency bought nothing.
+  ```
+  ## Dolt would give us cell-level merge
+  > [!SUPERSEDED] 2026-08-28 — ordinary git line-merge surfaces same-field
+  > collisions too, so the 120 MB dependency bought nothing.
+  ```
 
   Scope is from the marker to the next heading of the same or higher level. That
   is the entire parse rule.
+
 - **Corrections replace in place; reasoning accumulates.** A fact that turned out
   false is fixed, with the prior value in git. A position we moved past is marked,
   never deleted — it is what stops the question being re-litigated.
+
 - **Writes are atomic:** write to a temp file, `os.replace()` into position. One
   line, and it is all that survives of the Maildir detour.
+
 - **Reads are strict.** Files-as-truth makes every command a parser, so a lenient
   read reintroduces exactly the silent wrongness this change exists to escape
   (`seeds-sdhc.2`).

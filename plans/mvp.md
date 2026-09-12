@@ -4,7 +4,7 @@
 **Created:** 2026-01-27
 **Updated:** 2026-01-27
 
----
+______________________________________________________________________
 
 ## What is seeds?
 
@@ -18,7 +18,7 @@ seeds is a **deliberation capture tool** that helps ideas grow from initial seed
 - **Domain agnostic** - Software, RPGs, house projects, life decisions
 - **Nothing is precious** - Expect the tool itself to evolve through use
 
----
+______________________________________________________________________
 
 ## MVP Scope
 
@@ -26,15 +26,15 @@ The MVP focuses on the **minimal set of features** needed to start using seeds t
 
 ### In Scope
 
-1. **Seed CRUD** - Create, read, update, close seeds
-2. **Quick capture** - Low-friction "jot an idea" command
-3. **Lifecycle states** - Track seed maturity
-4. **Questions** - Attach questions to seeds, mark as answered
-5. **Backlog/defer** - Shelve seeds for later
-6. **Basic relationships** - Seeds can relate to other seeds
-7. **CLI-first** - Flag-based commands, no editor popups
-8. **SQLite storage** - Fast local queries
-9. **JSONL export** - Git-friendly persistence
+01. **Seed CRUD** - Create, read, update, close seeds
+02. **Quick capture** - Low-friction "jot an idea" command
+03. **Lifecycle states** - Track seed maturity
+04. **Questions** - Attach questions to seeds, mark as answered
+05. **Backlog/defer** - Shelve seeds for later
+06. **Basic relationships** - Seeds can relate to other seeds
+07. **CLI-first** - Flag-based commands, no editor popups
+08. **SQLite storage** - Fast local queries
+09. **JSONL export** - Git-friendly persistence
 10. **Prime command** - AI context injection for Claude Code hooks
 
 ### Out of Scope (Future)
@@ -47,7 +47,7 @@ The MVP focuses on the **minimal set of features** needed to start using seeds t
 - MCP server
 - Daemon for background sync
 
----
+______________________________________________________________________
 
 ## Data Model
 
@@ -74,6 +74,7 @@ class Seed:
 ```
 
 **Parent-child via ID convention (like Beads):**
+
 - `seed-a1b2` - Parent seed
 - `seed-a1b2.1` - First child
 - `seed-a1b2.2` - Second child
@@ -95,6 +96,7 @@ class SeedStatus(Enum):
 ```
 
 **Lifecycle flow:**
+
 ```
 CAPTURED → EXPLORING → RESOLVED
     ↓
@@ -132,7 +134,7 @@ class Question:
     answered_at: datetime | None
 ```
 
----
+______________________________________________________________________
 
 ## CLI Design
 
@@ -232,7 +234,7 @@ seeds doctor                         # Check for issues
 seeds prime                          # Output workflow context for Claude
 ```
 
----
+______________________________________________________________________
 
 ## Storage
 
@@ -289,7 +291,7 @@ One seed per line, questions embedded:
 {"id": "seed-a1b2", "title": "Database choice", "content": "...", "status": "exploring", "seed_type": "idea", "tags": ["infrastructure"], "questions": [{"id": "q-c3d4", "text": "What are our scaling requirements?", "answer": null, "status": "open"}], "created_at": "2026-01-27T10:00:00Z", "updated_at": "2026-01-27T14:00:00Z"}
 ```
 
----
+______________________________________________________________________
 
 ## Prime Command Output
 
@@ -327,7 +329,7 @@ The `seeds prime` command outputs AI-optimized workflow context:
 - `seeds sync` - Export to JSONL
 ```
 
----
+______________________________________________________________________
 
 ## Hook Integration
 
@@ -346,7 +348,7 @@ For Claude Code (`~/.claude/settings.json`):
 }
 ```
 
----
+______________________________________________________________________
 
 ## Implementation Notes
 
@@ -390,7 +392,7 @@ seeds/
 - **dataclasses** - Models (stdlib)
 - **json** - Serialization (stdlib)
 
----
+______________________________________________________________________
 
 ## Success Criteria for MVP
 
@@ -403,7 +405,7 @@ seeds/
 7. Can inject context with `seeds prime`
 8. AI agent (Claude) can use the tool naturally
 
----
+______________________________________________________________________
 
 ## Design Decisions (from Interview)
 
@@ -419,14 +421,14 @@ Based on user interview (2026-01-27):
 8. **Mobile capture** → Later feature. MVP is CLI only.
 9. **AI updates** → Update content directly. Git tracks what changed.
 
----
+______________________________________________________________________
 
 ## Open Questions (Remaining)
 
 1. **Granularity** - How fine-grained should seeds be? Many small vs. few large? (Discover through use)
 2. **Manifest** - Do we need a summary/manifest for AI to quickly scan seeds? (Observe if needed)
 
----
+______________________________________________________________________
 
 ## What's Next
 

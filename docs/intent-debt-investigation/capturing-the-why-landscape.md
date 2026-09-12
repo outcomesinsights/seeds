@@ -4,7 +4,7 @@
 >
 > Compiled 2026-06-11 from ~40 sources — most read first-hand, some synthesized from web research, and the deliberation-tooling lineage building on seeds' own `deliberation-tools-research.md`.
 
----
+______________________________________________________________________
 
 ## The one idea that ties it all together
 
@@ -20,7 +20,7 @@ Put them together and you get the white space the entire ecosystem is rushing in
 
 Hold that spectrum in your head — *raw recording → transcript → summary → structured memory → decision trace → spec/rationale → genuine deliberation* — because every tool in Part II is really just a bet on which slice of it to occupy.
 
----
+______________________________________________________________________
 
 # Part I — The Diagnosis
 
@@ -30,11 +30,11 @@ If you read one thing in this space, it's Margaret-Anne Storey's **["From Techni
 
 The model is three kinds of debt, distinguished by **where each one lives**:
 
-| Debt | Lives in | Is the erosion of… |
-|------|----------|--------------------|
-| **Technical debt** | the code | changeability |
-| **Cognitive debt** | people | shared understanding ("the team lost the plot") |
-| **Intent debt** | artifacts | externalized rationale, goals, constraints — the *why* |
+| Debt               | Lives in  | Is the erosion of…                                     |
+| ------------------ | --------- | ------------------------------------------------------ |
+| **Technical debt** | the code  | changeability                                          |
+| **Cognitive debt** | people    | shared understanding ("the team lost the plot")        |
+| **Intent debt**    | artifacts | externalized rationale, goals, constraints — the *why* |
 
 From the abstract, verbatim: intent debt is *"the absence of externalized rationale that developers and AI agents need to work safely with code."* The crucial word is **externalized** — intent that lives only in your skull isn't an asset anyone (human or agent) can use.
 
@@ -79,7 +79,7 @@ The same theme runs through Sunil Pai's piece on developer relations "after the 
 
 The throughline of Part I: **the implicit carriers of intent (readable code, hallway talk, the veteran who remembers 2023) are all weakening at once, and the explicit carriers haven't been rebuilt yet.** That's the vacuum.
 
----
+______________________________________________________________________
 
 # Part II — The Solution Space
 
@@ -91,23 +91,24 @@ The most energetic corner of the field. The thesis: agents fail not by breaking 
 
 The striking thing is how many tools are independently rebuilding the same skeleton — **durable context, feature intent, a technical plan, explicit tasks, and verification**:
 
-| Tool | Angle |
-|------|-------|
-| **GitHub Spec Kit / Kiro** | specs kept next to the change workflow |
-| **OpenSpec** | spec as a decision record that survives the change |
-| **Tessl** | the spec becomes the thing you edit, not the code |
-| **Intent (Augment)** | spec as shared state |
-| **Symphony (OpenAI)** | spec as orchestration contract for autonomous runs |
-| **CodeSpeak** | machine-readable specs LLMs compile to code; claims 5.9–9.9× compression vs source, plus an explicit *"intent recovery"* tool that extracts requirements from prior agent sessions |
-| **Ossature**, **acai.sh** | spec/acceptance-criteria toolkits pitched as the antidote to "slop" |
+| Tool                       | Angle                                                                                                                                                                              |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **GitHub Spec Kit / Kiro** | specs kept next to the change workflow                                                                                                                                             |
+| **OpenSpec**               | spec as a decision record that survives the change                                                                                                                                 |
+| **Tessl**                  | the spec becomes the thing you edit, not the code                                                                                                                                  |
+| **Intent (Augment)**       | spec as shared state                                                                                                                                                               |
+| **Symphony (OpenAI)**      | spec as orchestration contract for autonomous runs                                                                                                                                 |
+| **CodeSpeak**              | machine-readable specs LLMs compile to code; claims 5.9–9.9× compression vs source, plus an explicit *"intent recovery"* tool that extracts requirements from prior agent sessions |
+| **Ossature**, **acai.sh**  | spec/acceptance-criteria toolkits pitched as the antidote to "slop"                                                                                                                |
 
 Rickard's criteria for a *good* spec are worth memorizing: **declarative** (match code to intent, don't replay a brittle patch), **layered** (product requirements don't silently become architecture), and **cheap to revise** (*"if a spec is expensive to update, the process hardens into ceremony and the ceremony becomes the work"*). And his discipline: push mechanical rules *out* of prose into lint/schemas/tests/harnesses — *"smaller specs, harder checks, less guessing."*
 
 A close cousin is **"review the intent, not the code."** Ankit Jain's ["How to Kill the Code Review"](https://www.latent.space/p/reviews-dead) argues that since AI generates code past human review capacity, the approval gate should move upstream to specs and acceptance criteria — humans approve the *intent* before coding, and code becomes a verifiable artifact of the spec rather than the object of judgment.
 
 **The catch — and it's the central live debate in the whole field.** Two objections:
+
 1. **Dijkstra's ghost:** *"a sufficiently detailed spec is code."* Precision doesn't vanish by moving from one notation to another; push abstraction too far and you've reinvented model-driven development's failures.
-2. **Intent isn't knowable upfront.** This is the strongest counterweight, and it comes from Thorsten Ball's ["Building Software Is Learning"](https://registerspill.thorstenball.com/p/building-software-is-learning) (pure Naur): *"building new software is learning."* You can't fully specify what you want because the specification *emerges during building*. Full upfront specification is impossible because complete specification *is* the programming. His prescription is the opposite of spec-first: minimize the latency between trying something and hitting reality (hour-long prototypes, README-driven design, tiny merges). 
+2. **Intent isn't knowable upfront.** This is the strongest counterweight, and it comes from Thorsten Ball's ["Building Software Is Learning"](https://registerspill.thorstenball.com/p/building-software-is-learning) (pure Naur): *"building new software is learning."* You can't fully specify what you want because the specification *emerges during building*. Full upfront specification is impossible because complete specification *is* the programming. His prescription is the opposite of spec-first: minimize the latency between trying something and hitting reality (hour-long prototypes, README-driven design, tiny merges).
 
 So the unresolved question the field is arguing about: **is intent something you write down and then execute, or something you discover by executing and must capture as you go?** Both camps are right about different work, and nobody has reconciled them.
 
@@ -160,6 +161,7 @@ Note the **direct philosophical clash with family D**: Kellogg says graphs are a
 The inverse strategy: instead of capturing intent at the source, mine it back out of the codebase. **Meta's** ["How Meta Used AI to Map Tribal Knowledge"](https://engineering.fb.com/2026/04/06/developer-tools/how-meta-used-ai-to-map-tribal-knowledge-in-large-scale-data-pipelines/) is the standout. A "pre-compute engine" of 50+ specialized agents (explorers, analysts, writers, critics, fixers) read every file in a 4,100-file pipeline once and answered five standardized questions per module — including, explicitly, *"What tribal knowledge is buried in code comments?"* — surfacing 50+ undocumented patterns (silent field-rename conventions, append-only enum constraints) and packaging them as 59 compact *"compass, not encyclopedia"* context files (~1,000 tokens each).
 
 Two lines worth keeping:
+
 > *"Context that decays is worse than no context at all."* (so the system self-maintains and re-validates)
 > *"Without context, agents burn 15–25 tool calls exploring… and produce subtly incorrect code."*
 
@@ -192,33 +194,33 @@ Finally, the tools built specifically to capture *deliberation* (not tasks, not 
 
 The category's defining gap (per the prior survey): nobody treats **the deliberation process itself as the first-class artifact**, journey and all, in a CLI/agent-native form. Most tools capture the *destination*; this corner is about capturing the *road*.
 
----
+______________________________________________________________________
 
 # Part III — Cross-cutting themes and the tensions worth watching
 
 Step back and the same fault lines run through every family. These are the things to actually argue about.
 
-1. **The capture↔intent spectrum is the master lens.** Raw recording → transcript → summary → structured memory → decision trace → spec/rationale → live deliberation. Everything in Part II is a bet on a slice. Cost and value both rise as you move right. The firehose tools live on the cheap-left; ADRs and specs live on the expensive-right; the genuinely hard, mostly-unbuilt thing is the *machinery that moves material rightward* — distillation.
+01. **The capture↔intent spectrum is the master lens.** Raw recording → transcript → summary → structured memory → decision trace → spec/rationale → live deliberation. Everything in Part II is a bet on a slice. Cost and value both rise as you move right. The firehose tools live on the cheap-left; ADRs and specs live on the expensive-right; the genuinely hard, mostly-unbuilt thing is the *machinery that moves material rightward* — distillation.
 
-2. **Distillation is the field's great unsolved problem.** Universal agreement that raw capture ≠ useful intent. Near-universal hand-waving about how you compress a sprawling deliberation into durable rationale *without losing the journey that justifies it*. git-memento bolts on a `--summary-skill`; Read.ai gestures at "a connected knowledge system"; Meta re-validates to fight decay. Nobody has nailed it. Whoever does owns the category.
+02. **Distillation is the field's great unsolved problem.** Universal agreement that raw capture ≠ useful intent. Near-universal hand-waving about how you compress a sprawling deliberation into durable rationale *without losing the journey that justifies it*. git-memento bolts on a `--summary-skill`; Read.ai gestures at "a connected knowledge system"; Meta re-validates to fight decay. Nobody has nailed it. Whoever does owns the category.
 
-3. **Upfront intent vs. emergent intent.** Spec-driven development (write it, then build) vs. Naur/Ball (build to discover, then capture). This isn't resolvable in the abstract — it's a function of how novel the work is. The interesting tools will let intent be *both* prescribed and harvested.
+03. **Upfront intent vs. emergent intent.** Spec-driven development (write it, then build) vs. Naur/Ball (build to discover, then capture). This isn't resolvable in the abstract — it's a function of how novel the work is. The interesting tools will let intent be *both* prescribed and harvested.
 
-4. **Capture-at-source vs. reconstruct-after.** a16z and git-memento capture as it happens; Meta reconstructs from the residue. Source-capture gets the genuine *why* but suffers the candor paradox and the friction problem. Reconstruction scales and needs no discipline but only recovers what the artifact implies. They're complements, and a serious system probably needs both.
+04. **Capture-at-source vs. reconstruct-after.** a16z and git-memento capture as it happens; Meta reconstructs from the residue. Source-capture gets the genuine *why* but suffers the candor paradox and the friction problem. Reconstruction scales and needs no discipline but only recovers what the artifact implies. They're complements, and a serious system probably needs both.
 
-5. **The candor paradox / observer effect.** The deepest and least-appreciated tension: *comprehensive capture degrades what's captured.* Record everything and the real thinking flees to the unrecorded margins. This is why "just record it all" (the a16z bull case) is self-undermining, and why *intentional, opt-in, low-stakes* capture surfaces may beat *ambient, total* ones. The governance answer — deliberately protect unrecorded space — is an admission that more capture is not strictly better.
+05. **The candor paradox / observer effect.** The deepest and least-appreciated tension: *comprehensive capture degrades what's captured.* Record everything and the real thinking flees to the unrecorded margins. This is why "just record it all" (the a16z bull case) is self-undermining, and why *intentional, opt-in, low-stakes* capture surfaces may beat *ambient, total* ones. The governance answer — deliberately protect unrecorded space — is an admission that more capture is not strictly better.
 
-6. **Embedded-in-workflow vs. separate step.** DRed's hard-won lesson, validated by every failed rationale tool: capture that asks you to stop and switch contexts dies; capture that *is* the workflow survives. The friction budget is brutal.
+06. **Embedded-in-workflow vs. separate step.** DRed's hard-won lesson, validated by every failed rationale tool: capture that asks you to stop and switch contexts dies; capture that *is* the workflow survives. The friction budget is brutal.
 
-7. **Structure vs. natural language.** Kellogg ("tokens are all the structure you need," graphs are a trap) vs. the context-graph/GraphRAG camp ("relationships need graphs"). A real, unsettled architectural fork for how captured intent should be stored.
+07. **Structure vs. natural language.** Kellogg ("tokens are all the structure you need," graphs are a trap) vs. the context-graph/GraphRAG camp ("relationships need graphs"). A real, unsettled architectural fork for how captured intent should be stored.
 
-8. **Who is the audience now?** Historically intent-capture served future-humans (the next maintainer). Increasingly the primary reader is an *agent* — and agents have different needs (machine-readable, retrievable, compact, "compass not encyclopedia"). This is quietly reshaping the *form* intent should take.
+08. **Who is the audience now?** Historically intent-capture served future-humans (the next maintainer). Increasingly the primary reader is an *agent* — and agents have different needs (machine-readable, retrievable, compact, "compass not encyclopedia"). This is quietly reshaping the *form* intent should take.
 
-9. **Capture as avoidance.** files.md's warning, applicable to the whole field: an elaborate capture habit can be procrastination wearing a productivity costume. The test for any tool here is whether it makes thinking *happen*, or just makes *not-thinking* feel organized.
+09. **Capture as avoidance.** files.md's warning, applicable to the whole field: an elaborate capture habit can be procrastination wearing a productivity costume. The test for any tool here is whether it makes thinking *happen*, or just makes *not-thinking* feel organized.
 
 10. **The McLuhan retrieval is real.** This isn't a new problem with new answers; it's an old discipline (RFCs, ADRs, IBIS, literate programming, design rationale) made suddenly load-bearing because the implicit channels that let us skip it have gone dark. The winners will likely be old ideas in agent-native clothing.
 
----
+______________________________________________________________________
 
 # Appendix — Where seeds sits
 
@@ -231,6 +233,7 @@ Step back and the same fault lines run through every family. These are the thing
 **Already on the radar** (so the landscape isn't telling you anything new here): ConPort (seeds-83), intent.build (seeds-74.3/80/81), context graphs / graph DB (seeds-42), reasoning compression (seeds-116/120), multi-perspective deliberation (seeds-117), knowledge artifacts (seeds-90/91), source-document gleaning (seeds-125/126).
 
 **Newer entrants worth a look:**
+
 - **The Triple Debt vocabulary itself** — the cleanest problem statement and positioning seeds could adopt; "intent debt" is a better elevator pitch than anything currently in the README.
 - **git-memento's binding model** — transcript-to-artifact via git notes; a concrete pattern for seeds' seeds-74 (link seeds to source conversations) and seeds-115 (link seeds to experiments).
 - **Tim Kellogg's anti-schema stance** — a direct, credible challenge to seeds' SQLite/typed-relationship structure (and to seeds-42's graph-DB question); worth pressure-testing whether seeds' structure helps the agent or fights it.
@@ -239,11 +242,12 @@ Step back and the same fault lines run through every family. These are the thing
 
 **The one-line takeaway.** The whole field now agrees on seeds' premise — intent and deliberation are the scarce, uncaptured thing — and the field's single biggest *unsolved* problem (distilling raw deliberation into durable intent without losing the journey) is precisely the bet seeds is placed on. That's a good place to be standing. For the full seeds-specific treatment — grounded in the codebase, the live deliberation log, and the published positioning — see the companion [`capturing-the-why-seeds-evaluation.md`](capturing-the-why-seeds-evaluation.md).
 
----
+______________________________________________________________________
 
 ## Sources
 
 **In the diagnosis (Part I)**
+
 - Storey — Triple Debt paper: [ACM Queue](https://queue.acm.org/detail.cfm?id=3807966) · [arXiv](https://arxiv.org/abs/2603.22106) · [getDX writeup](https://getdx.com/blog/cognitive-debt-the-hidden-risk-in-ai-driven-software-development/) · [Thoughtworks Radar v34](https://www.thoughtworks.com/about-us/news/2026/combat-ai-cognitive-debt-radar-v34) · [RDEL #137](https://rdel.substack.com/p/rdel-137-what-kinds-of-new-debt-are)
 - Storey — [What I'm Hearing About Cognitive Debt](https://margaretstorey.com/blog/2026/02/18/cognitive-debt-revisited/) · [original](https://margaretstorey.com/blog/2026/02/09/cognitive-debt/)
 - Osmani — [The Intent Debt](https://addyosmani.com/blog/intent-debt/)
@@ -252,6 +256,7 @@ Step back and the same fault lines run through every family. These are the thing
 - [Dheer — Your ticket is a prompt](https://dheer.co/tickets-are-prompts/) · Sunil Pai — [developer relations after the cheat code machine](https://sunilpai.dev/posts/developer-relations/)
 
 **In the solution space (Part II)**
+
 - Specs: [Rickard — The Spec Layer](https://blog.matt-rickard.com/p/the-spec-layer) · [CodeSpeak](https://codespeak.dev/) · [Latent.Space — How to Kill the Code Review](https://www.latent.space/p/reviews-dead) · [Ball — Building Software Is Learning](https://registerspill.thorstenball.com/p/building-software-is-learning)
 - Transcripts: [git-memento](https://github.com/mandel-macaque/memento) · [Spiess — Software Collaboration in the AI Age](https://spiess.dev/blog/software-collaboration-in-the-ai-age)
 - Memory/graphs: [Kellogg — Agent Memory Patterns](https://timkellogg.me/blog/2026/04/27/memory-patterns) · [InfoWorld — Are decision traces enough?](https://www.infoworld.com/article/4156909/contexts-graphs-ai-memory-and-enterprise-knowledge-are-decision-traces-enough.html) · [Osmani — Long-running Agents](https://addyosmani.com/blog/long-running-agents/)

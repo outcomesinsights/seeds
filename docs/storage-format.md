@@ -32,7 +32,9 @@ no second copy of anything. The directory listing *is* the seed set.
 
 ### 1.1 The path rule
 
-    .seeds/seeds/<id>.md
+```
+.seeds/seeds/<id>.md
+```
 
 The filename stem is the id **verbatim, dots included** — `seeds-lcfa.6.1` is
 stored at `.seeds/seeds/seeds-lcfa.6.1.md`. There is no escaping, no directory
@@ -83,17 +85,22 @@ Settles seeds-sdhc's open items #3 and #4…
 Mechanically:
 
 - **UTF-8**, no BOM. **LF** line endings. The file ends with exactly one newline.
+
 - Byte 0 is the first `-` of the opening `---`. Nothing precedes it — no blank
   line, no comment, no shebang.
+
 - The frontmatter is delimited by a line containing exactly `---` to open and a
   line containing exactly `---` to close. No `...` document terminator.
+
 - Exactly one blank line separates the closing `---` from the body. **A file
   whose body is empty ends at the closing `---` line's newline** — there is no
   trailing blank line, because every markdown formatter strips one and a store
   whose canonical form disagrees with the ecosystem's default formatter
   re-dirties itself on every run. The earlier `---\n\n` spelling still parses,
   and is reported as `non-canonical-bytes`.
+
 - Everything after that blank line, verbatim, is the body.
+
 - **The body is stored formatted.** Every write runs it through
   [mdformat](https://mdformat.rtfd.io/) — pinned, because the formatter's
   output *is* the canonical form, so a version whose style changed would make
@@ -187,20 +194,20 @@ makes a single line of it worth reading — see §9.1.
 
 ## 3. Frontmatter fields
 
-| key | YAML type | required |
-| --- | --- | --- |
-| `id` | string | always |
-| `title` | string | always |
-| `status` | string, closed set | always |
-| `type` | string, open vocabulary | always |
-| `parent` | string | iff the id is dotted |
-| `created_at` | timestamp | always |
-| `updated_at` | timestamp | always |
-| `resolved_at` | timestamp | iff `status` is terminal |
-| `resolution` | string | optional |
-| `tags` | block sequence of strings | optional |
-| `relationships` | block sequence of mappings | optional |
-| `converted_at` | timestamp | written by the converter only |
+| key             | YAML type                  | required                      |
+| --------------- | -------------------------- | ----------------------------- |
+| `id`            | string                     | always                        |
+| `title`         | string                     | always                        |
+| `status`        | string, closed set         | always                        |
+| `type`          | string, open vocabulary    | always                        |
+| `parent`        | string                     | iff the id is dotted          |
+| `created_at`    | timestamp                  | always                        |
+| `updated_at`    | timestamp                  | always                        |
+| `resolved_at`   | timestamp                  | iff `status` is terminal      |
+| `resolution`    | string                     | optional                      |
+| `tags`          | block sequence of strings  | optional                      |
+| `relationships` | block sequence of mappings | optional                      |
+| `converted_at`  | timestamp                  | written by the converter only |
 
 Keys are emitted in exactly that order. Order is not semantic — a reader must
 not depend on it — but a *writer* must produce it, so that re-writing an
@@ -288,7 +295,9 @@ and no cycle exists.
 ISO 8601, **always timezone-aware, always normalized to UTC**, as
 `datetime.isoformat()` emits it:
 
-    2026-08-31T09:41:07.220118+00:00
+```
+2026-08-31T09:41:07.220118+00:00
+```
 
 A naive timestamp — no offset — is a **read error**. The JSONL importer
 interprets naive input as UTC to avoid losing a third-party record; that
@@ -367,11 +376,11 @@ relationships:
     created_at: 2026-08-28T14:02:11.481293+00:00
 ```
 
-| key | type | required |
-| --- | --- | --- |
-| `target_id` | string (a seed id) | yes |
-| `rel_type` | string, closed set | yes |
-| `created_at` | timestamp | yes |
+| key          | type               | required |
+| ------------ | ------------------ | -------- |
+| `target_id`  | string (a seed id) | yes      |
+| `rel_type`   | string, closed set | yes      |
+| `created_at` | timestamp          | yes      |
 
 `created_at` is the edge's own creation time, not either seed's, and it is the
 same value at both ends.
@@ -400,10 +409,10 @@ it holds. **A symmetric type stores itself at both ends. A directional type
 stores a named inverse at the far end.** Without a named inverse, symmetry
 checking cannot tell which of the two files is the wrong one.
 
-| stored at the near end | stored at the far end | direction |
-| --- | --- | --- |
-| `relates-to` | `relates-to` | symmetric |
-| `questions` | `questioned-by` | directional |
+| stored at the near end | stored at the far end | direction   |
+| ---------------------- | --------------------- | ----------- |
+| `relates-to`           | `relates-to`          | symmetric   |
+| `questions`            | `questioned-by`       | directional |
 
 Those three strings are the closed set of legal `rel_type` values.
 `questioned-by` is a storage-side name introduced by this document to satisfy the
@@ -483,7 +492,7 @@ Grammar:
 - It must be **the first non-blank line after the heading it retires**. A marker
   anywhere else is a violation; there is no floating supersession.
 - Then a date, `YYYY-MM-DD` — the day the position was retired.
-- Then ` — ` (space, em dash, space).
+- Then `—` (space, em dash, space).
 - Then the **reason clause, which is mandatory** and non-empty. `seeds check`
   enforces its presence. A bare marker loses the *why*, and a conclusion without
   its reason invites re-litigation — a heading saying "Python" invites an agent
@@ -602,7 +611,9 @@ the case where the writer is killed mid-write.
 The project prefix lives in a small tracked **`.seeds/config.yaml`**, alongside any
 future repo-level settings:
 
-    prefix: seeds
+```
+prefix: seeds
+```
 
 Ruled by @aguynamedryan, 2026-08-31. Until then it lived in the SQLite `config`
 table (`db.get_prefix`, db.py:316), which phase 5 deletes.

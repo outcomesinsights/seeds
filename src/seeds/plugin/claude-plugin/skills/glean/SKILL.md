@@ -33,7 +33,9 @@ back 96 candidates in 13KB. You never see the transcript.
 
 ## 1. Run the verb
 
-    seeds glean
+```
+seeds glean
+```
 
 It resolves the current session from `$CLAUDE_CODE_SESSION_ID` — never from the
 most-recently-modified file, which on a host running several agents is routinely somebody
@@ -78,8 +80,7 @@ The test: would somebody opening this seed cold in three months learn something 
 not recover from the repository?
 
 Read the `already captured` block as a cue, not as noise. If a survivor sharpens,
-qualifies, or contradicts a seed listed there, the right move is `seeds update <id> --append
-"…"` on that seed — not a second seed saying nearly the same thing. Likewise, cluster
+qualifies, or contradicts a seed listed there, the right move is `seeds update <id> --append "…"` on that seed — not a second seed saying nearly the same thing. Likewise, cluster
 several candidates circling one idea into a single seed instead of filing near-duplicates.
 
 ## 3. Offer the survivors, one at a time
@@ -100,7 +101,9 @@ single yes is not a review.
 `seeds jot "<the thought>"` is right for a one-liner — a title-only seed is a legitimate
 shape, not an unfinished one. For anything with a body:
 
-    seeds create -t "<title>" --type <decision|question|exploration|concern|idea> --content-file <path>
+```
+seeds create -t "<title>" --type <decision|question|exploration|concern|idea> --content-file <path>
+```
 
 `--content-file` keeps a multi-paragraph body out of argv (`-c TEXT` is fine for a short
 one, and `--content -` reads stdin). Write the turn reference into the body, and **quote the

@@ -80,6 +80,7 @@ Cutting a release (manual steps; intentionally no automation yet):
    missing. `pyproject.toml` derives the version via hatchling and is never
    edited by hand. `tests/test_version_sync.py` fails the build if a manifest is
    ever left behind.
+
 2. Run `just changelog-coverage` first, and do not proceed until it exits 0.
    It classifies *every* commit in the range as RENDERED, SKIPPED (a deliberate
    `cliff.toml` rule dropped it) or MISSING, and fails naming the offenders —
@@ -98,6 +99,7 @@ Cutting a release (manual steps; intentionally no automation yet):
    invalidated by further work. Writing it in this step, immediately before the
    commit and tag, removes that failure for free; step 3 is the belt to that
    suspenders.
+
 3. Run `just changelog-section X.Y.Z` and do not proceed until it exits 0.
    Step 2's gate proves the *generator* saw every commit; this one proves the
    section you just wrote kept up with it, which is a different question — a
@@ -112,15 +114,21 @@ Cutting a release (manual steps; intentionally no automation yet):
    The reason is mandatory; a bare hash allowlist is one nobody can audit
    later. 0.6.0 carries exactly one, for a `fix:` superseded within the same
    release.
+
 4. Commit the bumped files and the changelog together
    (`chore: bump version to X.Y.Z`).
+
 5. Tag: `git tag -a vX.Y.Z -m "vX.Y.Z — short summary"`.
+
 6. Push: `git push origin main && git push origin vX.Y.Z`.
+
 7. Create the GitHub Release with the same notes:
    `gh release create vX.Y.Z --notes "..."`.
+
 8. Refresh the global `seeds` CLI on your dev host so the new version is
    available outside the source tree. Which command does that depends on how
    `seeds` got onto your PATH, so check first with `which seeds`:
+
    - **`~/.nix-profile/bin/seeds`** — nix installed it (the case on titan).
      Refresh from `~/.config/home-manager`: `nix flake update seeds`, then
      switch. The flake input carries no ref pin, so it tracks **main**, not the

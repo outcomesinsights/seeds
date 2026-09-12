@@ -5,40 +5,44 @@
 Both documents identify the same fundamental issue from different angles:
 
 **Beads perspective** (Steve Yegge):
+
 > "If you got competing documents, obsolete documents, conflicting documents, ambiguous documents - they get dementia."
 
 **ADR perspective** (Michael Nygard):
+
 > "When teams don't document decisions, future developers either blindly accept past choices or blindly change them."
 
 For AI agents, this compounds into **architectural design amnesia**: every session, the agent forgets:
+
 - What architectural decisions were made
 - Why certain approaches were chosen over alternatives
 - What constraints and tradeoffs informed those choices
 - What decisions depend on or enable other decisions
 
----
+______________________________________________________________________
 
 ## Why Beads Succeeds Where ADR Tools Fail
 
 The key insight is:
 
-| What Beads Provides | What ADR Tools Lack |
-|---------------------|---------------------|
-| SQLite + JSONL storage | Markdown files only |
-| Discrete typed fields | Free-form sections |
-| `bd dep add` relationships | Text-based "Superseded by" |
-| `bd list --status=X` | Manual grep |
-| `bd ready` (unblocked items) | Nothing comparable |
-| Hash-based IDs | Sequential numbering (collision-prone) |
-| Atomic CLI operations | "Open editor, fill template" |
+| What Beads Provides          | What ADR Tools Lack                    |
+| ---------------------------- | -------------------------------------- |
+| SQLite + JSONL storage       | Markdown files only                    |
+| Discrete typed fields        | Free-form sections                     |
+| `bd dep add` relationships   | Text-based "Superseded by"             |
+| `bd list --status=X`         | Manual grep                            |
+| `bd ready` (unblocked items) | Nothing comparable                     |
+| Hash-based IDs               | Sequential numbering (collision-prone) |
+| Atomic CLI operations        | "Open editor, fill template"           |
 
 The **secret sauce** is that Beads doesn't ask the AI to parse free-form text. It provides:
+
 1. **Structured, queryable data** - Not "interpret this markdown"
 2. **Programmatic operations** - Not "open vim and edit"
 3. **Explicit relationships** - Not "find the text that says 'related to'"
 4. **Enforced schema** - Not "hope the AI follows the template"
 
----
+______________________________________________________________________
 
 ## ADR-Specific Domain Needs
 
@@ -90,24 +94,25 @@ ADRs need to capture not just "what we decided" but "what we considered and why 
 
 ### 4. ADR-Specific Relationships
 
-| Beads Relationship | ADR Relationship | Semantic Difference |
-|-------------------|------------------|---------------------|
-| `blocks` | `depends_on` | Similar - temporal ordering |
-| `parent/child` | - | ADRs are typically flat |
-| `relates_to` | `relates_to` | Same - loose coupling |
-| - | `supersedes` | ADR-specific: replaces with immutability |
-| - | `amends` | ADR-specific: modifies without replacing |
-| - | `enables` | ADR-specific: "this decision opens up..." |
+| Beads Relationship | ADR Relationship | Semantic Difference                       |
+| ------------------ | ---------------- | ----------------------------------------- |
+| `blocks`           | `depends_on`     | Similar - temporal ordering               |
+| `parent/child`     | -                | ADRs are typically flat                   |
+| `relates_to`       | `relates_to`     | Same - loose coupling                     |
+| -                  | `supersedes`     | ADR-specific: replaces with immutability  |
+| -                  | `amends`         | ADR-specific: modifies without replacing  |
+| -                  | `enables`        | ADR-specific: "this decision opens up..." |
 
 ### 5. Different Query Patterns
 
 Instead of "what work is ready?", ADR queries are:
+
 - "What decisions affect the authentication system?"
 - "Are there conflicting decisions about data storage?"
 - "What decisions are still proposed and need review?"
 - "What would break if we changed this decision?"
 
----
+______________________________________________________________________
 
 ## Proposed Architecture: ADR-Beads
 
@@ -242,11 +247,12 @@ adr sync --flush-only              # Just export to JSONL
 - `adr create --title="..." --context="..."` - New decision
 ```
 
----
+______________________________________________________________________
 
 ## How This Solves Design Amnesia
 
 **Without ADR-Beads:**
+
 ```
 Session 1: AI designs auth system using JWT
 Session 2: AI doesn't know about Session 1, proposes sessions-based auth
@@ -255,6 +261,7 @@ Session 3: AI proposes OAuth, unaware of prior discussions
 ```
 
 **With ADR-Beads:**
+
 ```
 Session 1: AI creates ADR for JWT auth, accepts it
 Session 2: `adr prime` injects context
@@ -265,7 +272,7 @@ Session 3: If requirements change, AI creates new ADR that supersedes
 → Coherent evolution, no amnesia
 ```
 
----
+______________________________________________________________________
 
 ## Key Insight: ADRs as "Architectural Immune System"
 
@@ -276,7 +283,7 @@ The `adr prime` injection acts as an **immune system** against design amnesia:
 3. **Memory** - Even across context compaction, the decisions persist
 4. **Evolution** - Supersession allows change while preserving history
 
----
+______________________________________________________________________
 
 ## Implementation Considerations
 
@@ -295,11 +302,12 @@ While storage is JSONL, humans often want to read ADRs as markdown. An `adr expo
 ### Integration with Beads
 
 These could coexist:
+
 - Beads tracks "implement ADR-123" as work items
 - ADR-Beads tracks the decisions themselves
 - Cross-references via `external_ref` fields
 
----
+______________________________________________________________________
 
 ## Conclusion
 

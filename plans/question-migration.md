@@ -11,7 +11,9 @@ The current model has a `questions` table (separate entity) and a `related_to` J
 Examined 114 seeds, 36 questions, and 65 seeds with `related_to` links. Here are the relationship patterns actually present:
 
 ### Pattern 1: Decision → Idea ("addresses" / "decides-for")
+
 Decisions linked to the idea they resolve. Strongly directional.
+
 - `seed-061a` (decision: Use Flask) → `seed-5f7b` (idea: Web UI)
 - `seed-4950` (decision: Use Pico CSS) → `seed-5f7b` (idea: Web UI)
 - `seed-43a0` (decision: Read-only) → `seed-5f7b` (idea: Web UI)
@@ -19,44 +21,53 @@ Decisions linked to the idea they resolve. Strongly directional.
 - `seed-80e3` (decision: Show questions in detail) → `seed-5f7b` (idea: Web UI)
 
 ### Pattern 2: Concern → Idea/Concern ("raises-concern-about" / clustering)
+
 Concerns linked to what they're concerned about, or clustered with related concerns.
+
 - `seed-ed41` (concern: AI adoption) ← `seed-5c22`, `seed-aeb6` (specific friction instances)
 - `seed-f537` (concern: exponential growth) ← `seed-39d3`, `seed-5c7b`, `seed-502a`, `seed-bac9` (related mitigations/observations)
 - `seed-80ba` (concern: question confusion) ↔ `seed-29c0` (idea: question/exploration overlap)
 
 ### Pattern 3: Question → Seed ("questions")
+
 The `questions` table is a clear directed relationship: question asks about a seed.
+
 - 36 questions across 14 seeds, heavily concentrated on `seed-81a4` (18 questions about shipping beta)
 - Questions have answers (25 answered, 11 open) — the answer relationship is implicit in the current model
 
 ### Pattern 4: Exploration → Topic ("explores")
+
 Explorations linked to the thing they're investigating.
+
 - `seed-1f89` (exploration: options modeling) ↔ `seed-eedd` (idea: where do alternatives live?)
 - `seed-134e` (exploration: knowledge accumulation) ↔ `seed-dedd.2`, `seed-7e8e`, `seed-1def`, `seed-d2e765de`
 - `seed-73f0` (exploration: why no MCP in beads) ↔ `seed-c989.1` (idea: MCP transport)
 
 ### Pattern 5: Mutual/symmetric ("relates-to" — genuinely undifferentiated)
+
 Some links are genuinely symmetric with no clear directionality:
+
 - `seed-0301` (markdown rendering) ↔ `seed-ccf0` (prettify markdown) — related ideas, neither depends on the other
 - `seed-7102` (nested view) ↔ `seed-76a1` (toggle nested/flat) — complementary features
 - `seed-4653` ↔ `seed-1fadaed5` — both about linking seeds to external things
 
 ### Summary of Observed Relationship Types
 
-| Pattern | Candidate type | Direction | Count (approx) |
-|---------|---------------|-----------|-----------------|
-| Question asks about seed | `questions` | directed | 36 |
-| Answer resolves question | `answers` | directed | 25 |
-| Decision addresses idea | relates-to (TBD) | directed | ~15 |
-| Concern about something | relates-to (TBD) | directed | ~12 |
-| Exploration investigates | relates-to (TBD) | directed | ~8 |
-| Symmetric/undifferentiated | `relates-to` | bidirectional | ~20 |
+| Pattern                    | Candidate type   | Direction     | Count (approx) |
+| -------------------------- | ---------------- | ------------- | -------------- |
+| Question asks about seed   | `questions`      | directed      | 36             |
+| Answer resolves question   | `answers`        | directed      | 25             |
+| Decision addresses idea    | relates-to (TBD) | directed      | ~15            |
+| Concern about something    | relates-to (TBD) | directed      | ~12            |
+| Exploration investigates   | relates-to (TBD) | directed      | ~8             |
+| Symmetric/undifferentiated | `relates-to`     | bidirectional | ~20            |
 
 **Conclusion**: `questions` and `answers` are clearly distinct relationship types. The other patterns (decision-addresses, concern-about, explores) are real but less urgent — they can be refined from `relates-to` over time as the organic discovery process reveals which distinctions matter in practice.
 
 ## Schema Changes
 
 ### New table: `relationships`
+
 ```sql
 CREATE TABLE IF NOT EXISTS relationships (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,6 +84,7 @@ CREATE TABLE IF NOT EXISTS relationships (
 ### Removed: `questions` table and `related_to` column on seeds
 
 ### FTS5 simplified
+
 Remove `question_texts` column — questions are now seeds with their own FTS entries.
 
 ## Key Design Decisions
@@ -101,6 +113,7 @@ Remove `question_texts` column — questions are now seeds with their own FTS en
 **No separate migration phase**: Rather than a multi-phase approach where old and new code coexist, we'll do a single atomic migration. The old `questions` table and `related_to` column are migrated and removed in one pass.
 
 **What migration does**:
+
 1. Creates `relationships` table
 2. For each seed with `related_to` entries: creates bidirectional `relates-to` relationship rows
 3. For each question row: creates a new seed (type=question, title=text, content=answer, appropriate status) and a `questions` relationship from the new seed to its parent seed
@@ -110,15 +123,18 @@ Remove `question_texts` column — questions are now seeds with their own FTS en
 ## Phased Implementation
 
 ### Phase 1: Models + DB layer
+
 Build the foundation without touching CLI or export.
 
 **`src/seeds/models.py`**:
+
 - Add `RelationType` enum (`relates-to`, `questions`, `answers`)
 - Add `Relationship` dataclass (source_id, target_id, rel_type, created_at)
 - Remove `Question` dataclass and `QuestionStatus` enum
 - Remove `related_to` from `Seed` dataclass
 
 **`src/seeds/db.py`**:
+
 - Add `relationships` table to schema, remove `questions` table and `related_to` column
 - Add migration: create relationships table, populate from `related_to` JSON arrays and `questions` table, then drop old structures
 - Add CRUD: `create_relationship()`, `get_relationships(seed_id, rel_type=None, direction='both')`, `delete_relationship()`
@@ -132,9 +148,11 @@ Build the foundation without touching CLI or export.
 **Tests**: New `TestRelationships` class in `test_db.py`, rewrite question tests
 
 ### Phase 2: CLI + export + web
+
 Wire up the new DB layer to user-facing code.
 
 **`src/seeds/cli.py`**:
+
 - `ask`: creates seed (type=question) + `questions` relationship
 - `answer`: sets seed.content = answer, status = RESOLVED
 - `questions`: queries via relationship type
@@ -144,26 +162,30 @@ Wire up the new DB layer to user-facing code.
 - `doctor`: update orphan check to use relationships
 
 **`src/seeds/export.py`**:
+
 - Export: `format_version: 2`, relationships as outbound edges per seed, no embedded questions
 - Import: detect format version, handle v1 (reconstruct relationships from old format) and v2
 
 **`src/seeds/prime.py`**:
+
 - Update command descriptions (minor text changes)
 
 **`src/seeds/web.py`** + templates:
+
 - Read relationships from DB instead of `seed.related_to`
 - Questions page queries question-type seeds
 
 ## Files Modified (in order)
-1. `src/seeds/models.py` — add RelationType, Relationship; remove Question, QuestionStatus, related_to
-2. `src/seeds/db.py` — relationships table, migration, new queries, remove question methods, simplify FTS
-3. `src/seeds/cli.py` — rewrite ask/answer/questions/link/show/tree/doctor
-4. `src/seeds/export.py` — v2 format with backward-compatible import
-5. `src/seeds/prime.py` — update command descriptions
-6. `src/seeds/web.py` — use relationships for display
-7. `tests/conftest.py` — update fixtures
-8. `tests/test_db.py` — rewrite question tests as relationship tests
-9. `tests/test_cli.py` — update command tests
+
+01. `src/seeds/models.py` — add RelationType, Relationship; remove Question, QuestionStatus, related_to
+02. `src/seeds/db.py` — relationships table, migration, new queries, remove question methods, simplify FTS
+03. `src/seeds/cli.py` — rewrite ask/answer/questions/link/show/tree/doctor
+04. `src/seeds/export.py` — v2 format with backward-compatible import
+05. `src/seeds/prime.py` — update command descriptions
+06. `src/seeds/web.py` — use relationships for display
+07. `tests/conftest.py` — update fixtures
+08. `tests/test_db.py` — rewrite question tests as relationship tests
+09. `tests/test_cli.py` — update command tests
 10. `tests/test_export.py` — add v1→v2 import test, update roundtrip
 
 ## Verification

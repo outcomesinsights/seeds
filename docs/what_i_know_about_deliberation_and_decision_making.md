@@ -3,24 +3,24 @@
 **Created:** 2026-01-22
 **Context:** Research for ADRB tooling - capturing the *process* of reaching decisions, not just the final decision record
 
----
+______________________________________________________________________
 
 ## Table of Contents
 
-1. [Core Concepts and Definitions](#core-concepts-and-definitions)
-2. [Decision-Making Frameworks](#decision-making-frameworks)
-3. [Deliberation: Structure and Methods](#deliberation-structure-and-methods)
-4. [Documentation Patterns and Artifacts](#documentation-patterns-and-artifacts)
-5. [Questions and Answers as Deliberation Artifacts](#questions-and-answers-as-deliberation-artifacts)
-6. [Tools and Systems](#tools-and-systems)
-7. [Human+AI Deliberation](#humanai-deliberation)
-8. [Best Practices](#best-practices)
-9. [Anti-Patterns](#anti-patterns)
+01. [Core Concepts and Definitions](#core-concepts-and-definitions)
+02. [Decision-Making Frameworks](#decision-making-frameworks)
+03. [Deliberation: Structure and Methods](#deliberation-structure-and-methods)
+04. [Documentation Patterns and Artifacts](#documentation-patterns-and-artifacts)
+05. [Questions and Answers as Deliberation Artifacts](#questions-and-answers-as-deliberation-artifacts)
+06. [Tools and Systems](#tools-and-systems)
+07. [Human+AI Deliberation](#humanai-deliberation)
+08. [Best Practices](#best-practices)
+09. [Anti-Patterns](#anti-patterns)
 10. [How This Relates to RFCs, ADRs, and Design Docs](#how-this-relates-to-rfcs-adrs-and-design-docs)
 11. [Synthesis: What We Need](#synthesis-what-we-need)
 12. [Sources and Further Reading](#sources-and-further-reading)
 
----
+______________________________________________________________________
 
 ## Core Concepts and Definitions
 
@@ -54,16 +54,16 @@ Software architecture decisions often exhibit "wickedness" - they involve trade-
 
 These terms are often conflated but serve different purposes:
 
-| Dialogue | Deliberation |
-|----------|--------------|
+| Dialogue                             | Deliberation                         |
+| ------------------------------------ | ------------------------------------ |
 | Fosters understanding and connection | Guides toward decisions and outcomes |
-| Open-ended exploration | Structured toward resolution |
-| Values meaning-making | Values actionable conclusions |
-| No predetermined goal | Aims at consensus or decision |
+| Open-ended exploration               | Structured toward resolution         |
+| Values meaning-making                | Values actionable conclusions        |
+| No predetermined goal                | Aims at consensus or decision        |
 
 Both have a place in the decision-making lifecycle. Dialogue often precedes deliberation.
 
----
+______________________________________________________________________
 
 ## Decision-Making Frameworks
 
@@ -106,6 +106,7 @@ Instead of seeking agreement ("Does everyone agree?"), consent-based approaches 
 The definition of an objection: "Carrying out this proposal will interfere with our ability to achieve our aims."
 
 The process:
+
 1. Present proposal
 2. Clarifying questions
 3. Reaction round
@@ -140,7 +141,7 @@ From the decision sciences, SDM provides a framework for complex decisions:
 
 **Key insight**: SDM makes values explicit. Disagreements often stem from different unstated objectives.
 
----
+______________________________________________________________________
 
 ## Deliberation: Structure and Methods
 
@@ -149,6 +150,7 @@ From the decision sciences, SDM provides a framework for complex decisions:
 Developed by Werner Kunz and Horst Rittel in the 1960s, IBIS provides a grammar for deliberation:
 
 **Elements:**
+
 - **Issues** (Questions): What needs to be decided?
 - **Positions** (Ideas): What are the possible answers?
 - **Arguments**: Why support or oppose a position?
@@ -193,15 +195,16 @@ The Socratic method is iterative - each answer generates new questions.
 
 ### Synchronous vs. Asynchronous Deliberation
 
-| Synchronous | Asynchronous |
-|-------------|--------------|
-| Real-time meetings | Distributed over time |
-| Benefits from energy and momentum | Allows time for reflection |
-| Risk of groupthink | Reduces bias from social pressure |
-| Harder across time zones | Enables global participation |
-| Favors quick thinkers | Levels the playing field |
+| Synchronous                       | Asynchronous                      |
+| --------------------------------- | --------------------------------- |
+| Real-time meetings                | Distributed over time             |
+| Benefits from energy and momentum | Allows time for reflection        |
+| Risk of groupthink                | Reduces bias from social pressure |
+| Harder across time zones          | Enables global participation      |
+| Favors quick thinkers             | Levels the playing field          |
 
 **Best practice for async deliberation:**
+
 - Use a central communication channel with threading
 - Establish clear timelines and decision-makers (DACI)
 - Document decisions in an accessible source of truth
@@ -209,7 +212,7 @@ The Socratic method is iterative - each answer generates new questions.
 
 The Apache Software Foundation uses async deliberation to allow 9 board members to make dozens of decisions in less than 2 hours of monthly meetings - by doing most deliberation asynchronously in advance.
 
----
+______________________________________________________________________
 
 ## Documentation Patterns and Artifacts
 
@@ -217,19 +220,20 @@ The Apache Software Foundation uses async deliberation to allow 9 board members 
 
 Different artifacts capture different aspects of the decision lifecycle:
 
-| Artifact | When Written | Purpose | Captures Journey? |
-|----------|--------------|---------|-------------------|
-| Meeting notes/transcripts | During/after discussion | Record of conversation | Yes (raw) |
-| RFC/Design Doc | Before implementation | Propose approach, get feedback | Partially |
-| Decision Journal | At decision time | Personal reflection | Yes |
-| ADR | After decision | Record decision and rationale | Summary only |
-| Decision Log | Ongoing | Track project decisions | No |
+| Artifact                  | When Written            | Purpose                        | Captures Journey? |
+| ------------------------- | ----------------------- | ------------------------------ | ----------------- |
+| Meeting notes/transcripts | During/after discussion | Record of conversation         | Yes (raw)         |
+| RFC/Design Doc            | Before implementation   | Propose approach, get feedback | Partially         |
+| Decision Journal          | At decision time        | Personal reflection            | Yes               |
+| ADR                       | After decision          | Record decision and rationale  | Summary only      |
+| Decision Log              | Ongoing                 | Track project decisions        | No                |
 
 ### Decision Journals (Personal)
 
 A decision journal is a personal record for improving decision quality over time.
 
 **What to capture:**
+
 - The decision being made
 - The date and your mental/emotional state
 - Expected outcomes and confidence levels
@@ -277,7 +281,7 @@ With AI transcription becoming ubiquitous, raw conversation transcripts are incr
 
 **Key insight from immediateissues.md**: "My boss and I transcribe all of our conversations now." This creates raw material that could be processed into structured artifacts.
 
----
+______________________________________________________________________
 
 ## Questions and Answers as Deliberation Artifacts
 
@@ -295,6 +299,7 @@ This creates a deliberation record that captures the journey to understanding.
 Several patterns use questions as organizing principles:
 
 **Socratic questioning** proceeds through types:
+
 1. Conceptual clarification questions
 2. Probing assumptions
 3. Probing rationale, reasons, evidence
@@ -303,6 +308,7 @@ Several patterns use questions as organizing principles:
 6. Questions about the question
 
 **IBIS** treats questions (issues) as primary:
+
 - Questions decompose into sub-questions
 - Questions are answered by positions
 - Positions are supported/opposed by arguments
@@ -310,6 +316,7 @@ Several patterns use questions as organizing principles:
 ### Multiple Perspectives on the Same Question
 
 A question can receive answers from:
+
 - Different team members (human perspectives)
 - Different LLMs (model perspectives)
 - The same person at different times (temporal perspectives)
@@ -317,30 +324,34 @@ A question can receive answers from:
 
 **Key insight**: Tracking multiple answers to the same question creates a richer deliberation record than converging to a single answer too quickly.
 
----
+______________________________________________________________________
 
 ## Tools and Systems
 
 ### Argument Visualization Tools
 
 **Compendium**
+
 - Open-source IBIS-based tool
 - Supports dialogue mapping
 - Creates visual maps of issues, positions, arguments
 - No longer actively maintained but still available
 
 **DRed (Design Rationale Editor)**
+
 - Developed at Cambridge Engineering Design Centre
 - IBIS-based with color-coded status (amber=open, green=resolved)
 - Designed for engineers capturing design rationale
 
 **Vithanco**
+
 - Modern tool supporting IBIS notation
 - Creates argument maps
 
 ### Collaborative Decision Platforms
 
 **Loomio**
+
 - Open-source decision-making software
 - Supports proposals, discussions, and voting
 - Built by a worker-owned cooperative
@@ -348,6 +359,7 @@ A question can receive answers from:
 - Designed for consent-based decision-making
 
 **Miro/FigJam/Whiteboard tools**
+
 - General-purpose but used for dialogue mapping
 - Design rationale often captured as sticky notes
 - Less structured than purpose-built tools
@@ -355,11 +367,13 @@ A question can receive answers from:
 ### Async Collaboration Tools
 
 **Notion/Confluence**
+
 - RFCs and design docs often live here
 - Comments enable async deliberation
 - Lack structure for IBIS-style argumentation
 
 **GitHub Discussions/Issues**
+
 - RFC workflows often use GitHub
 - Threaded discussions
 - Can link to code and PRs
@@ -367,11 +381,12 @@ A question can receive answers from:
 ### Decision Support Systems (DSS)
 
 Enterprise decision support systems focus on data analysis for decisions. They're typically:
+
 - Data-driven (analytics, dashboards)
 - Focused on business decisions
 - Less about capturing deliberation, more about informing it
 
----
+______________________________________________________________________
 
 ## Human+AI Deliberation
 
@@ -430,10 +445,11 @@ For a human working closely with an AI assistant:
 4. **Documentation phase**: Capture the decision and key insights
 
 **Gap identified**: Current tools support steps 1 and 4 poorly for human+AI pairs:
+
 - Exploration happens in ephemeral sessions
 - Documentation captures outcomes, not journeys
 
----
+______________________________________________________________________
 
 ## Best Practices
 
@@ -477,7 +493,7 @@ For a human working closely with an AI assistant:
 
 5. **Document disagreements**: When you and the AI disagree, that's often where the interesting reasoning lives.
 
----
+______________________________________________________________________
 
 ## Anti-Patterns
 
@@ -519,23 +535,24 @@ For a human working closely with an AI assistant:
 
 **Context loss**: Starting each AI session from scratch without providing relevant history. Wastes time and loses continuity.
 
----
+______________________________________________________________________
 
 ## How This Relates to RFCs, ADRs, and Design Docs
 
 ### The Landscape of Engineering Documentation
 
-| Document Type | Purpose | When Written | Feedback? | Captures Process? |
-|--------------|---------|--------------|-----------|-------------------|
-| RFC | Propose approach, solicit comments | Before implementation | Yes, primary purpose | Partially (comments) |
-| Design Doc | Detail technical approach | Before implementation | Yes | Partially (comments) |
-| ADR | Record architectural decision | At/after decision | Minimal | Summary of rationale |
-| Decision Log | Track project decisions | Ongoing | No | No |
-| Meeting Notes | Record discussion | During/after meeting | No | Yes (raw) |
+| Document Type | Purpose                            | When Written          | Feedback?            | Captures Process?    |
+| ------------- | ---------------------------------- | --------------------- | -------------------- | -------------------- |
+| RFC           | Propose approach, solicit comments | Before implementation | Yes, primary purpose | Partially (comments) |
+| Design Doc    | Detail technical approach          | Before implementation | Yes                  | Partially (comments) |
+| ADR           | Record architectural decision      | At/after decision     | Minimal              | Summary of rationale |
+| Decision Log  | Track project decisions            | Ongoing               | No                   | No                   |
+| Meeting Notes | Record discussion                  | During/after meeting  | No                   | Yes (raw)            |
 
 ### The Gap
 
 None of these cleanly capture the *exploration* phase:
+
 - The questions that arose and how they were answered
 - The alternatives that were considered seriously
 - The reasoning that led to narrowing down options
@@ -548,6 +565,7 @@ RFCs come closest, as they invite comments. But RFC comments are often about the
 From immediateissues.md: "A tool that its ultimate product is an ADR, but captures the thinking that went in, the exploration and thinking that went in to the process before the ADR was generated and set in stone."
 
 This would fill the gap between:
+
 - Raw discussion (meeting transcripts, chat logs) - too unstructured
 - Final artifacts (ADRs, Design Docs) - too polished, no journey
 
@@ -567,13 +585,14 @@ Transcripts/Chat Logs
 ```
 
 The "Exploration Tool" (what ADRB might become) would:
+
 - Track questions and their answers
 - Capture alternatives considered
 - Allow multiple perspectives per question
 - Link to source material (transcripts, etc.)
 - Eventually generate or feed into ADRs
 
----
+______________________________________________________________________
 
 ## Synthesis: What We Need
 
@@ -617,11 +636,12 @@ Based on this research, here's what a deliberation support tool for human+AI pai
 
 5. What triggers moving from exploration to decision?
 
----
+______________________________________________________________________
 
 ## Sources and Further Reading
 
 ### Decision-Making Frameworks
+
 - [DACI Framework - Atlassian](https://www.atlassian.com/team-playbook/plays/daci)
 - [RAPID Decision Making - Bain & Company](https://www.bain.com/insights/rapid-decision-making/)
 - [RAPID vs RACI - Indeed](https://www.indeed.com/career-advice/career-development/rapid-vs-raci)
@@ -629,6 +649,7 @@ Based on this research, here's what a deliberation support tool for human+AI pai
 - [AI-Supported Shared Decision-Making Framework](https://pmc.ncbi.nlm.nih.gov/articles/PMC12331219/)
 
 ### Deliberation and Argumentation
+
 - [Issue-Based Information Systems - Wikipedia](https://en.wikipedia.org/wiki/Issue-based_information_system)
 - [IBIS: A Tool for All Reasons](http://www.cognexus.org/IBIS-A_Tool_for_All_Reasons.pdf)
 - [Dialogue Mapping - Lucidchart](https://www.lucidchart.com/blog/what-is-dialogue-mapping)
@@ -636,22 +657,26 @@ Based on this research, here's what a deliberation support tool for human+AI pai
 - [Design Rationale - Wikipedia](https://en.wikipedia.org/wiki/Design_rationale)
 
 ### Consent and Collaborative Decision-Making
+
 - [Consent Decision Making - Sociocracy For All](https://www.sociocracyforall.org/consent-decision-making/)
 - [Consent Decision-Making - Sociocracy 3.0](https://patterns.sociocracy30.org/consent-decision-making.html)
 - [Comparing Decision-Making Methods](https://www.corporate-rebels.com/blog/comparing-decision-making-methods)
 
 ### Decision Journals and Logs
+
 - [Decision Journal - Farnam Street](https://fs.blog/decision-journal/)
 - [Decision Journal - Alliance for Decision Education](https://alliancefordecisioneducation.org/resources/keeping-a-decision-journal/)
 - [Decision Journal - Atlassian](https://www.atlassian.com/blog/productivity/decision-journal)
 - [Decision Log - Lucid Meetings](https://www.lucidmeetings.com/glossary/decision-log)
 
 ### RFCs and Design Docs
+
 - [Engineering Planning with RFCs, Design Documents and ADRs - Pragmatic Engineer](https://newsletter.pragmaticengineer.com/p/rfcs-and-design-docs)
 - [Software Engineering RFC and Design Doc Examples](https://newsletter.pragmaticengineer.com/p/software-engineering-rfc-and-design)
 - [RFC Guide - Medium](https://medium.com/juans-and-zeroes/a-thorough-team-guide-to-rfcs-8aa14f8e757c)
 
 ### Human+AI Collaboration
+
 - [Fostering Effective Hybrid Human-LLM Reasoning](https://www.frontiersin.org/journals/artificial-intelligence/articles/10.3389/frai.2024.1464690/full)
 - [Multi-AI Collaboration - MIT News](https://news.mit.edu/2023/multi-ai-collaboration-helps-reasoning-factual-accuracy-language-models-0918)
 - [Human-AI Deliberation Research](https://arxiv.org/html/2403.16812v1)
@@ -659,25 +684,29 @@ Based on this research, here's what a deliberation support tool for human+AI pai
 - [AI-Powered Collaboration Models](https://www.augmentcode.com/guides/6-ai-human-development-collaboration-models-that-work)
 
 ### Asynchronous Decision-Making
+
 - [Asynchronous Decision-Making - Opensource.com](https://opensource.com/article/17/12/asynchronous-decision-making)
 - [Async Decisions for Remote Teams - Slite](https://slite.com/blog/how-to-make-decisions-asynchronously)
 - [Async Practices - Atlassian](https://www.atlassian.com/blog/teamwork/async-practices-for-decision-making)
 
 ### Wicked Problems
+
 - [Wicked Problems - Wikipedia](https://en.wikipedia.org/wiki/Wicked_problem)
 - [Understanding Wicked Problems - Systems Thinking Alliance](https://systemsthinkingalliance.org/wicked-problems/)
 - [Wicked Problems in Design Thinking](https://www.interaction-design.org/literature/topics/wicked-problems)
 
 ### Cognitive Bias and Anti-Patterns
+
 - [Cognitive Biases in Decision Making](https://pmc.ncbi.nlm.nih.gov/articles/PMC8763848/)
 - [Cognitive Bias - Wikipedia](https://en.wikipedia.org/wiki/Cognitive_bias)
 - [Cognitive Biases in Board Decision-Making](https://www.boardpro.com/blog/cognitive-biases-in-board-decision-making)
 
 ### Tools
-- [Compendium Software](https://en.wikipedia.org/wiki/Compendium_(software))
+
+- [Compendium Software](<https://en.wikipedia.org/wiki/Compendium_(software)>)
 - [Loomio](https://www.loomio.com/)
 - [Socratic Questioning - Wikipedia](https://en.wikipedia.org/wiki/Socratic_questioning)
 
----
+______________________________________________________________________
 
 *This document captures research to inform the development of tools that support the decision-making process, not just the decision record. It emerged from the realization in immediateissues.md that ADRs capture outcomes, not journeys, and that human+AI pairs need tooling to support their unique deliberation workflow.*

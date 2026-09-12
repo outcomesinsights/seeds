@@ -35,10 +35,12 @@ as literal text — the store holds `\[[clc-97e]\]`, which as a regex reads
 the reference nowhere.
 
 ### Added
+
 - -F matches a reference as text, not as a regex ([7dc8210](https://github.com/outcomesinsights/seeds/commit/7dc821087a4d76df55c5b1614641b293d7cc04ca))
 - --append reads stdin, and prime says to use it ([3a72c1e](https://github.com/outcomesinsights/seeds/commit/3a72c1e10ad3ade23236b54188a90787cf7c738d))
 
 ### Fixed
+
 - An unreadable seed is a message, not a traceback ([f3dad23](https://github.com/outcomesinsights/seeds/commit/f3dad23aa6b271ac2f962e71cf385e1dad93bab9))
 - Refuse a dirty store, and name the files to commit ([b34b922](https://github.com/outcomesinsights/seeds/commit/b34b922ab5de5ccbac64f972d1fa727c929f491a))
 
@@ -65,6 +67,7 @@ formatting would change what it means". Three quarters of the evidence that
 prompted this release was that mislabel.
 
 ### Fixed
+
 - Fence the fork block and the mislabelled setext block ([afbccb1](https://github.com/outcomesinsights/seeds/commit/afbccb1f11caaf9b7e69ea75415ffbd40d0c9f28))
 - Body-kept-verbatim was naming files that are merely stale ([a3d43ea](https://github.com/outcomesinsights/seeds/commit/a3d43ea7437186a0a01baf3b4a0f0463b8a545e6))
 - Sanitize the environment for the `bd` seam too ([1f4e9f0](https://github.com/outcomesinsights/seeds/commit/1f4e9f09f34bb40201391197c82a9e0f0ddd8183))
@@ -93,10 +96,12 @@ loss for a store that never reached v2. Two such stores on this machine held
 nine answered questions between them.
 
 ### Documentation
+
 - The yes/no group, and the right reason for quoting it ([9c31bc3](https://github.com/outcomesinsights/seeds/commit/9c31bc3923f799869034eac0fe89f4a500324af3))
 - Name the verification command, and scope it to the store ([0f73415](https://github.com/outcomesinsights/seeds/commit/0f73415c61f7321743ce96d51270136940c3cc8b))
 
 ### Fixed
+
 - The v1 refusal now names a path that can actually be walked ([215819d](https://github.com/outcomesinsights/seeds/commit/215819d67924300b1722e00fc29c6dae092baf36))
 - Translate the legacy questions table instead of dropping it ([4b112b5](https://github.com/outcomesinsights/seeds/commit/4b112b5e73419b8040635bc426c52fb6ee7cebd6))
 - Stop over-quoting plain scalars, and read what that emits ([5fb8d50](https://github.com/outcomesinsights/seeds/commit/5fb8d5017fe3faf264db5856a7ff6e93a9b362df))
@@ -127,6 +132,7 @@ agents write nearly every seed body and there is nobody standing by to be asked.
 Where fencing cannot save a body, it is stored exactly as it came.
 
 ### Added
+
 - Leave a converted store canonical, and cover two more escapes ([2ed3b03](https://github.com/outcomesinsights/seeds/commit/2ed3b038f6129f9620a77d4b555050d49d843b72))
 - The writer fences its own literal text ([848609d](https://github.com/outcomesinsights/seeds/commit/848609d4c4a6babf0268b6d666cb52bc9f9f7fe4))
 - Seeds normalize rewrites the store in canonical form ([d91fa23](https://github.com/outcomesinsights/seeds/commit/d91fa233df7457e1b826e09e6d7c18fd653251bc))
@@ -159,9 +165,11 @@ Where fencing cannot save a body, it is stored exactly as it came.
 - Gate the CHANGELOG artifact, not just the generator ([a8ef784](https://github.com/outcomesinsights/seeds/commit/a8ef784604bc76a1647714b7d988f7843fadec86))
 
 ### Changed
+
 - Declare ripgrep, which seeds search now needs at runtime ([3174b89](https://github.com/outcomesinsights/seeds/commit/3174b8972a6ad02e1c8e4a5f6ae1486053def1e7))
 
 ### Documentation
+
 - A config above the store is shared state, and say so ([a03086b](https://github.com/outcomesinsights/seeds/commit/a03086b62d65d4d005e74be52d13a06e07acc680))
 - List all seven shipped skills, and gate the list ([a110418](https://github.com/outcomesinsights/seeds/commit/a1104188a29369608df1ec15fe2686123080865f))
 - Make seeds-to-beads write structured Source: lineage ([4328ca4](https://github.com/outcomesinsights/seeds/commit/4328ca42c2f76e4a6c8859fd7c97f48ae19b4433))
@@ -176,6 +184,7 @@ Where fencing cannot save a body, it is stored exactly as it came.
 - The storage overhaul plan, and settle the last five open items ([139847b](https://github.com/outcomesinsights/seeds/commit/139847b044fe8140649784199198eb48019b6411))
 
 ### Fixed
+
 - Inherit formatter options from above the store ([0537b19](https://github.com/outcomesinsights/seeds/commit/0537b1992fe2513e4cbd03516fea938130a10251))
 - Scalar quoting picks whichever form needs no escapes ([81fb86e](https://github.com/outcomesinsights/seeds/commit/81fb86ea400acc71a54f632e87b6faabc7c2bb3d))
 - A body-less seed file ends at the closing delimiter ([5f5b36c](https://github.com/outcomesinsights/seeds/commit/5f5b36c20a41b1d46399ccae905142692d27ec97))
@@ -193,6 +202,7 @@ Where fencing cannot save a body, it is stored exactly as it came.
 - Regenerate uv.lock, stale since the mypy floor bump ([6b62a37](https://github.com/outcomesinsights/seeds/commit/6b62a37ae4b48c6c26fd50d03b3d423cdcec446a))
 
 ### Tooling
+
 - Bump to 0.7.0a1 for the shakedown, and accept PEP 440 alphas ([c5d1628](https://github.com/outcomesinsights/seeds/commit/c5d162894717d60035b94e9c6cfd6ba765108c5f))
 - One-off conversion-era audit of every store against its git history ([dfedd07](https://github.com/outcomesinsights/seeds/commit/dfedd07685b101da45b6c1fe43b762b4b87c12e9))
 - Close seeds-4co.16, and correct my overclaim about canonical bytes ([0658fb9](https://github.com/outcomesinsights/seeds/commit/0658fb98b5af34c5cec0d1fd3d6fb39f4a6a4ad9))
@@ -329,6 +339,7 @@ re-run. `seeds doctor` now surfaces the same records before an import is run.
      apart from work that went missing. See `just changelog-section`. Entries
      git-cliff put under Documentation or Tooling are pruned freely and need no
      marker; everything else does. -->
+
 <!-- changelog-omit: 194cd3e superseded inside this release — 6a70429 raised the
      Python floor to 3.11, which retires the py310 ruff target-version that
      commit set, so it describes a state no released version was ever in -->
@@ -525,8 +536,7 @@ from its JSONL export and synced round-trip without drift.
 
 ## [0.3.2] - 2026-06-04
 
-A correctness release for the Claude Code skills installer. `seeds skills
-install` now guarantees the plugin ends up *enabled*, so the bundled `seeds:*`
+A correctness release for the Claude Code skills installer. `seeds skills install` now guarantees the plugin ends up *enabled*, so the bundled `seeds:*`
 skills actually load in new Claude Code sessions — previously the plugin could
 install but sit disabled, silently contributing nothing. Clean package builds
 are restored, and the version is now single-sourced so the CLI and the plugin
@@ -581,8 +591,8 @@ the seed database for the deliberation that produced them.
   content templates in bead descriptions, writing mechanical acceptance
   criteria, and setting explicit dependencies.
 - **Claude Code plugin tree** under `src/seeds/plugin/` — `seeds-marketplace`
-  + `seeds` plugin manifests for local distribution. Bundled with the Python
-  package via Hatchling's `force-include`.
+  - `seeds` plugin manifests for local distribution. Bundled with the Python
+    package via Hatchling's `force-include`.
 
 ### Documentation
 
@@ -698,20 +708,20 @@ Initial public beta release.
 - **Experimental web UI**: `seeds serve` for read-only browsing of seeds and questions
 - **Doctor command**: `seeds doctor` for installation health checks
 
-[Unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a5...HEAD
-[0.7.0a5]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a4...v0.7.0a5
-[0.7.0a4]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a3...v0.7.0a4
-[0.7.0a3]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a2...v0.7.0a3
-[0.7.0a2]: https://github.com/outcomesinsights/seeds/compare/v0.6.0...v0.7.0a2
-[0.6.0]: https://github.com/outcomesinsights/seeds/compare/v0.5.0...v0.6.0
-[0.5.0]: https://github.com/outcomesinsights/seeds/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/outcomesinsights/seeds/compare/v0.3.5...v0.4.0
-[0.3.5]: https://github.com/outcomesinsights/seeds/compare/v0.3.4...v0.3.5
-[0.3.4]: https://github.com/outcomesinsights/seeds/compare/v0.3.3...v0.3.4
-[0.3.3]: https://github.com/outcomesinsights/seeds/compare/v0.3.2...v0.3.3
-[0.3.2]: https://github.com/outcomesinsights/seeds/compare/v0.3.1...v0.3.2
-[0.3.1]: https://github.com/outcomesinsights/seeds/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/outcomesinsights/seeds/compare/v0.2.0...v0.3.0
-[0.2.1]: https://github.com/outcomesinsights/seeds/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/outcomesinsights/seeds/releases/tag/v0.2.0
 [0.1.0]: https://github.com/outcomesinsights/seeds/releases/tag/v0.1.0
+[0.2.0]: https://github.com/outcomesinsights/seeds/releases/tag/v0.2.0
+[0.2.1]: https://github.com/outcomesinsights/seeds/compare/v0.2.0...v0.3.0
+[0.3.0]: https://github.com/outcomesinsights/seeds/compare/v0.2.0...v0.3.0
+[0.3.1]: https://github.com/outcomesinsights/seeds/compare/v0.3.0...v0.3.1
+[0.3.2]: https://github.com/outcomesinsights/seeds/compare/v0.3.1...v0.3.2
+[0.3.3]: https://github.com/outcomesinsights/seeds/compare/v0.3.2...v0.3.3
+[0.3.4]: https://github.com/outcomesinsights/seeds/compare/v0.3.3...v0.3.4
+[0.3.5]: https://github.com/outcomesinsights/seeds/compare/v0.3.4...v0.3.5
+[0.4.0]: https://github.com/outcomesinsights/seeds/compare/v0.3.5...v0.4.0
+[0.5.0]: https://github.com/outcomesinsights/seeds/compare/v0.4.0...v0.5.0
+[0.6.0]: https://github.com/outcomesinsights/seeds/compare/v0.5.0...v0.6.0
+[0.7.0a2]: https://github.com/outcomesinsights/seeds/compare/v0.6.0...v0.7.0a2
+[0.7.0a3]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a2...v0.7.0a3
+[0.7.0a4]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a3...v0.7.0a4
+[0.7.0a5]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a4...v0.7.0a5
+[unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a5...HEAD

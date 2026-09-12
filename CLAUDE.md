@@ -56,7 +56,7 @@ The test suite uses its own isolated database and is safe to run:
 uv run pytest
 ```
 
----
+______________________________________________________________________
 
 ## Status
 

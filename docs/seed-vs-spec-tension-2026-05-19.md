@@ -42,6 +42,7 @@ But because csc-115.1.1 was a CHILD of csc-115.1, csc-115.1 itself couldn't be r
 This is the wrong relationship type. csc-115.1.1 isn't a sub-task of csc-115.1; it's a *spin-off discussion that emerged during the same conversation*. The two should be related but independent.
 
 The seeds CLI's typed links (`seeds link --type`) currently support only three relationship types:
+
 - `relates-to`
 - `questions`
 - `answers`
@@ -49,6 +50,7 @@ The seeds CLI's typed links (`seeds link --type`) currently support only three r
 There's no `spin-off-of`, `superseded-by`, `deferred-from`, `derivative-of`, or similar. The choice is binary: child (blocks parent) or unrelated (loses thread).
 
 We worked around this in the cleanup by:
+
 1. Resolving csc-115.1.1 with a "relocated to csc-147" note.
 2. Creating csc-147 as a new top-level seed with the same content.
 3. Adding a `relates-to` link from csc-147 back to csc-115.1.
@@ -56,6 +58,7 @@ We worked around this in the cleanup by:
 This works but feels like a structural patch on a missing affordance. The relation that actually exists — "csc-147 came out of csc-115.1's discussion but is not part of csc-115.1's scope" — has no direct expression in the tool.
 
 **Open questions for the seeds tool**:
+
 - Should there be a `spin-off-of` (or similar) typed link?
 - Should the "blocking" semantics of the parent-child relationship be reconsidered? (e.g., a `--non-blocking` flag for child relationships)
 - Or is the right answer that *children* should always be in-scope-of-parent, and the right pattern for spin-offs is exactly what we did — top-level seeds with `relates-to` links?
@@ -66,12 +69,12 @@ csc-115.1 started as an idea (Ryan's design dump) and a deliberation (critique, 
 
 There's a discontinuity in what the seed IS at each of these points:
 
-| Phase | What it is | Right tool? |
-|-------|-----------|-------------|
-| Initial dump | A half-formed proposal | Seed (idea type) |
-| Critique cycles | A live conversation | Seed (exploration type) |
-| Locked decisions | A specification | ?? |
-| Implementation | A task | Beads |
+| Phase            | What it is             | Right tool?             |
+| ---------------- | ---------------------- | ----------------------- |
+| Initial dump     | A half-formed proposal | Seed (idea type)        |
+| Critique cycles  | A live conversation    | Seed (exploration type) |
+| Locked decisions | A specification        | ??                      |
+| Implementation   | A task                 | Beads                   |
 
 There's a missing layer between "seed" and "bead". The seed captured the deliberation faithfully; the beads will capture the work. But the *specification* — the thing an implementer reads to know what to build — doesn't have a natural home. In this session it ended up as a "Final Design (Locked)" section prepended to the seed body, with the deliberation history preserved below.
 
@@ -82,6 +85,7 @@ That works but it's a stretch. The seeds tool is designed for low-friction delib
 That feels right. The cost: a new tool to invent, build, and maintain. The benefit: each tool stays focused on what it's good at; the spec layer becomes a first-class artifact (versioned, reviewable, link-target-able) instead of a section in a seed body.
 
 **Open questions**:
+
 - What would a between-seeds-and-beads spec layer look like? A new tool? A formalized seed type (`type: specification`)? A separate file living alongside the seed?
 - How does deliberation flow into spec, and spec flow into beads? Manual lift? Tool-mediated?
 - Where do test fixtures, API contracts, schema diagrams live in this layered model? In the spec layer or the bead layer?

@@ -4,13 +4,13 @@
 >
 > **Read the confidence labels.** The two dev-tooling strands rest on primary sources (GitHub API, npm registry, verbatim arXiv text) and are solid. The civic/democratic strand is **under-evidenced here** — almost every concrete signal failed verification due to source rate-limiting during the run. "Failed verification" means *could not confirm*, **not** *disproven*. That gap is the single biggest limitation of this sweep and is flagged throughout.
 
----
+______________________________________________________________________
 
 ## The one-line answer
 
 **Yes — there is a real surge, but it has mostly colonized the *word* "deliberation" with a different *shape* than seeds.** In the last six months "deliberation software" has come to mean **multi-LLM debate-and-vote ensembles** (agent councils that emit a verdict), not tools that capture a human's reasoning journey. Simultaneously — and more importantly for seeds — the dev-tooling research literature has **independently rediscovered seeds' exact "capture the why" problem**, but is proposing the *post-hoc extraction* solution seeds deliberately rejected. Net: the **problem** is being validated from two directions while seeds' specific **solution shape** (CLI-first, human-reasoning, journey-not-destination, capture-at-decision-time) remains essentially unoccupied.
 
----
+______________________________________________________________________
 
 ## Strand 1 — The agent-council wave *(HIGH confidence; primary sources)*
 
@@ -18,17 +18,18 @@ This is the loud one, and it's genuinely new. Seeded by **Andrej Karpathy's `llm
 
 The exemplars (all dates verified against the GitHub/npm APIs, current to within days of 2026-06-15):
 
-| Tool | What it is | In-window signal |
-|------|-----------|------------------|
+| Tool                                 | What it is                                                                                                                                                                                                                                         | In-window signal                                                    |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | **`@antonbabenko/deliberation-mcp`** | MCP server; a `/consensus` loop (≤5 rounds) with 7 expert sub-agents (Architect, Plan Reviewer, Scope Analyst, Code Reviewer, Security Analyst, Researcher, Debugger) that "debate edge cases until they agree"; "models vote, Claude adjudicates" | **v3.5.4** on 2026-06-11; **51 releases** since v1.6.0 (2026-05-17) |
-| **`council-of-high-intelligence`** | "18 AI personas deliberate your hardest decisions across multiple LLM providers" → emits a synthesized **Verdict** | **~968 stars / 102 forks**, pushed 2026-05-21 |
-| **`claude-synod-debate`** | "Multi-agent deliberation system for Claude Code — 3-vendor heterogeneous ensemble" | pushed 2026-06-07 |
-| **`deliberum`** | "Quality-centered peer deliberation runtime for humans, models, and tools" | created 2026-06-10 |
-| **`llm-deliberate`** | Explicitly "researches the **deliberation process itself rather than producing final answers**" — but for LLM-vs-LLM consensus via 5 social-choice algorithms (Plurality, Borda, Copeland/Condorcet, Ranked Pairs) | 2025-12-24; maintainer says it **won't be maintained** |
+| **`council-of-high-intelligence`**   | "18 AI personas deliberate your hardest decisions across multiple LLM providers" → emits a synthesized **Verdict**                                                                                                                                 | **~968 stars / 102 forks**, pushed 2026-05-21                       |
+| **`claude-synod-debate`**            | "Multi-agent deliberation system for Claude Code — 3-vendor heterogeneous ensemble"                                                                                                                                                                | pushed 2026-06-07                                                   |
+| **`deliberum`**                      | "Quality-centered peer deliberation runtime for humans, models, and tools"                                                                                                                                                                         | created 2026-06-10                                                  |
+| **`llm-deliberate`**                 | Explicitly "researches the **deliberation process itself rather than producing final answers**" — but for LLM-vs-LLM consensus via 5 social-choice algorithms (Plurality, Borda, Copeland/Condorcet, Ranked Pairs)                                 | 2025-12-24; maintainer says it **won't be maintained**              |
 
 …plus `ghcp-llm-council`, `agora`, `the-quorum`, `gemot`, `tribunal`, `Judica`, `harmonica-mcp` and more.
 
 **Why this matters for seeds, precisely:** these tools take a human question and emit an **AI-synthesized verdict**. They are **destination-oriented** and **machine-reasoning** — the exact opposite of seeds' bet. Two sharp observations:
+
 - `llm-deliberate` proves the **"process, not destination" framing is in the air** — but it's been pointed at *machine* consensus, not *human* reasoning. The vocabulary seeds uses is being claimed for a different target.
 - This is a **naming/positioning hazard**: in mid-2026, someone searching "deliberation tool / deliberation MCP" lands in a sea of agent-councils, not journey-capture. seeds' category label now resolves to something else.
 
@@ -43,7 +44,7 @@ Fetched directly ([github.com/xuhuanstudio/deliberum](https://github.com/xuhuans
 
 But it is **not** seeds, in three ways: **unit** — a live single-topic deliberation *room/session runtime*, vs seeds' *corpus over time* (lifecycle, hierarchy, cross-links, "what did we decide 8 months ago and why"); **stack** — TypeScript + Hono daemon + React/Vite web UI at `:3877`, vs seeds' CLI-first, git-backed JSONL, no-daemon shape; **maturity** — one author, days old, the name itself provisional. Net: strong philosophical validation from an independent build, but a different product. The thing to watch is whether it generalizes from single-session to corpus-over-time.
 
----
+______________________________________________________________________
 
 ## Strand 2 — The design-rationale problem, independently rediscovered in dev tooling *(HIGH confidence; primary sources)*
 
@@ -56,12 +57,13 @@ The strongest signal that seeds' *problem* is real and rising — from a corner 
 Its proposed fix is a "knowledge layer" that would **extract** those decisions from completed reasoning traces and **persist them as ADRs** to "close the documentation gap" — and the paper notes such tooling "does not yet exist." Reinforced by adjacent in-window papers: **Lore** (arXiv:2603.15566, "Decision Shadow") and **"Context Matters"** (arXiv:2604.03826, EASE 2026).
 
 **The seeds-specific read — and it's a validation of your contrarian bets:** academia is converging on the *problem* seeds was built for, but the *solution* it's reaching for is **automated, post-hoc extraction → ADRs** — which is the **inverse of capture-as-you-deliberate**, and is essentially the two approaches you already deliberated and **declined**:
+
 - post-hoc reconstruction from residue = your `seeds-166` (*proactive corpus extraction*, resolved/declined: "reconstructing from residue isn't very helpful");
 - conclusion-as-ADR output = the ADR rejection baked into seeds' founding (and `seeds-168`, *seeds is upstream of intent*).
 
 So the field rediscovering the problem *and reaching for the approaches you rejected* is a point in favor of seeds' positioning, not against it. (An unverified-but-thematically-aligned paper, arXiv:2504.20781, reportedly measured LLM-generated design rationale at **high recall / low precision** vs human experts — i.e. LLMs can surface plausible reasoning but can't reliably reconstruct the *actual* deliberation. If it holds up, it's direct ammunition for "capture at decision time rather than regenerate afterward." Treat as unconfirmed.)
 
----
+______________________________________________________________________
 
 ## Strand 3 — AI-mediated civic deliberation *(LOW confidence here — under-evidenced, NOT disproven)*
 
@@ -72,7 +74,7 @@ There is continued, possibly accelerating activity in AI-mediated *democratic* d
 
 **Read for seeds:** even at full strength this strand is **human/civic group deliberation** — orthogonal to seeds' dev-tooling, single-thinker capture niche. It matters as evidence that "deliberation + AI" is a hot phrase, not as a competitor. A targeted re-sweep against reachable primary sources (conference program PDFs, funder pages) is the right follow-up if this strand matters to you.
 
----
+______________________________________________________________________
 
 ## What this means for seeds
 
@@ -83,7 +85,7 @@ There is continued, possibly accelerating activity in AI-mediated *democratic* d
 5. **No funding signal** specific to deliberation-*capture* (vs. agent-orchestration) survived verification — so "is money flowing to this niche" is unresolved.
 6. **One to watch — `deliberum`** (see *Closer look* under Strand 1). The journey-persistence signal I flagged **already fired**: it ships an append-only event store on day one, and it's the most seeds-aligned entrant *philosophically* (rejects voting/judge, objections first-class, keeps unresolved boundaries). What still separates it is *unit* (single-session room vs corpus-over-time) and *stack* (TS/daemon/web vs CLI/git). Watch whether it generalizes from a single deliberation to a persistent corpus.
 
----
+______________________________________________________________________
 
 ## Open questions (carried from the harness)
 
@@ -92,7 +94,7 @@ There is continued, possibly accelerating activity in AI-mediated *democratic* d
 - Is seeds' exact combination (CLI-first + human-reasoning + capture-at-decision-time) genuinely unoccupied? This sweep suggests yes but warrants a dedicated confirmation pass.
 - Is there a VC thesis / funding behind deliberation-*capture* specifically? No signal survived; unresolved.
 
----
+______________________________________________________________________
 
 ## Method & integrity notes
 

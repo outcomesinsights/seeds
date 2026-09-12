@@ -2,15 +2,15 @@
 
 ## Table of Contents
 
-1. [History and Origin](#history-and-origin)
-2. [Philosophy and Purpose](#philosophy-and-purpose)
-3. [Core Concepts and Definitions](#core-concepts-and-definitions)
-4. [The IETF RFC Process](#the-ietf-rfc-process)
-5. [Internal/Corporate RFC Processes](#internalcorporate-rfc-processes)
-6. [RFC Templates and Formats](#rfc-templates-and-formats)
-7. [RFC Lifecycle and Workflow](#rfc-lifecycle-and-workflow)
-8. [Tools and Ecosystem](#tools-and-ecosystem)
-9. [Best Practices](#best-practices)
+01. [History and Origin](#history-and-origin)
+02. [Philosophy and Purpose](#philosophy-and-purpose)
+03. [Core Concepts and Definitions](#core-concepts-and-definitions)
+04. [The IETF RFC Process](#the-ietf-rfc-process)
+05. [Internal/Corporate RFC Processes](#internalcorporate-rfc-processes)
+06. [RFC Templates and Formats](#rfc-templates-and-formats)
+07. [RFC Lifecycle and Workflow](#rfc-lifecycle-and-workflow)
+08. [Tools and Ecosystem](#tools-and-ecosystem)
+09. [Best Practices](#best-practices)
 10. [Anti-Patterns to Avoid](#anti-patterns-to-avoid)
 11. [When to Write an RFC](#when-to-write-an-rfc)
 12. [When NOT to Write an RFC](#when-not-to-write-an-rfc)
@@ -18,7 +18,7 @@
 14. [Real-World Examples and Adoption](#real-world-examples-and-adoption)
 15. [Sources and Further Reading](#sources-and-further-reading)
 
----
+______________________________________________________________________
 
 ## History and Origin
 
@@ -44,7 +44,7 @@ RFCs began as informal notes on ARPANET, the precursor to the Internet. Over tim
 
 Today, there are over 8,500 RFCs whose publication is managed through a formal process by the RFC Editor team. The RFC series predates the IETF itself.
 
----
+______________________________________________________________________
 
 ## Philosophy and Purpose
 
@@ -84,7 +84,7 @@ The RFC process creates a searchable, referenceable history of technical decisio
 - Avoiding repeated discussions of the same topics
 - Preserving context across team transitions
 
----
+______________________________________________________________________
 
 ## Core Concepts and Definitions
 
@@ -111,6 +111,7 @@ The time window during which feedback is solicited on an RFC. This period should
 ### NABC Framework
 
 A value proposition format sometimes used in RFCs:
+
 - **N**eed: What problem are we solving?
 - **A**pproach: How will we solve it?
 - **B**enefits: What do we gain?
@@ -118,7 +119,7 @@ A value proposition format sometimes used in RFCs:
 
 This format was introduced to SoundCloud by Gavin Bell and has been adopted by Phil Calcado in his structured RFC process.
 
----
+______________________________________________________________________
 
 ## The IETF RFC Process
 
@@ -129,6 +130,7 @@ A Request for Comments (RFC) is a publication in a series from the principal tec
 ### RFC Streams
 
 There are five streams of RFCs:
+
 1. **IETF**: Standards-track and Best Current Practices
 2. **IRTF**: Internet Research Task Force documents
 3. **IAB**: Internet Architecture Board documents
@@ -140,6 +142,7 @@ Only the IETF creates BCPs and RFCs on the standards track.
 ### Standards Track Maturity Levels
 
 Originally, the standards track had three maturity levels (as defined in RFC 2026):
+
 1. Proposed Standard
 2. Draft Standard
 3. Standard
@@ -161,7 +164,7 @@ In October 2011, RFC 6410 simplified this to two levels:
 
 Once assigned a number and published, an RFC is never rescinded or modified. If amendments are needed, authors publish a revised document. Superseded RFCs are said to be deprecated or obsolete.
 
----
+______________________________________________________________________
 
 ## Internal/Corporate RFC Processes
 
@@ -171,18 +174,18 @@ Many Big Tech companies and high-growth startups have adopted RFC-like processes
 
 ### Companies Using RFCs/Design Docs
 
-| Company | Name | Notes |
-|---------|------|-------|
-| **Uber** | RFC | Started early, scaled from tens to thousands of engineers |
-| **Google** | Design Docs | Comprehensive design document culture |
-| **Spotify** | RFCs and ADRs | "Deeply embedded part of the culture" |
-| **Airbnb** | Specs and Design Docs | For both Product and Engineering |
-| **LinkedIn** | RFCs | "Strong culture of writing RFCs and doing RFC reviews" |
-| **HashiCorp** | RFC | Well-documented public template |
-| **Artsy** | RFC | Used for both technical and cultural changes |
-| **BBC iPlayer** | RFC | Engineering decision documentation |
-| **Amazon** | PR/FAQ | Different format called "working backwards documents" |
-| **Peloton** | Design Docs + ADRs | Evolved approach combining both |
+| Company         | Name                  | Notes                                                     |
+| --------------- | --------------------- | --------------------------------------------------------- |
+| **Uber**        | RFC                   | Started early, scaled from tens to thousands of engineers |
+| **Google**      | Design Docs           | Comprehensive design document culture                     |
+| **Spotify**     | RFCs and ADRs         | "Deeply embedded part of the culture"                     |
+| **Airbnb**      | Specs and Design Docs | For both Product and Engineering                          |
+| **LinkedIn**    | RFCs                  | "Strong culture of writing RFCs and doing RFC reviews"    |
+| **HashiCorp**   | RFC                   | Well-documented public template                           |
+| **Artsy**       | RFC                   | Used for both technical and cultural changes              |
+| **BBC iPlayer** | RFC                   | Engineering decision documentation                        |
+| **Amazon**      | PR/FAQ                | Different format called "working backwards documents"     |
+| **Peloton**     | Design Docs + ADRs    | Evolved approach combining both                           |
 
 Note: Facebook/Meta is notably minimal in its documentation culture compared to other Big Tech companies.
 
@@ -204,7 +207,7 @@ Uber's RFC process illustrates how companies adapt over time:
 3. **Scale Challenges (2,000+ engineers)**: Hundreds of RFCs weekly caused noise; ambiguity about when RFCs were needed; discoverability problems with Google Docs storage
 4. **Adaptation**: Introduced lightweight templates for team-scope changes and heavyweight templates for organization-wide impacts
 
----
+______________________________________________________________________
 
 ## RFC Templates and Formats
 
@@ -212,18 +215,18 @@ Uber's RFC process illustrates how companies adapt over time:
 
 Most RFC templates include these core sections:
 
-| Section | Purpose |
-|---------|---------|
-| **Summary/Overview** | 1-2 paragraphs explaining the RFC's goal |
-| **Background/Context** | Full context so newcomers can understand |
-| **Problem Statement** | Why this change is needed |
-| **Motivation** | Why now? Why this approach? |
-| **Proposal/Solution** | The "how" of the proposed solution |
-| **Detailed Design** | Technical implementation details |
+| Section                     | Purpose                                     |
+| --------------------------- | ------------------------------------------- |
+| **Summary/Overview**        | 1-2 paragraphs explaining the RFC's goal    |
+| **Background/Context**      | Full context so newcomers can understand    |
+| **Problem Statement**       | Why this change is needed                   |
+| **Motivation**              | Why now? Why this approach?                 |
+| **Proposal/Solution**       | The "how" of the proposed solution          |
+| **Detailed Design**         | Technical implementation details            |
 | **Alternatives Considered** | Other approaches and why they were rejected |
-| **Risks/Drawbacks** | Potential downsides and mitigations |
-| **Open Questions** | Unresolved issues that won't block approval |
-| **FAQ** | Common questions and answers |
+| **Risks/Drawbacks**         | Potential downsides and mitigations         |
+| **Open Questions**          | Unresolved issues that won't block approval |
+| **FAQ**                     | Common questions and answers                |
 
 ### The HashiCorp RFC Template
 
@@ -232,6 +235,7 @@ HashiCorp has published a well-regarded RFC template with these key principles:
 **Overview Section**: Should be one or two paragraphs explaining the goal without diving into "why", "why now", or "how".
 
 **Background Section Litmus Test**:
+
 > "If you can't show a random engineer the background section and have them acquire nearly full context on the necessity for the RFC, then the background section is not full enough."
 
 **Proposal Section**: Given the background, this section proposes a solution—an overview of the "how".
@@ -267,11 +271,13 @@ Rust's RFC template is widely influential in open source. Key sections:
 Organizations often develop multiple template tiers:
 
 **Lightweight Templates** (for team-scope changes):
+
 - Problem statement
 - Proposed solution
 - Brief impact analysis
 
 **Heavyweight Templates** (for organization-wide impacts):
+
 - Full background and context
 - Detailed design and implementation plan
 - Comprehensive alternatives analysis
@@ -279,57 +285,64 @@ Organizations often develop multiple template tiers:
 - Migration strategy
 - Success metrics
 
----
+______________________________________________________________________
 
 ## RFC Lifecycle and Workflow
 
 ### Typical RFC Statuses
 
-| Status | Description |
-|--------|-------------|
-| **Draft/In Preparation** | Author is writing, not yet ready for review |
-| **Pending/In Review** | RFC submitted for feedback, comment period active |
-| **Approved/Accepted** | RFC has been approved, ready for implementation |
-| **Active** | RFC is being implemented |
-| **Landed/Completed** | Implementation shipped in production |
-| **Rejected** | RFC was not approved |
-| **Withdrawn** | Author withdrew the RFC |
-| **Superseded/Obsolete** | Replaced by a newer RFC |
+| Status                   | Description                                       |
+| ------------------------ | ------------------------------------------------- |
+| **Draft/In Preparation** | Author is writing, not yet ready for review       |
+| **Pending/In Review**    | RFC submitted for feedback, comment period active |
+| **Approved/Accepted**    | RFC has been approved, ready for implementation   |
+| **Active**               | RFC is being implemented                          |
+| **Landed/Completed**     | Implementation shipped in production              |
+| **Rejected**             | RFC was not approved                              |
+| **Withdrawn**            | Author withdrew the RFC                           |
+| **Superseded/Obsolete**  | Replaced by a newer RFC                           |
 
 ### The Standard Workflow
 
 1. **Drafting**
+
    - Author identifies a problem or opportunity
    - Author writes initial RFC using organization's template
    - Author may seek informal feedback from close colleagues
 
 2. **Informal Review (Optional)**
+
    - Share with a small group for early feedback
    - Pair less-experienced authors with senior engineers as "backers"
    - Iterate on the document before broader distribution
 
 3. **Formal Submission**
+
    - Submit RFC to designated channel (mailing list, GitHub PR, Confluence, etc.)
    - Announce to relevant stakeholders
    - Begin formal comment period
 
 4. **Comment Period**
+
    - Stakeholders read and provide feedback
    - Author responds to questions and concerns
    - Document may be revised based on feedback
    - Typical duration: 2 days to 1 week (varies by organization)
 
 5. **Decision**
+
    - Designated decision-maker(s) approve or reject
    - May require explicit sign-off from approvers
    - Decision and rationale are recorded
 
 6. **Implementation**
+
    - If approved, work begins on implementation
    - RFC serves as reference during development
    - Changes to the plan may require RFC amendments or new RFCs
 
 7. **Archival**
+
    - Completed RFCs are archived for future reference
    - Status is updated to reflect completion
 
@@ -347,12 +360,13 @@ A crucial element often missing from naive RFC implementations is a clear decisi
 **The Problem**: Without explicit decision-making steps, the default outcome of an RFC becomes "no"—leading to inaction and endless discussion.
 
 **The Solution**: Clearly define:
+
 - Who has authority to approve/reject
 - What constitutes sufficient review
 - How to resolve disagreements
 - When the comment period ends
 
----
+______________________________________________________________________
 
 ## Tools and Ecosystem
 
@@ -360,12 +374,12 @@ A crucial element often missing from naive RFC implementations is a clear decisi
 
 Most organizations use existing collaboration tools rather than specialized RFC software:
 
-| Tool Type | Examples |
-|-----------|----------|
+| Tool Type           | Examples                                       |
+| ------------------- | ---------------------------------------------- |
 | **Cloud Documents** | Google Docs, Dropbox Paper, Notion, Coda, Quip |
-| **Git-based** | GitHub/GitLab/Bitbucket with Markdown files |
-| **Wikis** | Confluence, Notion, Slab |
-| **Hybrid** | Knowledge bases synced with Git (e.g., Guru) |
+| **Git-based**       | GitHub/GitLab/Bitbucket with Markdown files    |
+| **Wikis**           | Confluence, Notion, Slab                       |
+| **Hybrid**          | Knowledge bases synced with Git (e.g., Guru)   |
 
 ### Git-based RFC Management
 
@@ -378,6 +392,7 @@ Git repositories are popular for RFC management because they provide:
 - Same tooling developers already use
 
 **Example Workflow**:
+
 1. Copy RFC template to new file (`0000-my-feature.md`)
 2. Fill in the template
 3. Submit as a pull request
@@ -408,40 +423,47 @@ A common problem at scale is finding existing RFCs. Solutions include:
 - **Knowledge bases**: Tools like Notion or Confluence that provide better search than raw Git
 - **Regular digests**: Periodic summaries of new and notable RFCs
 
----
+______________________________________________________________________
 
 ## Best Practices
 
 ### Writing Effective RFCs
 
 1. **Start with the problem, not the solution**
+
    - The motivation section should make the problem crystal clear
    - A random engineer should understand why this matters
 
 2. **Focus on "what" and "why", less on "how"**
+
    - Implementation details are better left to those doing the work
    - Avoid bikeshedding discussions about minor details
 
 3. **Be specific about context**
+
    - Include organizational situation, business priorities, team constraints
    - Link to related documents, previous discussions, relevant ADRs
 
 4. **Always consider alternatives**
+
    - Every RFC should consider "do nothing" as an alternative
    - Present rejected alternatives and explain why they were rejected
    - Avoid "dummy alternatives" that exist only to make the preferred option look good
 
 5. **Document risks honestly**
+
    - List potential downsides and failure modes
    - Include security, complexity, compatibility concerns
    - Explain mitigation strategies
 
 6. **Keep scope focused**
+
    - One decision per RFC
    - Split complex proposals into multiple RFCs if needed
    - Large RFCs are harder to review and more likely to stall
 
 7. **Tailor depth to complexity**
+
    - Simple changes need simple RFCs
    - Overly detailed RFCs for small tasks waste time
    - Under-documented large projects lead to rework
@@ -449,31 +471,37 @@ A common problem at scale is finding existing RFCs. Solutions include:
 ### Running an Effective RFC Process
 
 1. **Define clear ownership**
+
    - Every RFC needs an author responsible for shepherding it
    - Decision-making authority must be explicit
    - "Disagree and commit" culture works when ownership is clear
 
 2. **Set reasonable timeframes**
+
    - Comment periods should have deadlines
    - 2-7 days is typical; adjust for complexity
    - Longer periods lead to discussion fatigue
 
 3. **Encourage broad participation**
+
    - Consider pairing junior engineers with senior "backers"
    - Recognize excellent commenters
    - Invite cross-functional perspectives
 
 4. **Create psychological safety**
+
    - People need a safe space to propose ideas
    - Feedback should be constructive
    - Rejection of an RFC is not rejection of the person
 
 5. **Manage noise at scale**
+
    - Segment distribution lists by area/team
    - Use appropriate templates for different scope levels
    - Don't require everyone to review everything
 
 6. **Maintain discoverability**
+
    - Index and categorize RFCs
    - Make search easy
    - Regularly prune outdated or irrelevant RFCs
@@ -481,70 +509,75 @@ A common problem at scale is finding existing RFCs. Solutions include:
 ### Providing Effective Feedback
 
 1. **Read the whole document before commenting**
+
    - Understand the full context
    - Your question may be answered later in the document
 
 2. **Comment on substance, not style**
+
    - Focus on technical merit and business impact
    - Avoid grammar nitpicking (unless it affects clarity)
 
 3. **Suggest alternatives when critiquing**
+
    - "Have you considered X?" is more helpful than "This won't work"
    - Bring your expertise to bear constructively
 
 4. **Respect the author's expertise**
+
    - They've likely thought more deeply about this problem
    - Ask questions rather than making assertions
 
 5. **Recognize when synchronous discussion helps**
+
    - Some comments need more context than text allows
    - Offer to meet if async discussion is going in circles
 
----
+______________________________________________________________________
 
 ## Anti-Patterns to Avoid
 
 ### Process Anti-Patterns
 
-| Anti-Pattern | Description |
-|--------------|-------------|
-| **No Decision Framework** | RFC process without explicit approval/rejection mechanism leads to endless discussion and inaction |
-| **Design by Committee** | Over-engineered process that's unnecessarily slow and bureaucratic |
-| **Diffusion of Responsibility** | Engineers use RFCs as "ass-covering" rather than genuine feedback-seeking |
-| **Everyone Reviews Everything** | At scale, this overwhelms senior engineers and creates noise |
-| **Ambiguous Scope** | Teams don't know when an RFC is required, leading to inconsistent use |
-| **Poor Discoverability** | RFCs exist but nobody can find them |
-| **Infinite Comment Periods** | No deadlines mean proposals linger without resolution |
+| Anti-Pattern                    | Description                                                                                        |
+| ------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **No Decision Framework**       | RFC process without explicit approval/rejection mechanism leads to endless discussion and inaction |
+| **Design by Committee**         | Over-engineered process that's unnecessarily slow and bureaucratic                                 |
+| **Diffusion of Responsibility** | Engineers use RFCs as "ass-covering" rather than genuine feedback-seeking                          |
+| **Everyone Reviews Everything** | At scale, this overwhelms senior engineers and creates noise                                       |
+| **Ambiguous Scope**             | Teams don't know when an RFC is required, leading to inconsistent use                              |
+| **Poor Discoverability**        | RFCs exist but nobody can find them                                                                |
+| **Infinite Comment Periods**    | No deadlines mean proposals linger without resolution                                              |
 
 ### Content Anti-Patterns
 
-| Anti-Pattern | Description |
-|--------------|-------------|
-| **Implementation Detail Focus** | Too much "how," not enough "what" and "why" |
-| **Missing Alternatives** | No serious consideration of other approaches |
-| **Dummy Alternatives** | Non-viable options presented to favor the preferred solution |
-| **Hidden Risks** | Only positive outcomes mentioned; downsides buried or omitted |
-| **Scope Creep** | RFC tries to solve too many problems at once |
-| **Bikeshedding Magnet** | Including minor details that invite endless debate |
+| Anti-Pattern                    | Description                                                   |
+| ------------------------------- | ------------------------------------------------------------- |
+| **Implementation Detail Focus** | Too much "how," not enough "what" and "why"                   |
+| **Missing Alternatives**        | No serious consideration of other approaches                  |
+| **Dummy Alternatives**          | Non-viable options presented to favor the preferred solution  |
+| **Hidden Risks**                | Only positive outcomes mentioned; downsides buried or omitted |
+| **Scope Creep**                 | RFC tries to solve too many problems at once                  |
+| **Bikeshedding Magnet**         | Including minor details that invite endless debate            |
 
 ### Review Anti-Patterns
 
-| Anti-Pattern | Description |
-|--------------|-------------|
-| **Drive-by Comments** | Quick, unhelpful comments that don't engage with substance |
+| Anti-Pattern            | Description                                                     |
+| ----------------------- | --------------------------------------------------------------- |
+| **Drive-by Comments**   | Quick, unhelpful comments that don't engage with substance      |
 | **Expertise Blindness** | Treating all opinions equally regardless of relevant experience |
-| **Tone Problems** | Async communication loses tone; comments read as harsh |
-| **Never Satisfied** | Reviewers who always find one more thing to question |
-| **Radio Silence** | No feedback at all, leaving authors uncertain |
+| **Tone Problems**       | Async communication loses tone; comments read as harsh          |
+| **Never Satisfied**     | Reviewers who always find one more thing to question            |
+| **Radio Silence**       | No feedback at all, leaving authors uncertain                   |
 
 ### Organizational Anti-Patterns
 
-| Anti-Pattern | Description |
-|--------------|-------------|
-| **RFC Tax** | Process becomes a barrier rather than an enabler |
-| **Elite Access** | Only senior engineers write RFCs; others feel excluded |
-| **Cargo Cult** | Adopting RFC process without understanding the purpose |
-| **Process as Shield** | "Everyone reviewed it" used to deflect accountability |
+| Anti-Pattern          | Description                                            |
+| --------------------- | ------------------------------------------------------ |
+| **RFC Tax**           | Process becomes a barrier rather than an enabler       |
+| **Elite Access**      | Only senior engineers write RFCs; others feel excluded |
+| **Cargo Cult**        | Adopting RFC process without understanding the purpose |
+| **Process as Shield** | "Everyone reviewed it" used to deflect accountability  |
 
 ### The Jacob Kaplan-Moss Critique
 
@@ -553,6 +586,7 @@ Jacob Kaplan-Moss has argued that RFC processes are a poor fit for most organiza
 > "The crux of the problem with RFC processes in corporate settings is that the process, as designed, doesn't include any sort of decision-making framework. They are a 'document and discuss' framework—and not a decision-making framework. RFCs are written and discussed, but there's no mechanism by which they're formally adopted or rejected."
 
 **Key Issues**:
+
 - Without explicit decision-making, default outcome is "no"
 - Discussion tends to run long as organization grows
 - Experts are put on even ground with everyone else
@@ -560,7 +594,7 @@ Jacob Kaplan-Moss has argued that RFC processes are a poor fit for most organiza
 
 **The Solution**: If adopting an RFC process, explicitly bolt on a decision-making step.
 
----
+______________________________________________________________________
 
 ## When to Write an RFC
 
@@ -600,7 +634,7 @@ The breadth of stakeholders should be proportional to the impact:
 - **Moderate impact**: New API affecting partner teams → Relevant team leads and architects
 - **Broad impact**: Organization-wide infrastructure change → Engineering-wide visibility
 
----
+______________________________________________________________________
 
 ## When NOT to Write an RFC
 
@@ -633,17 +667,17 @@ At SoundCloud, an RFC about cloud migration mentioned in passing that internal t
 
 > "Enforcing [the RFC rule] is seldom necessary. In fact, it is more common that the problem is the other way around: it's not that people need to be told when to write an RFC, they need coaching identifying when this is NOT the best course of action."
 
----
+______________________________________________________________________
 
 ## RFCs vs ADRs vs Design Documents
 
 ### The Fundamental Difference
 
-| Document | Purpose | Timing | Audience |
-|----------|---------|--------|----------|
-| **RFC** | Gather feedback, build consensus | *Before* decision | Broad, seeks input |
-| **ADR** | Record decision made | *After* decision | Future readers, posterity |
-| **Design Doc** | Detailed technical specification | During planning | Implementation team |
+| Document       | Purpose                          | Timing            | Audience                  |
+| -------------- | -------------------------------- | ----------------- | ------------------------- |
+| **RFC**        | Gather feedback, build consensus | *Before* decision | Broad, seeks input        |
+| **ADR**        | Record decision made             | *After* decision  | Future readers, posterity |
+| **Design Doc** | Detailed technical specification | During planning   | Implementation team       |
 
 > "RFC is the brainstorming meeting before a decision. ADR is the official memo after the decision."
 
@@ -688,18 +722,21 @@ A common pattern in organizations using both RFCs and ADRs:
 ### When to Use Which
 
 **Use an RFC when**:
+
 - You want to frame a problem and propose a solution
 - You want thoughtful feedback from a distributed team
 - You want to surface an idea or gather input
 - You need to communicate around a cross-functional decision
 
 **Use an ADR when**:
+
 - You've collected feedback on an RFC and decided to move forward
 - A team decided on a solution together that doesn't impact anyone else
 - You need to record a past decision you still remember
 - You want future developers to understand the "why"
 
 **Skip the RFC when**:
+
 - A team decides on a solution together that doesn't impact anyone else
 - A few people find a solution without needing to convince the team
 - The decision is small and reversible
@@ -709,11 +746,12 @@ A common pattern in organizations using both RFCs and ADRs:
 Spotify uses both RFCs and ADRs, which are "deeply embedded part of the culture" and sometimes used for non-technical changes such as re-orgs.
 
 Their guidance:
+
 - Write ADRs to backfill undocumented decisions
 - Write ADRs after large changes (when RFCs conclude)
 - Write ADRs for small decisions to prevent compounding problems
 
----
+______________________________________________________________________
 
 ## Real-World Examples and Adoption
 
@@ -769,6 +807,7 @@ Many other projects have based their RFC processes on Rust's, including Ember, R
 #### Phil Calcado's Implementations
 
 Phil Calcado has implemented structured RFC processes at:
+
 - ThoughtWorks
 - SoundCloud
 - DigitalOcean
@@ -779,13 +818,14 @@ His structured RFC process emphasizes separating decision-making from feedback g
 ### Adoption Patterns
 
 Organizations typically adopt RFC processes when:
+
 - Teams grow beyond the size where verbal communication scales
 - Knowledge silos become problematic
 - Decision-making becomes inconsistent
 - New team members struggle to understand past decisions
 - Cross-team coordination becomes difficult
 
----
+______________________________________________________________________
 
 ## Sources and Further Reading
 
@@ -840,7 +880,7 @@ Organizations typically adopt RFC processes when:
 - [RFC 1 Defines the Building Block of Internet Communication](https://thisdayintechhistory.com/04/07/rfc-1-defines-the-building-block-of-internet-communication/) - This Day in Tech History
 - [The Publication of the First RFC](http://scihi.org/steve-crocker-rfc/) - SciHi Blog
 
----
+______________________________________________________________________
 
 ## Quick Reference: Starting with RFCs
 
@@ -886,11 +926,13 @@ Organizations typically adopt RFC processes when:
 ### RFC Process Checklist
 
 1. **Before Writing**
+
    - [ ] Is this change significant enough to need an RFC?
    - [ ] Who are the stakeholders?
    - [ ] What alternatives exist?
 
 2. **Writing**
+
    - [ ] Problem is clearly stated
    - [ ] Background provides sufficient context
    - [ ] Alternatives are seriously considered
@@ -898,12 +940,14 @@ Organizations typically adopt RFC processes when:
    - [ ] Scope is focused on one decision
 
 3. **Review**
+
    - [ ] Submitted to appropriate channels
    - [ ] Comment period has deadline
    - [ ] Approvers are identified
    - [ ] Author is responsive to feedback
 
 4. **After Approval**
+
    - [ ] Decision is recorded (consider writing ADR)
    - [ ] RFC is archived and discoverable
    - [ ] Implementation plan is clear
@@ -911,6 +955,7 @@ Organizations typically adopt RFC processes when:
 ### Decision Questions
 
 **Do I need an RFC?**
+
 - Does this affect people outside my immediate team?
 - Will this be hard to reverse?
 - Is there likely to be disagreement?
@@ -919,12 +964,13 @@ Organizations typically adopt RFC processes when:
 If yes to any of these, consider an RFC.
 
 **Should I write an ADR instead?**
+
 - Is the decision already made?
 - Is the scope small and team-internal?
 - Do I just need to record what we decided, not gather feedback?
 
 If yes, an ADR may be more appropriate.
 
----
+______________________________________________________________________
 
 *Document compiled from research across 30+ sources including IETF documentation, The Pragmatic Engineer newsletter, Phil Calcado's blog, HashiCorp's RFC template, Rust RFC process, and various engineering blog posts from Uber, Spotify, and other technology companies.*

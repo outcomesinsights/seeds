@@ -4,7 +4,7 @@
 >
 > **Revised 2026-06-11** after a deep study of the actual seeds codebase (v0.3.2), its live deliberation database, the beads investigation, and the published intro post. The first draft was written from the README and backlog titles and got several things directionally wrong — most of all, it under-read how settled seeds' identity already is. Where I cite a `seeds-NN`, it's a real item in seeds' own `.seeds/` deliberation log.
 
----
+______________________________________________________________________
 
 ## What seeds actually is (so the rest of this is grounded)
 
@@ -13,6 +13,7 @@ seeds is a small, working CLI tool (v0.3.2, public beta, MIT, ~76/78 of its own 
 **1. It was born from a specific fear, and against a specific alternative.** Plan files destroy evidence. Ryan's words from the founding brainstorm: *"AI seems really happy to just generate the initial document and then change it upon feedback without recording why there was a change… we are actually scared to bring feedback to AI because it's going to overwrite the original thinking."* seeds is the place where the *journey* survives the next rewrite. Crucially, he **explicitly rejected ADRs** as the answer: *"We are not interested in ADRs… ADRs capture the decision after it's made, only one step removed from a plan file."* The good stuff lives in *"hour-long conversations that weren't reviews of decisions but deep dives into the problem domain — the messy, almost philosophical, in-the-weeds part."* This matters enormously for the recommendations below: **anything that nudges seeds toward "produce a clean conclusion artifact" is pushing against the reason it exists.**
 
 **2. The three-layer model is the published positioning.** From the intro post:
+
 - **Planning tools** (OpenSpec, GitHub Spec Kit, task-master) — produce a spec/PRD/task-list.
 - **Execution tools** (beads) — track what's being built *now*.
 - **Deliberation tools** (seeds) — capture the reasoning that decides whether something becomes plannable *in the first place*.
@@ -37,21 +38,21 @@ seeds is the **IBIS / design-rationale lineage rebuilt CLI-first and agent-nativ
 
 ## Verdict table
 
-| Part II family | Could it replace seeds? | Value to seeds | The one thing to take |
-|----------------|:-----------------------:|:--------------:|-----------------------|
-| A. Spec-driven development | No — it's the *planning* layer, downstream | ★★★ | Keep the boundary; feed it, don't become it |
-| B. ADR / IBIS / design rationale | No — it's the ancestor seeds pivoted *past* | ★★★ | IBIS options/arguments are still thin; the ADR is optional fruit, not the goal |
-| C. Transcript/session capture | No — it's the raw source | ★★★★ | seeds as *consumer* of capture (the seeds-112 frontier) |
-| D. Agent memory (Kellogg) | Partially (architecture challenge) | ★★★★ | Settle structure-vs-tokens for seeds-42; keep `prime` a curated block |
-| E. Decision traces / context graphs | No — enterprise scale | ★★ | Stay episodic; the ConPort line is already drawn |
-| F. Tacit-knowledge extraction (Meta) | No — complementary mode seeds lacks | ★★★★ | Proactive extraction as a *gleaning* mode |
-| G. Harness / ticket / AGENTS.md | **Yes, the honest low-tech rival** | ★★★ | It captures the residue; seeds captures the journey it can't |
-| H. PKM + the backlash | No | ★★ | The completeness gap is the real issue, not accumulation |
-| **I. beads + deliberation tooling** | **Asked and answered (beads), nearest cousin (intent.build)** | ★★★★ | AI-as-participant + journey-not-destination is the moat |
+| Part II family                       |                    Could it replace seeds?                    | Value to seeds | The one thing to take                                                          |
+| ------------------------------------ | :-----------------------------------------------------------: | :------------: | ------------------------------------------------------------------------------ |
+| A. Spec-driven development           |          No — it's the *planning* layer, downstream           |      ★★★       | Keep the boundary; feed it, don't become it                                    |
+| B. ADR / IBIS / design rationale     |          No — it's the ancestor seeds pivoted *past*          |      ★★★       | IBIS options/arguments are still thin; the ADR is optional fruit, not the goal |
+| C. Transcript/session capture        |                   No — it's the raw source                    |      ★★★★      | seeds as *consumer* of capture (the seeds-112 frontier)                        |
+| D. Agent memory (Kellogg)            |              Partially (architecture challenge)               |      ★★★★      | Settle structure-vs-tokens for seeds-42; keep `prime` a curated block          |
+| E. Decision traces / context graphs  |                     No — enterprise scale                     |       ★★       | Stay episodic; the ConPort line is already drawn                               |
+| F. Tacit-knowledge extraction (Meta) |              No — complementary mode seeds lacks              |      ★★★★      | Proactive extraction as a *gleaning* mode                                      |
+| G. Harness / ticket / AGENTS.md      |              **Yes, the honest low-tech rival**               |      ★★★       | It captures the residue; seeds captures the journey it can't                   |
+| H. PKM + the backlash                |                              No                               |       ★★       | The completeness gap is the real issue, not accumulation                       |
+| **I. beads + deliberation tooling**  | **Asked and answered (beads), nearest cousin (intent.build)** |      ★★★★      | AI-as-participant + journey-not-destination is the moat                        |
 
 The genuinely interesting "could-replace" entries are now **G** (a flat `AGENTS.md` is the real low-tech rival for "just write the why down") and **D** (Kellogg's "structure fights the model" is a live challenge to seeds' SQLite-and-relationships core). The beads question — which my first draft missed entirely — turns out to be **asked and answered**, in seeds' favor, and is worth understanding precisely.
 
----
+______________________________________________________________________
 
 ## Family-by-family
 
@@ -68,6 +69,7 @@ The genuinely interesting "could-replace" entries are now **G** (a flat `AGENTS.
 **Major correction.** My first draft's headline move — "make ADRs the fruit; close the loop from resolved seeds to ADRs/AGENTS.md" — runs against seeds' founding thesis. Ryan **rejected ADRs on purpose**; an ADR is "one step removed from a plan file," capturing the conclusion and discarding the in-the-weeds journey that seeds exists to keep. ADR generation is real but it's `seeds-22` — *deferred*, "out of scope (future)," and explicitly *optional, domain-specific fruit* (ADR for software, character doc for an RPG, shopping list for a remodel). It is emphatically **not** seeds' value proposition.
 
 **Learn from (what still holds).** seeds *is* the IBIS lineage, and two things from that family are genuinely thin in the tool today:
+
 - **Options and arguments as first-class** (IBIS Positions/Arguments, QOC). seeds has idea/question/decision/concern but no explicit "competing option" or "pro/con" structure; `seeds-9/36/44` wrestled with "where do alternatives and rationale live?" and left it open. The landscape's renewed interest in capturing the *why* makes this worth revisiting — but as deliberation structure, not as ADR output.
 - **DRed's embedded-in-workflow lesson.** Rationale capture works only when it's *in* the workflow, never a separate step. seeds' whole agent-is-the-interface design is the right instinct; the seeds-112 capture gap is exactly where it's not yet embedded enough.
 
@@ -115,7 +117,7 @@ This is the family my first draft mishandled, so it gets the most space.
 
 **The differentiator to lean on.** seeds-7 and seeds-117 already frame the vision as **AI-as-participant, not AI-as-secretary** — the agent raises its own questions, captures its own reasoning, proposes conclusions, Ryan steers. The `feedback`/"closer" skill is the smallest expression of it (and seeds-151.2 is a sharp lesson: the closer works *user-initiated*, breaks when the agent ritualizes it). This is what separates seeds from passive tools like intent.build *and* from the ambient recording firehose: seeds is where deliberation is *conducted*, not just *recorded*.
 
----
+______________________________________________________________________
 
 ## The moves, prioritized (revised)
 

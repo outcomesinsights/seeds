@@ -2,21 +2,21 @@
 
 ## Table of Contents
 
-1. [History and Origin](#history-and-origin)
-2. [Philosophy and Purpose](#philosophy-and-purpose)
-3. [Core Concepts and Definitions](#core-concepts-and-definitions)
-4. [The Original Nygard Format](#the-original-nygard-format)
-5. [Templates and Formats](#templates-and-formats)
-6. [Tools and Ecosystem](#tools-and-ecosystem)
-7. [Best Practices](#best-practices)
-8. [Anti-Patterns to Avoid](#anti-patterns-to-avoid)
-9. [When to Write an ADR](#when-to-write-an-adr)
+01. [History and Origin](#history-and-origin)
+02. [Philosophy and Purpose](#philosophy-and-purpose)
+03. [Core Concepts and Definitions](#core-concepts-and-definitions)
+04. [The Original Nygard Format](#the-original-nygard-format)
+05. [Templates and Formats](#templates-and-formats)
+06. [Tools and Ecosystem](#tools-and-ecosystem)
+07. [Best Practices](#best-practices)
+08. [Anti-Patterns to Avoid](#anti-patterns-to-avoid)
+09. [When to Write an ADR](#when-to-write-an-adr)
 10. [When NOT to Write an ADR](#when-not-to-write-an-adr)
 11. [Real-World Examples and Adoption](#real-world-examples-and-adoption)
 12. [Integrations and Related Practices](#integrations-and-related-practices)
 13. [Sources and Further Reading](#sources-and-further-reading)
 
----
+______________________________________________________________________
 
 ## History and Origin
 
@@ -27,6 +27,7 @@ Architecture Decision Records were popularized by **Michael Nygard** in his Nove
 At the time, Nygard's team had been using the format on projects since early August 2011. Despite the short trial period, feedback from both clients and developers was positive. Developers who rotated through ADR-using projects appreciated the context they received by reading the records.
 
 Nygard identified a critical problem: when teams don't document decisions, future developers either:
+
 - **Blindly accept** past choices without understanding them (risking paralysis when context shifts)
 - **Blindly change** them (potentially undermining non-functional requirements the original decision satisfied)
 
@@ -36,7 +37,7 @@ Seven years after Nygard's article, **ThoughtWorks** placed Lightweight Architec
 
 The history of architecture decision recording actually extends back to the late 1990s, but Nygard's lightweight, practical format crystallized the practice into something widely adoptable.
 
----
+______________________________________________________________________
 
 ## Philosophy and Purpose
 
@@ -71,28 +72,33 @@ ADRs are an act of empathy toward future developers (including your future self)
 - Lost productivity during ownership transfers
 - Compound problems requiring large migrations later
 
----
+______________________________________________________________________
 
 ## Core Concepts and Definitions
 
 ### Architectural Decision (AD)
+
 A justified design choice that addresses a functional or non-functional requirement that is **architecturally significant**.
 
 Martin Fowler's definition: "Software architecture is those decisions which are both important and hard to change."
 
 ### Architecturally Significant Requirement (ASR)
+
 A requirement that has a **measurable effect** on the architecture and quality of a software/hardware system.
 
 ### Architecture Decision Record (ADR)
+
 A short text document that captures a **single** architectural decision along with its context and consequences.
 
 ### Architecture Decision Log (ADL)
+
 The collection of all ADRs maintained throughout a project—forming a decision history.
 
 ### Architectural Knowledge Management (AKM)
+
 The broader discipline encompassing ADR practices for capturing and sharing architectural knowledge.
 
----
+______________________________________________________________________
 
 ## The Original Nygard Format
 
@@ -125,24 +131,28 @@ not just the "positive" ones.]
 - **Consequences**: ALL impacts—positive, negative, and neutral
 
 ADRs should be:
+
 - **1-2 pages long** at most
 - Written as **conversations with future developers**
 - Using **complete sentences** rather than bullet fragments
 - Stored in **version control**, alongside the code
 
----
+______________________________________________________________________
 
 ## Templates and Formats
 
 ### 1. Michael Nygard (Original)
+
 The simple five-section format described above. Most widely used.
 
 ### 2. MADR (Markdown Architectural Decision Records)
+
 [MADR](https://adr.github.io/madr/) - More structured with explicit options analysis.
 
 **Current version**: MADR 4.0.0 (September 2024)
 
 **Core Sections**:
+
 - Context and Problem Statement
 - Decision Drivers (optional)
 - Considered Options
@@ -156,45 +166,53 @@ The simple five-section format described above. Most widely used.
 The name MADR is pronounced "matter" [ˈmæɾɚ]—as in "decisions that matter."
 
 ### 3. Y-Statements
+
 A single-sentence format for capturing decisions concisely:
 
 **Short form**:
+
 > "In the context of `<use case>`, facing `<concern>` we decided for `<option>` to achieve `<quality>`, accepting `<downside>`."
 
 **Long form**:
+
 > "In the context of `<use case>`, facing `<concern>`, we decided for `<option>` and neglected `<other options>`, to achieve `<qualities>`, accepting `<downsides>`, because `<rationale>`."
 
 **Example**:
+
 > "In the context of the Web shop service, facing the need to keep user session data consistent across instances, we decided for the Database Session State Pattern (and against Client Session State or Server Session State) to achieve cloud elasticity, accepting that a session database needs to be designed, implemented, and replicated."
 
 Originated from Olaf Zimmermann at SATURN 2012, visualized as the letter "Y" (pronounced like "why").
 
 ### 4. Jeff Tyree and Art Akerman Format
+
 More sophisticated template with additional sections for assumptions, constraints, and related decisions.
 
 ### 5. Business Case Template
+
 MBA-oriented with cost/benefit analysis and SWOT.
 
 ### 6. arc42 Integration
+
 Comprehensive architecture documentation with ADRs in Section 9.
 
 ### Template Comparison
 
-| Template | Complexity | Best For |
-|----------|------------|----------|
-| Nygard | Simple | Most teams, quick adoption |
-| MADR | Moderate | Teams wanting explicit options analysis |
-| Y-Statement | Minimal | Quick captures, inline documentation |
+| Template      | Complexity    | Best For                                   |
+| ------------- | ------------- | ------------------------------------------ |
+| Nygard        | Simple        | Most teams, quick adoption                 |
+| MADR          | Moderate      | Teams wanting explicit options analysis    |
+| Y-Statement   | Minimal       | Quick captures, inline documentation       |
 | Tyree/Akerman | Comprehensive | Enterprise contexts with many stakeholders |
-| Business Case | Complex | Decisions requiring business justification |
+| Business Case | Complex       | Decisions requiring business justification |
 
----
+______________________________________________________________________
 
 ## Tools and Ecosystem
 
 ### Command-Line Tools
 
 #### adr-tools (Original - Bash)
+
 [npryce/adr-tools](https://github.com/npryce/adr-tools) - The original CLI tool.
 
 ```bash
@@ -215,16 +233,19 @@ adr help
 ```
 
 #### Python Alternatives
+
 - **[adr-tools-python](https://pypi.org/project/adr-tools-python/)**: `pip3 install adr-tools-python`
 - **[ADR-py](https://github.com/AlTosterino/ADR-py)**: Modern Python 3.11+ rewrite
 - **[pyadr](https://github.com/flepied/madr-tools-python)**: MADR-focused with lifecycle management
 - **adr-viewer**: Generates websites from ADR collections
 
 #### Go Alternatives
+
 - **[marouni/adr](https://github.com/marouni/adr)**: `go install github.com/marouni/adr`
 - **[abebars/adr](https://github.com/abebars/adr)**: Similar Go implementation
 
 #### Other Languages
+
 - **dotnet-adr**: Cross-platform .NET Global Tool
 - **Talo**: CLI for ADRs, RFCs, and custom design documents
 - **Rust-based tools**: Various implementations available
@@ -232,23 +253,28 @@ adr help
 ### Web/GUI Tools
 
 #### Log4brains
+
 [thomvaill/log4brains](https://github.com/thomvaill/log4brains) - Docs-as-code knowledge base.
 
 Features:
+
 - Preview ADRs locally with hot reload
 - Publish as static website (GitHub Pages, GitLab Pages, S3)
 - Uses MADR format by default
 - Includes features of most other tools combined
 
 #### ADR Manager (Web)
+
 Web application connecting to GitHub repositories to render ADRs.
 
 #### ADR Manager (VS Code Extension)
+
 Visual Studio Code plugin with two modes (basic/professional) organized by template sections.
 
 ### Platform Integrations
 
 #### Backstage ADR Plugin
+
 [@backstage-community/plugin-adr](https://www.npmjs.com/package/@backstage-community/plugin-adr)
 
 - Explores ADRs associated with entities
@@ -257,9 +283,11 @@ Visual Studio Code plugin with two modes (basic/professional) organized by templ
 - Configure via `backstage.io/adr-location` in catalog-info.yaml
 
 #### Structurizr
+
 C4 model visualization and documentation platform with ADR support.
 
 #### docToolchain
+
 Docs-as-code implementation for software architecture documentation.
 
 ### Supporting Tools
@@ -267,7 +295,7 @@ Docs-as-code implementation for software architecture documentation.
 - **adr-log**: Generates `index.md` from ADR collections
 - **ArchUnit**: Architecture unit testing (validates decisions are followed)
 
----
+______________________________________________________________________
 
 ## Best Practices
 
@@ -313,37 +341,37 @@ Docs-as-code implementation for software architecture documentation.
 
 5. **Periodic reviews**: Review ADRs annually to identify those needing updates or supersession.
 
----
+______________________________________________________________________
 
 ## Anti-Patterns to Avoid
 
 ### ADR Creation Anti-Patterns
 
-| Anti-Pattern | Description |
-|--------------|-------------|
-| **Blueprint/Policy in Disguise** | Writing style is cookbook-like or commanding, not journal-style |
-| **Mega-ADR** | Multiple pages stuffed with detailed architecture specs, diagrams, code |
-| **Novel/Epic** | Entire Software Architecture Document squeezed into one ADR |
-| **Fairy Tale** | Only pros listed, no cons; shallow "wishful thinking" justification |
-| **Sales Pitch** | Marketing language, exaggerations without evidence |
-| **Free Lunch Coupon** | Ignoring difficult or long-term consequences |
-| **Sprint/Rush** | Only one option considered; only short-term effects discussed |
-| **Tunnel Vision** | Isolated context; ignoring operations/maintenance perspectives |
-| **Dummy Alternative** | Presenting non-viable options to favor the preferred solution |
-| **Maze** | Topic doesn't match content; discussions derail |
-| **Magic Tricks** | False urgency, pseudo-accuracy with weighted scoring |
+| Anti-Pattern                     | Description                                                             |
+| -------------------------------- | ----------------------------------------------------------------------- |
+| **Blueprint/Policy in Disguise** | Writing style is cookbook-like or commanding, not journal-style         |
+| **Mega-ADR**                     | Multiple pages stuffed with detailed architecture specs, diagrams, code |
+| **Novel/Epic**                   | Entire Software Architecture Document squeezed into one ADR             |
+| **Fairy Tale**                   | Only pros listed, no cons; shallow "wishful thinking" justification     |
+| **Sales Pitch**                  | Marketing language, exaggerations without evidence                      |
+| **Free Lunch Coupon**            | Ignoring difficult or long-term consequences                            |
+| **Sprint/Rush**                  | Only one option considered; only short-term effects discussed           |
+| **Tunnel Vision**                | Isolated context; ignoring operations/maintenance perspectives          |
+| **Dummy Alternative**            | Presenting non-viable options to favor the preferred solution           |
+| **Maze**                         | Topic doesn't match content; discussions derail                         |
+| **Magic Tricks**                 | False urgency, pseudo-accuracy with weighted scoring                    |
 
 ### ADR Review Anti-Patterns
 
-| Anti-Pattern | Description |
-|--------------|-------------|
-| **Pass Through** | Minimal/shallow comments; document only skimmed |
-| **Copy Edit** | Focuses solely on grammar, not content |
-| **Siding/Dead End** | Topic switches unexpectedly; stops without advice |
-| **Self Promotion** | Recommends reviewer's own work; conflict of interest |
-| **Power Game** | Relies on hierarchy instead of technical arguments |
-| **Offended Reaction** | Defensively protects criticized positions |
-| **Groundhog Day** | Repetitive messaging without progression |
+| Anti-Pattern          | Description                                          |
+| --------------------- | ---------------------------------------------------- |
+| **Pass Through**      | Minimal/shallow comments; document only skimmed      |
+| **Copy Edit**         | Focuses solely on grammar, not content               |
+| **Siding/Dead End**   | Topic switches unexpectedly; stops without advice    |
+| **Self Promotion**    | Recommends reviewer's own work; conflict of interest |
+| **Power Game**        | Relies on hierarchy instead of technical arguments   |
+| **Offended Reaction** | Defensively protects criticized positions            |
+| **Groundhog Day**     | Repetitive messaging without progression             |
 
 ### Decision-Making Anti-Patterns
 
@@ -351,7 +379,7 @@ Docs-as-code implementation for software architecture documentation.
 2. **Decision without justification**: Same topic gets discussed repeatedly
 3. **Decision not captured**: Team members forget or don't know a decision was made
 
----
+______________________________________________________________________
 
 ## When to Write an ADR
 
@@ -376,13 +404,14 @@ Write ADRs in three scenarios:
 ### Architecturally Significant Decisions
 
 Michael Nygard defines architecturally significant decisions as those that impact:
+
 - Structure
 - Non-functional characteristics
 - Dependencies
 - Interfaces
 - Construction techniques
 
----
+______________________________________________________________________
 
 ## When NOT to Write an ADR
 
@@ -398,7 +427,7 @@ Skip ADRs for:
 
 If no one will ever wonder "why did we do this?", you probably don't need an ADR.
 
----
+______________________________________________________________________
 
 ## Real-World Examples and Adoption
 
@@ -412,52 +441,64 @@ If no one will ever wonder "why did we do this?", you probably don't need an ADR
 ### Enterprise Adoption
 
 #### UK Government
+
 The Government Digital Service (GDS) released an official [ADR Framework](https://www.gov.uk/government/publications/architectural-decision-record-framework/architectural-decision-record-framework) (December 2025) for use across the UK public sector, with four escalation levels:
+
 - Team/Working Group (single team impact)
 - Cross-team/Programme (multiple teams)
 - Department-wide (new standards/precedents)
 - Cross-government (national strategy alignment)
 
 #### AWS
+
 AWS Prescriptive Guidance provides extensive ADR documentation and has written 200+ ADRs internally. Their guidance emphasizes:
+
 - Immutability once accepted
 - Clear ownership
 - Integration with code review
 - Decision log maintenance
 
 #### Microsoft Azure
+
 Azure Well-Architected Framework includes ADR guidance as part of the architect role.
 
 ### Adoption Statistics
 
 According to an IEEE MSR study on GitHub:
+
 - ADR adoption is still relatively low but increasing yearly
 - ~50% of repositories with ADRs contain just 1-5 ADRs (tried but not fully adopted)
 - Nygard's template is most commonly used
 
----
+______________________________________________________________________
 
 ## Integrations and Related Practices
 
 ### arc42
+
 ADRs fit naturally into **Section 9** of arc42 architecture documentation. arc42 recommends using ADRs for every important decision, presented as a list ordered by importance or in detailed form.
 
 ### C4 Model
+
 ADRs complement C4 diagrams by documenting the "why" behind structural decisions shown in context, container, and component diagrams.
 
 ### Technology Radar
+
 An internally-customized mapping of technology adoption can reference ADRs as evidence for adoption decisions.
 
 ### Architecture Advisory Forum
+
 Weekly meetings where teams present proposed decisions (via ADRs) and receive advice without giving up decision ownership.
 
 ### Team-Sourced Principles
+
 8-15 SMART principles that guide decisions. ADRs reference which principles influenced choices.
 
 ### RFCs and Design Documents
+
 ADRs capture the *outcome* of larger explorations documented in RFCs or design docs. They're summaries, not replacements.
 
----
+______________________________________________________________________
 
 ## Sources and Further Reading
 
@@ -505,7 +546,7 @@ ADRs capture the *outcome* of larger explorations documented in RFCs or design d
 - [Markdown Architectural Decision Records: Format and Tool Support](https://ceur-ws.org/Vol-2072/paper9.pdf) - Academic paper on MADR
 - [Using Architecture Decision Records in Open Source Projects](https://ieeexplore.ieee.org/document/10155430/) - IEEE MSR study on GitHub ADR adoption
 
----
+______________________________________________________________________
 
 ## Quick Reference: Starting with ADRs
 
@@ -564,6 +605,6 @@ project/
 6. Are consequences reported objectively (including negatives)?
 7. Is the solution actionable with clear next steps?
 
----
+______________________________________________________________________
 
 *Document compiled from research across 40+ sources including the original Michael Nygard article, ThoughtWorks Technology Radar, AWS Prescriptive Guidance, UK Government frameworks, Spotify Engineering, and various community blog posts.*

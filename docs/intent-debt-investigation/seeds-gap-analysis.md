@@ -8,27 +8,27 @@ The seeds backlog is **remarkably complete**. After reading every seed, the unco
 
 ## What's already covered (so we don't re-file it)
 
-| Theme the landscape pushes | Already in the backlog |
-|---|---|
+| Theme the landscape pushes                                            | Already in the backlog                                                                                                                    |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | Consume raw capture / glean from transcripts, email, Slack, PR, voice | seeds-4, 74.2.1–74.2.4, 125 (gleaning/threshing/winnowing), 126 (inbox), 130 (project-aware), 131 (re-ingestion), 142 (dedupe-and-create) |
-| Distillation: verbose transcript ↔ lossy summary | **seeds-116** states it verbatim; 120 (granularity), 89/90/91 (knowledge artifacts) |
-| Capture-in-the-moment (live vs after) | seeds-112, 112.1–112.4 (incl. clancey commit-watcher analysis), 113 (gold-standard testing), 141 (AskUserQuestion capture) |
-| Completeness ("what haven't I explored?") | seeds-60, 50 (coherence check), 61/62 (ETL hierarchy, templates) |
-| Typed relationships (supersedes, duplicates…) | seeds-6, 83.3, 124 (organic discovery), beads-validated |
-| Spec graduation / "spec-ready" state | seeds-118, 122 |
-| Multi-agent / multi-perspective critique | seeds-117, 121; the `feedback`/closer pattern (151.1, 151.2) |
-| Agent memory / MCP-vs-CLI | seeds-83.1, 84, **85 (resolved: CLI+hooks beats MCP on token cost)**, 87 (dynamic prime, shipped) |
-| ConPort / memory-bank distinction | seeds-83, **83.4 (decided: stores-conclusions vs tracks-journey)** |
-| beads absorbing seeds | seeds-12, 12.1, 12.2 (resolved via Yegge's execution-only boundary) |
-| ephemeral capture / wisps | seeds-86 |
-| graph visualization | seeds-88 |
-| metadata/extra field | seeds-40 (beads-validated) |
-| privacy/copyright of sources | seeds-127, 132, 133; scrubbing hook 114 |
-| AI-as-participant, not secretary | seeds-7, 21, 151, 151.1 |
+| Distillation: verbose transcript ↔ lossy summary                      | **seeds-116** states it verbatim; 120 (granularity), 89/90/91 (knowledge artifacts)                                                       |
+| Capture-in-the-moment (live vs after)                                 | seeds-112, 112.1–112.4 (incl. clancey commit-watcher analysis), 113 (gold-standard testing), 141 (AskUserQuestion capture)                |
+| Completeness ("what haven't I explored?")                             | seeds-60, 50 (coherence check), 61/62 (ETL hierarchy, templates)                                                                          |
+| Typed relationships (supersedes, duplicates…)                         | seeds-6, 83.3, 124 (organic discovery), beads-validated                                                                                   |
+| Spec graduation / "spec-ready" state                                  | seeds-118, 122                                                                                                                            |
+| Multi-agent / multi-perspective critique                              | seeds-117, 121; the `feedback`/closer pattern (151.1, 151.2)                                                                              |
+| Agent memory / MCP-vs-CLI                                             | seeds-83.1, 84, **85 (resolved: CLI+hooks beats MCP on token cost)**, 87 (dynamic prime, shipped)                                         |
+| ConPort / memory-bank distinction                                     | seeds-83, **83.4 (decided: stores-conclusions vs tracks-journey)**                                                                        |
+| beads absorbing seeds                                                 | seeds-12, 12.1, 12.2 (resolved via Yegge's execution-only boundary)                                                                       |
+| ephemeral capture / wisps                                             | seeds-86                                                                                                                                  |
+| graph visualization                                                   | seeds-88                                                                                                                                  |
+| metadata/extra field                                                  | seeds-40 (beads-validated)                                                                                                                |
+| privacy/copyright of sources                                          | seeds-127, 132, 133; scrubbing hook 114                                                                                                   |
+| AI-as-participant, not secretary                                      | seeds-7, 21, 151, 151.1                                                                                                                   |
 
 That is most of the landscape. What follows is what's *missing*.
 
----
+______________________________________________________________________
 
 ## The six gaps
 
@@ -36,7 +36,7 @@ Each is drafted as a candidate seed (title, type, tags, body) so you can file it
 
 ### Gap 1 — Staleness / decay of resolved deliberation
 
-- **Type:** concern  **Tags:** lifecycle, decay, staleness, maintenance, intent-debt
+- **Type:** concern **Tags:** lifecycle, decay, staleness, maintenance, intent-debt
 
 > **Resolved deliberation can go stale — nothing detects or flags decisions whose premises no longer hold.**
 >
@@ -50,11 +50,12 @@ Each is drafted as a candidate seed (title, type, tags, body) so you can file it
 
 ### Gap 2 — The candor paradox (and the audit-log chilling effect)
 
-- **Type:** concern  **Tags:** philosophy, candor, observer-effect, privacy, positioning
+- **Type:** concern **Tags:** philosophy, candor, observer-effect, privacy, positioning
 
 > **Does knowing deliberation is captured make it more performed and less candid?**
 >
 > The recording-firehose literature's sharpest critique (a16z "Everything Is Recorded Now," and its own comments; White & Case on governance) is the observer effect: once people assume everything is recorded, the messy half-formed thinking that produces good decisions migrates to the unrecorded hallway — "you capture more context, but a thinner, more performed version of it." Two angles for seeds:
+>
 > 1. When the agent (or I) know a deliberation will be filed into seeds — and that `.seeds/` may be public (seeds-103) — does the thinking get quietly performed or self-censored?
 > 2. The ETL audit-log use case turns seeds into a discoverable record downstream consumers read. A candid "we shadow-priced this" or "we don't trust column X" could resurface detached from the context that justified it.
 >
@@ -66,7 +67,7 @@ Each is drafted as a candidate seed (title, type, tags, body) so you can file it
 
 ### Gap 3 — Structure-vs-tokens: does the structure help the agent, or fight it?
 
-- **Type:** question  **Tags:** architecture, model, agent-ux, structure
+- **Type:** question **Tags:** architecture, model, agent-ux, structure
 
 > **Does seeds' structured model help the agent reason, or fight the model's native token-space reasoning?**
 >
@@ -80,7 +81,7 @@ Each is drafted as a candidate seed (title, type, tags, body) so you can file it
 
 ### Gap 4 — Retrospective outcome: did the decision actually pan out?
 
-- **Type:** idea  **Tags:** lifecycle, outcome, retrospective, feedback-loop
+- **Type:** idea **Tags:** lifecycle, outcome, retrospective, feedback-loop
 
 > **Revisit resolved decisions later to record whether they worked — not just what was decided.**
 >
@@ -92,7 +93,7 @@ Each is drafted as a candidate seed (title, type, tags, body) so you can file it
 
 ### Gap 5 — Proactive corpus extraction (reconstruct deliberation nobody captured live)
 
-- **Type:** idea  **Tags:** gleaning, extraction, corpus, knowledge-artifact, completeness
+- **Type:** idea **Tags:** gleaning, extraction, corpus, knowledge-artifact, completeness
 
 > **Glean deliberation from an existing codebase/corpus, not just from a source placed in the inbox.**
 >
@@ -106,7 +107,7 @@ Each is drafted as a candidate seed (title, type, tags, body) so you can file it
 
 ### Gap 6 — Adopt the "intent debt" vocabulary as positioning
 
-- **Type:** idea  **Tags:** positioning, framing, readme, marketing
+- **Type:** idea **Tags:** positioning, framing, readme, marketing
 
 > **Adopt the Triple-Debt / "intent debt" framing as seeds' external positioning.**
 >
@@ -118,7 +119,7 @@ Each is drafted as a candidate seed (title, type, tags, body) so you can file it
 
 *Why it's a real gap:* the backlog has competitor research (intent.build, ConPort) but never adopts the field's emerging vocabulary. "intent debt" is a sharper elevator pitch than anything currently in the README, and it arrived *after* most of the backlog was written.
 
----
+______________________________________________________________________
 
 ## What I considered and decided is *not* a gap
 

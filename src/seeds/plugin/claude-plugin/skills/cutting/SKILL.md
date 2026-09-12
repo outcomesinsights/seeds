@@ -38,16 +38,20 @@ Excerpt, do not transcribe. A cutting is a distillation — enough to root, not 
 
 2. **Draft the body to a temp file.** A multi-paragraph body should not travel through argv:
 
-       BODY=$(mktemp) && cat > "$BODY" <<'EOF'
-       **What we were discussing:** …
-       **Why it came up:** …
-       **Established:** …
-       **Open:** …
-       EOF
+   ```
+   BODY=$(mktemp) && cat > "$BODY" <<'EOF'
+   **What we were discussing:** …
+   **Why it came up:** …
+   **Established:** …
+   **Open:** …
+   EOF
+   ```
 
 3. **Create the seed with that body.** `seeds create --content-file` reads the body straight from the file, so nothing multi-paragraph goes through argv:
 
-       seeds create -t "<the topic, stated to stand alone>" --type exploration --tags cutting --content-file "$BODY"
+   ```
+   seeds create -t "<the topic, stated to stand alone>" --type exploration --tags cutting --content-file "$BODY"
+   ```
 
    Tag it `cutting` so parked topics are findable as a set. Pass `--parent <id>` when the topic belongs under an existing deliberation, and `--type` whatever fits — `question` if the thing parked really is an open question.
 

@@ -13,7 +13,9 @@ Do this once when invoked. Do not adopt it as default behavior for later turns.
 
 ## 1. Run the verb — never scan the corpus yourself
 
-    seeds winnow --json
+```
+seeds winnow --json
+```
 
 `--flavor` (repeatable: `neglect`, `unblocked`, `unresolved`, `contradiction`, `staleness`, `outcome`) narrows the run; `--since` replaces every age cutoff with one point (`3m`, `2026-05-08`). The JSON is `{corpus: {seeds, edges}, flavors, facts, candidates}`, and each finding is `{tier, flavor, code, seed_ids, message, action, evidence}`. `tier` is `fact` or `candidate` and it decides everything that follows.
 
@@ -39,13 +41,15 @@ Discarding is the normal outcome, not a failed pass.
 
 ## 4. Report — two sections, never one
 
-    314 seeds, 427 edges. Flavors: all.
+```
+314 seeds, 427 edges. Flavors: all.
 
-    FACTS (62) — no judgment needed
-      … the verb's lines, unedited …
+FACTS (62) — no judgment needed
+  … the verb's lines, unedited …
 
-    CANDIDATES — 3 reported, 25 read and set aside
-      … each one judged, each one citing IDs and text …
+CANDIDATES — 3 reported, 25 read and set aside
+  … each one judged, each one citing IDs and text …
+```
 
 Keep the two apart even when a candidate looks certain. Confidence goes in your words ("both seeds are unambiguous; seeds-138 is the later and the narrower claim"), never in a promotion up into the FACTS list — a judged candidate is still a candidate, and one wrong entry in the factual section costs the whole report its credibility. Say how many candidates you read and set aside, so the ones you kept are visibly a selection rather than everything the verb emitted.
 

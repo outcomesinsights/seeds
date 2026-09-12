@@ -152,7 +152,7 @@ That's it. That's the whole rhythm. Most of it is conversation; the
 seeds CLI runs underneath, called by the agent on my behalf. I almost
 never type a `seeds` command.
 
----
+______________________________________________________________________
 
 ## The mental model
 

@@ -2,9 +2,10 @@
 
 Brainstormed 2026-02-27. Winner marked with ★.
 
----
+______________________________________________________________________
 
 ## The Garden Metaphor (pure flora)
+
 - Plant your ideas and watch them bloom into decisions.
 - A greenhouse for half-formed thoughts that deserve to grow.
 - Tend your ideas from first spark to full bloom.
@@ -19,6 +20,7 @@ Brainstormed 2026-02-27. Winner marked with ★.
 - A trellis for ideas that need support to climb.
 
 ## The Journey / Process
+
 - Capture the whole journey from "what if" to "here's why."
 - Because the path to a decision matters as much as the decision.
 - Document the deliberation, not just the conclusion.
@@ -30,6 +32,7 @@ Brainstormed 2026-02-27. Winner marked with ★.
 - Record the thinking so future-you knows why past-you chose.
 
 ## Beads-Style Structural Riffs
+
 - ★ Git-backed deliberation capture for ideas that need time to grow.
 - A lifecycle tracker for ideas, from wild hunch to firm decision.
 - Structured deliberation capture for AI-assisted design.
@@ -39,6 +42,7 @@ Brainstormed 2026-02-27. Winner marked with ★.
 - Deliberation graphs, rooted in git, branching toward decisions.
 
 ## Punny / Playful
+
 - Helping ideas come to fruition since 2025.
 - Ideas, carefully cultivated — no green thumb required.
 - Jot it, water it, watch it grow.
@@ -49,6 +53,7 @@ Brainstormed 2026-02-27. Winner marked with ★.
 - Where shower thoughts get the greenhouse they deserve.
 
 ## Concise / Punchy
+
 - Grow your ideas into decisions.
 - Deliberation capture for the design process.
 - Plant ideas. Harvest decisions.
@@ -58,6 +63,7 @@ Brainstormed 2026-02-27. Winner marked with ★.
 - The missing layer between brainstorming and building.
 
 ## Philosophical / Poetic
+
 - Every decision was once just a feeling — seeds remembers.
 - The archaeology of your future decisions, captured in real time.
 - A living record of how clarity emerges from curiosity.
@@ -68,6 +74,7 @@ Brainstormed 2026-02-27. Winner marked with ★.
 - Ideas are patient. Seeds gives them somewhere to wait.
 
 ## AI-Forward
+
 - Deliberation capture that gives AI agents design memory.
 - Help your AI remember why, not just what.
 - A shared garden where humans plant ideas and AI helps them grow.
