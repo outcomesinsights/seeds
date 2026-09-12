@@ -994,3 +994,15 @@ class TestLiteralSearch:
         store = self._store(tmp_path, ["An unrelated note about item [9]."])
         assert [r.id for r in store.search(r"\[[t-xh9]\]")] == ["t-a0b2"]
         assert store.search(r"\[[t-xh9]\]", literal=True) == []
+
+    def test_a_dot_in_a_code_is_a_wildcard_without_literal(self, tmp_path):
+        """Wider than references, and the reason the prime warning names codes:
+        `.` matches any character, so `I50.x` also finds `I50Ax`. clc-main
+        measured a store where the counts happened to agree and pointed out
+        that they agreed only by luck."""
+        store = self._store(
+            tmp_path,
+            ["The code I50.x covers heart failure.", "Vendor string I50Ax here."],
+        )
+        assert len(store.search("I50.x")) == 2
+        assert [r.id for r in store.search("I50.x", literal=True)] == ["t-a0b2"]

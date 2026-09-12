@@ -110,11 +110,20 @@ alignment are not markdown constructs; a fence is.
 - `seeds recent [--since=7d]` - Recently touched (any status)
 - `seeds search '<regex>'` - ripgrep over the seed files (case-insensitive; no stemming, so search for the stem: `merg` finds both `merge` and `merging`)
 
-**Searching for a REFERENCE: use `seeds search -F`.** The formatter escapes
-brackets, so `[[clc-97e]]` is stored `\\[[clc-97e]\\]`. Pasting that as a regex
-reads `[clc-97e]` as a character class and returns a small, plausible, entirely
-wrong result set — measured: two confident hits, neither mentioning the
-reference. `-F` matches the text and finds it whichever way it was spelled.
+**Use `seeds search -F` for any query carrying a code, a wildcard, or a
+reference.** QUERY is a regex, so anything code-shaped is regex-live:
+
+- `[[clc-97e]]` — the formatter escapes brackets, so it is STORED
+  `\\[[clc-97e]\\]`, and pasting that reads `[clc-97e]` as a character class.
+  Measured: two confident hits, neither mentioning the reference at all.
+- `I50.x` — `.` matches any character, so it also finds `I50Ax`. Measured on a
+  two-seed store: 2 hits unflagged, 1 with `-F`.
+
+Both return a small, plausible, entirely WRONG result set, which is worse than
+an empty one — you conclude the code has two referrers and move on. `-F`
+matches the text, and still finds a reference whichever way the formatter
+spelled it. Leave the regex behaviour alone when you want it; it is a real
+feature, not a bug.
 
 ### Searching Across Repos (use ripgrep directly — there is no seeds verb)
 
