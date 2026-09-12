@@ -4,7 +4,7 @@ title: A rename that repoints an edge onto an existing but wrong seed is invisib
 status: captured
 type: concern
 created_at: 2026-09-12T03:54:34.806761+00:00
-updated_at: 2026-09-12T03:54:34.806761+00:00
+updated_at: 2026-09-12T03:59:19.102511+00:00
 tags:
   - check
   - relationships
@@ -73,3 +73,58 @@ A check that answers a NARROWER question than its name suggests is worse than
 no check, because the clean result is taken as evidence. Worth asking of each
 existing rule: what is the nearest case it does NOT cover, and is that gap
 written down next to it?
+
+## SIGNAL CHOSEN (2026-09-11), and it is none of the three above
+
+home-manager-main replaced its own same-`created_at` proposal after I objected
+to it, and the replacement has what the others lacked: no false-positive story
+at all, because **it never examines a relationship**.
+
+**Look at the rename, not the edge.** A reference rewritten from `A-N` to
+`B-N` by an id pass is suspect if and only if `A-N` and `B-N` were DIFFERENT
+seeds immediately before that pass.
+
+- benign collision: the two were the same seed (a duplicate), so the rewrite
+  preserved meaning — 50 of 51 here;
+- corrupting collision: the two were different seeds, so the rewrite silently
+  repointed the reference at an unrelated record — 1 of 51, and it is the
+  `hm-7 -> hm-6` case found by hand.
+
+A legitimate inverse pair cannot trip it, because it asks nothing about edges.
+A store that never had a colliding prefix pass yields an empty candidate set —
+a genuine zero rather than a check with nothing to say.
+
+**Measured on home-manager, and reproduced independently here:**
+
+```
+files at c27ba89^                       240
+suffixes carrying BOTH seeds-N and hm-N  51
+  identical titles (benign)              50
+  DIFFERENT titles (corrupting)           1
+    seeds-6  Make FluidVoice reliably capture from the AB13X handset mic…
+    hm-6     jsaw.io is an internal-only TLD (nothing public on it)
+```
+
+Titles were sufficient and unambiguous on this corpus; a content hash is
+stricter if it is ever wanted.
+
+**The caveat, which is theirs and matters more than the signal.** This needs
+the pre-pass commit to be identifiable. Here it is `c27ba89`, known from the
+thread. Where nobody recorded which commit did the rename, the rule holds but
+its INPUT does not exist, and `--against-git` would have to find the pass by
+scanning for commits that delete many files sharing one prefix. So the
+acceptance criterion "zero findings across 21 stores" must not be read as "the
+check ran everywhere" — on most stores it will correctly have nothing to look
+at, and those two outcomes have to be distinguishable in the output or this
+detector acquires the exact disease it exists to cure.
+
+## And a sharper statement of the pattern
+
+Mine was "somebody reported an empty result rather than assuming they had
+misread it". Theirs is better: all three detectors answered a **narrower
+question than their name**, and in each case the narrowing was invisible from a
+clean run. What caught them was someone with a *specific suspected instance*
+checking whether the detector saw THAT instance — not reading the aggregate.
+
+**A check that cannot be pointed at a known-bad case is a check nobody can
+falsify.**
