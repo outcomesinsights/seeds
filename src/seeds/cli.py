@@ -451,7 +451,33 @@ def require_init(f: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
-@click.group()
+class _SeedsGroup(click.Group):
+    """The command group, with one place that turns a bad file into a message.
+
+    Reads are strict (§7): a file this module cannot fully understand fails
+    loudly and names the file, rather than skipping a field or returning a
+    partial seed. Loudly meant a Python traceback, which names the file and
+    nothing else useful -- `seeds list`, `ready`, `show`, `tree` and `winnow`
+    all died that way on a single malformed seed, with no hint that `seeds
+    check` would name every bad file in one pass and tell the operator what to
+    do about each. Found by home-manager-main, 2026-09-11, on a store where an
+    edit had left `relationships: []` behind.
+
+    The strictness is not what changes here. Only the presentation.
+    """
+
+    def invoke(self, ctx: click.Context) -> object:
+        try:
+            return super().invoke(ctx)
+        except SeedFileError as exc:
+            raise click.ClickException(
+                f"{exc}\n\nRun `seeds check` to see every file with this "
+                f"problem and what to do about each; this command stops at the "
+                f"first one it cannot read."
+            ) from exc
+
+
+@click.group(cls=_SeedsGroup)
 @click.version_option(version=__version__, prog_name="seeds")
 @click.pass_context
 def main(ctx: click.Context) -> None:

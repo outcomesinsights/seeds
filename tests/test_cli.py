@@ -18,7 +18,7 @@ from seeds.models import (
     SeedStatus,
     SeedType,
 )
-from seeds.seedfile import SeedRecord
+from seeds.seedfile import SeedFileError, SeedRecord
 from seeds.store import SEEDS_DIR, Store, new_record
 from tests.beadshelpers import (
     call_lines,
@@ -3300,3 +3300,41 @@ class TestAppendCanComeFromStdin:
         assert cli_runner.invoke(main, ["normalize", "--dry-run"]).output.startswith(
             "1 seed file(s), 0 would be rewritten."
         )
+
+
+class TestAnUnreadableFileIsAMessageNotATraceback:
+    """Reads are strict (§7) and that does not change. What changed is that
+    "fails loudly" no longer means a Python traceback: `list`, `ready`, `show`,
+    `tree` and `winnow` all died that way on one malformed seed, naming the
+    file and nothing else useful. Found by home-manager-main on a store where
+    an edit had left `relationships: []` behind."""
+
+    def _broken_store(self, tmp_path):
+        seeds_dir = tmp_path / ".seeds"
+        (seeds_dir / "seeds").mkdir(parents=True)
+        (seeds_dir / "config.yaml").write_text("prefix: t\n", encoding="utf-8")
+        (seeds_dir / "seeds" / "t-a1b2.md").write_text(
+            "---\nid: t-a1b2\ntitle: x\nstatus: captured\ntype: idea\n"
+            "created_at: 2026-01-01T00:00:00+00:00\n"
+            "updated_at: 2026-01-01T00:00:00+00:00\n"
+            "relationships: []\n---\n\nbody\n",
+            encoding="utf-8",
+        )
+        return seeds_dir
+
+    @pytest.mark.parametrize(
+        "argv",
+        [["list"], ["ready"], ["winnow"], ["show", "t-a1b2"], ["tree", "t-a1b2"]],
+    )
+    def test_it_names_the_file_and_points_at_check(self, cli_runner, tmp_path, argv):
+        self._broken_store(tmp_path)
+        original = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            result = cli_runner.invoke(main, argv)
+        finally:
+            os.chdir(original)
+        assert result.exit_code != 0
+        assert not isinstance(result.exception, SeedFileError)
+        assert "t-a1b2.md" in result.output
+        assert "seeds check" in result.output

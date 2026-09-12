@@ -432,8 +432,13 @@ def _check_edges(
                         f"relationship names {edge.target_id!r}, which has no file"
                     ),
                     remediation=(
-                        f"restore {edge.target_id}{FILE_SUFFIX} from git, or "
-                        f"drop this edge from both ends"
+                        f"three remedies, and the middle one was missing here: "
+                        f"restore {edge.target_id}{FILE_SUFFIX} from git; or "
+                        f"REPOINT the edge if the relationship is real and only "
+                        f"the id went stale -- a rename can leave a live "
+                        f"relationship naming a dead id, and dropping it then "
+                        f"loses the relationship rather than the error; or drop "
+                        f"it from both ends if the relationship itself is gone"
                     ),
                     seed_id=record.id,
                 )
