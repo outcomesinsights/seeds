@@ -6,6 +6,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0a6] - 2026-09-13
+
+**Not a public release** — an internal alpha on the `0.7.0` branch, as every
+0.7.0aN is. `main` is still the 0.6.x line and nothing is on PyPI.
+
+The headline is a refusal. Writing a seed body through a double-quoted shell
+word silently corrupts it: every POSIX shell substitutes backticks and
+`$expansions` before seeds runs, so a body reading `` Prefer the `echo X` verb ``
+is stored as `Prefer the X verb`, with no error anywhere and no way for seeds
+to tell. It is also arbitrary execution — a body quoting a destructive command
+runs it. Six incidents over three months across four repos, two of them silent
+content loss discovered later; 44% of the 1,904 seed bodies on the machine this
+was measured on contain a backtick.
+
+`--content-file`, `--content -` and a line in `prime` all existed already and it
+kept happening, because each needed the agent to already know to choose the safe
+route while the punishment for not choosing was silent. So `--content` now
+REFUSES a body that spans lines and names the safe routes in the error, which
+teaches at the moment of the mistake rather than in advance.
+
+That fix is deliberately in the package rather than in anyone's configuration,
+which is this repo's first recorded trellis: **guidance an agent needs in order
+to use seeds correctly must ship in `prime`, `--help` and error text, because a
+CLAUDE.md or memory file reaches exactly one machine and seeds runs on many.**
+Fourteen trellises already exist in five repos that merely use seeds; the repo
+that built the feature had none.
+
+### Added
+
+- Refuse a multi-line body through argv, and teach why in-package ([9c8bbd3](https://github.com/outcomesinsights/seeds/commit/9c8bbd3ab4d4b8add7b4026651940b12894cc420))
+- Sync via the Dolt remote; stop tracking the JSONL ([166a562](https://github.com/outcomesinsights/seeds/commit/166a5623de62226377a2c934424d6152c5843f4d))
+
+### Documentation
+
+- The -F warning covers any code-shaped query, not just refs ([4cd68f5](https://github.com/outcomesinsights/seeds/commit/4cd68f501bd263b3a6f05de6234248d7e94d4ff1))
+
+### Tooling
+
+- Track the gate declaration so a fresh clone is not silent ([7c0f834](https://github.com/outcomesinsights/seeds/commit/7c0f8347cfa8a4449c7240413bbc0cdc25ba429c))
+- Adopt the standard local gate recipes ([5779ed7](https://github.com/outcomesinsights/seeds/commit/5779ed748c0e5cac08cdffa1b05a6cb5ee173c64))
+
 ## [0.7.0a5] - 2026-09-11
 
 **Not a public release.** Like every 0.7.0aN, this is an internal alpha on the
