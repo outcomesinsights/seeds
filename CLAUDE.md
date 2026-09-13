@@ -158,3 +158,7 @@ cleanup, not a step in a reinstall.
 - **Hierarchical IDs**: Children use `parent-id.N` format (e.g., `seed-a1b2.1`)
 - **Blocked**: A seed with unresolved children cannot be resolved
 - **Store**: `.seeds/seeds/<id>.md`, one file per seed, tracked by git. There is no database and nothing to sync — a command writes the file before it returns. `docs/storage-format.md` is normative.
+
+## Principles
+
+- Guidance an agent needs in order to use seeds correctly must ship IN the package — prime, --help, and error text — because a CLAUDE.md or memory file reaches exactly one machine and seeds runs on many. — seeds-gi9k, 2026-09-13

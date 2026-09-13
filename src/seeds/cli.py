@@ -404,6 +404,44 @@ def _resolve_content(content: str | None, content_file: str | None) -> str | Non
     if content == STDIN_SENTINEL:
         return sys.stdin.read().rstrip("\n")
 
+    if content is not None and "\n" in content:
+        # A body that spans lines does not come through argv. Not a length
+        # rule and not a taste rule -- argv is where the shell has already had
+        # its turn. In a double-quoted word every POSIX shell substitutes
+        # `backticks` and $expansions BEFORE the command runs, so a body
+        # quoting a command is silently replaced by that command's OUTPUT, and
+        # seeds receives text it cannot tell from what the author meant. It is
+        # also arbitrary execution: a body quoting `rm -rf ...` runs it.
+        #
+        # Measured on the corpus this was written against: 44% of 1,904 seed
+        # bodies contain a backtick, and 87% span lines. Six incidents in three
+        # months, two of them silent content loss discovered later.
+        #
+        # Single-line content is still accepted: it is one short shell word an
+        # author can see, and 2 of 230 single-line bodies carried a backtick.
+        # The routes below never touch a shell word at all.
+        click.echo(
+            "Error: --content took a body that spans lines, and argv is not a "
+            "safe way to carry one.",
+            err=True,
+        )
+        click.echo(
+            "  Every POSIX shell substitutes `backticks` and $expansions "
+            "inside a double-quoted word before seeds ever runs, so a body "
+            "quoting a command is replaced by that command's output -- "
+            "silently, and seeds cannot tell.",
+            err=True,
+        )
+        click.echo("  Use one of these instead:", err=True)
+        click.echo("    --content-file PATH        read the body from a file", err=True)
+        click.echo("    --content -                read it from stdin", err=True)
+        click.echo(
+            "    ... < body.md              or a QUOTED heredoc, <<'EOF' -- "
+            "unquoted <<EOF still interpolates",
+            err=True,
+        )
+        sys.exit(1)
+
     return content
 
 
@@ -561,7 +599,9 @@ SEED_TYPES = [t.value for t in SeedType]
     "--content",
     "-c",
     metavar="TEXT",
-    help="Full content/description. Pass - to read the body from stdin.",
+    help="Full content/description, single line only. Pass - to read the body "
+    "from stdin; a body that spans lines must use --content-file or --content -, "
+    "because a shell substitutes `backticks` in argv before seeds sees them.",
 )
 @click.option(
     "--content-file",
@@ -1251,8 +1291,10 @@ def trellis(
     "-c",
     metavar="TEXT",
     help=(
-        "New content (replaces existing; refused once a seed has been edited). "
-        "Pass - to read the body from stdin."
+        "New content, single line only (replaces existing; refused once a seed "
+        "has been edited). Pass - to read the body from stdin; a body that "
+        "spans lines must use --content-file or --content -, because a shell "
+        "substitutes `backticks` in argv before seeds sees them."
     ),
 )
 @click.option(

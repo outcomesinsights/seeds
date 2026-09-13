@@ -1,6 +1,12 @@
 #!/usr/bin/env sh
-# beads-jsonl-export
-. "$HOME/.config/beads/hooks/pre-commit-jsonl-export.sh"
+# beads-jsonl-export. Sourced only if present: the script is nix-declared in
+# home-manager and is NOT deployed on every host — it is absent on titan, where
+# ~/.config/beads does not exist at all. This line ran harmlessly for months
+# because the pre-commit framework invoked `bd hooks run pre-commit` instead of
+# this shim; once `just hooks` rewired .git/hooks to chain the shim directly
+# under `set -e`, a missing file failed EVERY commit in the repo.
+_bd_export="$HOME/.config/beads/hooks/pre-commit-jsonl-export.sh"
+[ -f "$_bd_export" ] && . "$_bd_export"
 # --- BEGIN BEADS INTEGRATION v0.61.0 ---
 # This section is managed by beads. Do not remove these markers.
 if command -v bd >/dev/null 2>&1; then

@@ -147,6 +147,29 @@ you mean (a habitat's root, `~/projects/<org>/`, or `..` from a sibling repo).
 - Bodies referencing unknown `<prefix>-...` IDs are rejected, base36 hash IDs included; existing seeds, beads and a short allowlist of prose terms all count as known; pass `--allow-unknown-refs` to override
 - Bead IDs are checked against a sibling `.beads/issues.jsonl`, and anything it does not vouch for is confirmed with `bd` itself before being called unknown -- that export is throttled, so a bead created seconds ago is real and missing from it
 
+**NEVER PUT A SEED BODY IN A SHELL WORD.** This is the single most common way
+deliberation gets corrupted, and it is silent. In a double-quoted argument
+every POSIX shell substitutes `` `backticks` `` and `$expansions` BEFORE seeds
+runs, so a body quoting a command is replaced by that command's OUTPUT and
+seeds cannot tell the difference. It is also arbitrary execution: a body
+quoting a destructive command runs it. Measured on one real corpus, 44% of
+1,904 seed bodies contained a backtick.
+
+Three safe routes, none of which passes the body through a shell word:
+
+```
+seeds create -t "Title" --content-file body.md      # write the file first
+seeds update <id> --append - < more.md              # or redirect stdin
+seeds create -t "Title" --content - <<'EOF'         # QUOTED heredoc
+...body...
+EOF
+```
+
+`<<'EOF'` with the quotes is what makes a heredoc safe — an unquoted `<<EOF`
+still interpolates. Better still, write the file with your editor/file tool
+rather than the shell, then pass `--content-file`. `--content TEXT` is fine
+for a single short line and refuses a body that spans lines for this reason.
+
 **A LONG BODY GOES THROUGH THE CLI, NEVER `cat >>`.** `seeds create -t "..."
 --content-file body.md` takes a body from a file, and both `--content -` and
 `--append -` read from stdin, so `seeds update <id> --append - < more.md`

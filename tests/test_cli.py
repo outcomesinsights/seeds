@@ -1126,9 +1126,17 @@ class TestUpdateContentGuard:
     """
 
     def _create(self, cli_runner, content="Original capture"):
-        """Create a seed via the CLI and return its minted ID."""
+        """Create a seed via the CLI and return its minted ID.
+
+        Through stdin rather than argv: a body that spans lines is refused on
+        `--content`, because a shell eats backticks in a shell word before
+        seeds sees them. This helper predates that guard and one of its
+        fixtures is multi-line.
+        """
         result = cli_runner.invoke(
-            main, ["create", "--title", "Guarded seed", "--content", content]
+            main,
+            ["create", "--title", "Guarded seed", "--content", "-"],
+            input=content,
         )
         assert result.exit_code == 0, result.output
         return _extract_created_id(result.output)
@@ -3338,3 +3346,56 @@ class TestAnUnreadableFileIsAMessageNotATraceback:
         assert not isinstance(result.exception, SeedFileError)
         assert "t-a1b2.md" in result.output
         assert "seeds check" in result.output
+
+
+class TestAMultiLineBodyCannotComeThroughArgv:
+    """The most common way deliberation is corrupted, and it is silent.
+
+    A shell substitutes backticks and $expansions in a double-quoted word
+    BEFORE seeds runs, so a body quoting a command is replaced by that
+    command's output and seeds cannot tell. Six incidents in three months on
+    the corpus this was written against, two of them silent content loss found
+    later; 44% of its 1,904 bodies contain a backtick.
+    """
+
+    def test_create_refuses_it_and_names_the_safe_routes(
+        self, cli_runner, initialized_env
+    ):
+        result = cli_runner.invoke(
+            main, ["create", "-t", "T", "--content", "line one\nline two"]
+        )
+        assert result.exit_code == 1
+        assert "spans lines" in result.output
+        assert "--content-file" in result.output
+        assert "--content -" in result.output
+        assert "<<'EOF'" in result.output
+
+    def test_update_refuses_it_too(self, cli_runner, initialized_env):
+        created = cli_runner.invoke(main, ["create", "-t", "T", "-c", "one line"])
+        seed_id = created.output.split("Created seed: ")[1].split()[0]
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--content", "a\nb", "--replace"]
+        )
+        assert result.exit_code == 1
+        assert "spans lines" in result.output
+
+    def test_a_single_line_body_is_still_accepted(self, cli_runner, initialized_env):
+        """One short shell word an author can see. Refusing it would make
+        quick capture unusable and buy nothing."""
+        result = cli_runner.invoke(main, ["create", "-t", "T", "-c", "one line"])
+        assert result.exit_code == 0
+
+    def test_the_safe_routes_still_take_a_multi_line_body(
+        self, cli_runner, initialized_env, tmp_path
+    ):
+        body = "line one\n\n- and a list\n- of things\n"
+        path = tmp_path / "body.md"
+        path.write_text(body)
+        from_file = cli_runner.invoke(
+            main, ["create", "-t", "F", "--content-file", str(path)]
+        )
+        assert from_file.exit_code == 0
+        from_stdin = cli_runner.invoke(
+            main, ["create", "-t", "S", "--content", "-"], input=body
+        )
+        assert from_stdin.exit_code == 0
