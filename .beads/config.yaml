@@ -2,3 +2,7 @@ sync:
     mode: dolt-native
     remote: "git+https://github.com/outcomesinsights/seeds.git"
 export.auto: false
+
+# Beads sync through the git-backed Dolt remote at refs/dolt/data.
+# This line selects that path; the pre-push gate drives it.
+sync.remote: "git+https://github.com/outcomesinsights/seeds.git"
