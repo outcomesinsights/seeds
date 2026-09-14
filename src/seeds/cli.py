@@ -19,6 +19,14 @@ from seeds.beads import (
     load_bead_ids,
     query_bead_ids,
 )
+from seeds.candidates import (
+    DEFAULT_SINCE_DAYS,
+    CandidatesError,
+    find_candidates,
+    load_bead_records,
+)
+from seeds.candidates import format_report as format_candidates_report
+from seeds.candidates import report_as_dict as candidates_as_dict
 from seeds.check import (
     GitUnavailable,
     check_against_git,
@@ -2703,6 +2711,80 @@ def install(reinstall: bool) -> None:
 
     click.echo(f"seeds plugin {action} and enabled.")
     click.echo("Start a new Claude Code session to load the seeds:* skills.")
+
+
+@main.command("candidates")
+@click.argument("source", type=click.File("r"), default="-")
+@click.option(
+    "--since",
+    "since_value",
+    help=(
+        f"How far back to look. ISO date (2026-08-01), relative (30d, 6w), "
+        f"or 'today'/'yesterday'. Default: {DEFAULT_SINCE_DAYS}d."
+    ),
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit the report as JSON.")
+@pass_context
+def candidates_cmd(
+    ctx: Context, source, since_value: str | None, as_json: bool
+) -> None:
+    """Which seeds did recently-closed beads claim to discharge?
+
+    Reads bead records as JSON on stdin and prints the seeds they cite that are
+    still open. This is the discovery half of `resolve-seeds-from-beads`, run
+    when the session that shipped the work is long over and nobody remembers
+    which seeds it came from:
+
+        bd list --status=closed --closed-after=2026-08-15 --json | seeds candidates -
+
+    Nothing here shells out to `bd`, so seeds keeps no dependency on it and the
+    same input can come from a file or a fixture. Pipe the FULL closed set, not
+    a pre-narrowed one: every bead ID in the input helps tell a bead reference
+    apart from a seed reference, which is the one thing their identical shapes
+    cannot settle.
+
+    Each candidate carries its evidence class. A [source] candidate came from a
+    bead's structured `Source:` field, recorded by whoever converted the seed. A
+    [prose] candidate was text-matched out of a description, which is a strictly
+    weaker claim -- a bead that MENTIONS a seed is indistinguishable here from
+    one that implemented it. Seeds named on a `Context:` line are cited rather
+    than discharged and are never offered.
+
+    The window is stateless and always printed. A gap longer than it will miss
+    its early span, and that line is the only thing that makes the hole visible.
+
+    This command is READ-ONLY. It finds things to verify; it never resolves
+    anything, and a candidate is not a finding until someone has pointed at the
+    code that discharges it.
+    """
+    store = ctx.get_store()
+
+    try:
+        since_dt = parse_since(since_value or f"{DEFAULT_SINCE_DAYS}d")
+    except ValueError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    try:
+        records = load_bead_records(source.read())
+    except CandidatesError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        click.echo(
+            "Hint: pipe `bd list --status=closed --json` into this command.", err=True
+        )
+        sys.exit(1)
+
+    report = find_candidates(
+        records,
+        store.all(),
+        prefix=store.get_prefix(),
+        since=since_dt,
+        seeds_dir=store.seeds_dir,
+    )
+    if as_json:
+        click.echo(json.dumps(candidates_as_dict(report), indent=2, sort_keys=True))
+        return
+    click.echo(format_candidates_report(report), nl=False)
 
 
 if __name__ == "__main__":

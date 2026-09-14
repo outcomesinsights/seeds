@@ -165,6 +165,33 @@ seeds questions                          # List open questions
 seeds link <id1> <id2>                   # Create bidirectional relationship
 ```
 
+### Close the loop back from beads
+
+When work shipped weeks ago, nobody remembers which seeds it came from. `seeds candidates` reads closed beads and names the still-open seeds they cite:
+
+```bash
+bd list --status=closed --json | seeds candidates -        # last 30 days
+bd list --status=closed --json | seeds candidates - --since 90d
+bd list --status=closed --json | seeds candidates - --json
+```
+
+Nothing here shells out to `bd` — records arrive as JSON on stdin, so seeds
+keeps no dependency on any tracker and the same input can come from a file.
+Pipe the **full** set rather than a pre-narrowed one: bead IDs and seed IDs are
+shaped identically, and the only thing that tells them apart is whether an ID
+resolves to a seed file and *not* to a bead, which needs the bead IDs present.
+
+Every candidate carries its evidence class. A `[source]` candidate came from a
+bead's structured `Source:` field, recorded by whoever converted the seed; a
+`[prose]` candidate was text-matched out of a description, which is a **much**
+weaker claim — a bead that *mentions* a seed is indistinguishable here from one
+that implemented it. Seeds on a `Context:` line are cited rather than
+discharged, and are never offered. The window is stateless and always printed,
+because a gap longer than it will quietly miss its early span.
+
+The command is read-only. It finds things to verify; the `seeds:resolve-seeds-from-beads`
+skill is what verifies them against shipped code before anything gets resolved.
+
 ### Audit the thinking
 
 `seeds check` asks whether the files are valid and `seeds doctor` whether the
