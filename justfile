@@ -178,21 +178,7 @@ hooks:
     #!/usr/bin/env bash
     set -euo pipefail
     root="$(git rev-parse --show-toplevel)"
-    # Resolve from the GIT DIR, not `--git-path hooks`. beads points core.hooksPath at
-    # .beads/hooks and `--git-path` HONOURS it, so the obvious call aims this recipe at
-    # beads' own tracked shim -- the very file the generated hook then chains to. The
-    # hook ends up calling itself and every commit recurses until the shell gives up.
-    # Measured 2026-09-13: `git commit` hung with no output whatsoever, reporting only
-    # "shell level (1000) too high", until it was killed at two minutes. The guard
-    # below is the half that matters: it turns a silent self-call into a loud refusal.
-    hooks="$(git rev-parse --absolute-git-dir)/hooks"
-    case "$hooks" in
-        */.beads/hooks)
-            echo "refusing to write hooks inside .beads: $hooks" >&2
-            echo "core.hooksPath still points at beads; unset it first" >&2
-            exit 1
-            ;;
-    esac
+    hooks="$(git rev-parse --git-path hooks)"
     mkdir -p "$hooks"
     for h in pre-commit pre-push; do
         just --summary 2>/dev/null | tr ' ' '\n' | grep -qx "$h" || continue
@@ -209,7 +195,7 @@ hooks:
             echo '# Written by `just hooks`. Re-run to regenerate.'
             echo 'set -e'
             echo 'root="$(git rev-parse --show-toplevel)"'
-            echo 'hooks="$(git rev-parse --absolute-git-dir)/hooks"'
+            echo 'hooks="$(git rev-parse --git-path hooks)"'
             [ -n "$keep" ] && echo "p=\"\$hooks/preserved/$h\"; [ -x \"\$p\" ] && { \"\$p\" \"\$@\" || exit \$?; }"
             echo "b=\"\$root/.beads/hooks/$h\"; [ -x \"\$b\" ] && { \"\$b\" \"\$@\" || exit \$?; }"
             echo "cd \"\$root\" && exec just $h"
