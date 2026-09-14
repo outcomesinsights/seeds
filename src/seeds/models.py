@@ -280,6 +280,7 @@ PROSE_REF_ALLOWLIST = frozenset(
         "experiment",  # "`seeds-experiment`-style IDs"
         "recent",  # the `seeds recent` primitive, written `seeds-recent`
         "specific",  # "a seeds-specific phrase"
+        "shaped",  # "an ID-shaped token", "seeds-shaped IDs" -- prose about form
         "sweep",  # the proposed `/seeds-sweep` slash command
         "whatever",  # placeholder standing in for any ID, in a quoted discussion
     }
