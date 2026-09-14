@@ -1,11 +1,13 @@
 ---
 name: resolve-seeds-from-beads
-description: Use after an implementation session, once the user is satisfied with the shipped feature, to close the seeds->beads loop — reconcile what actually shipped against the deliberation, capture learnings and an efficacy note back into the originating seeds, then resolve them. Every candidate is verified against shipped code before it is offered for resolution.
+description: Use to close the seeds->beads loop — reconcile what actually shipped against the deliberation, capture learnings and an efficacy note back into the originating seeds, then resolve them. Works two ways — right after an implementation session, or cold as a periodic sweep over recently-closed beads (walk the beads that closed recently and find the seeds they resolve, close the loop on what shipped since last time), where `seeds candidates` recovers the lineage nobody remembers. Every candidate is verified against shipped code before it is offered for resolution.
 ---
 
 # Beads done → resolve the seeds
 
-The feature built from a seeds→beads handoff is finished and the user is satisfied. Close the loop back to deliberation. This is the symmetric bookend of the `seeds-to-beads` skill: that skill carried intent *out* to execution; this one carries what was learned *back* before resolving.
+Work built from a seeds→beads handoff has shipped. Close the loop back to deliberation. This is the symmetric bookend of the `seeds-to-beads` skill: that skill carried intent *out* to execution; this one carries what was learned *back* before resolving.
+
+**You do not have to have been there.** The common invocation is not "we just finished a feature" but "it has been a few weeks — walk the beads that closed and find the seeds they resolve." Step 0 picks the mode; step 1b handles the cold case without asking you to remember anything.
 
 Work through it once, with the user, when invoked. Do not adopt it as a default for later turns.
 
@@ -13,26 +15,88 @@ Work through it once, with the user, when invoked. Do not adopt it as a default 
 
 **A closed bead is a hint about where to look. It is never evidence that the work happened.** Resolving a seed asserts that deliberation has been discharged into code, so the only thing that can back that assertion is the code. Every step below is downstream of this: bead status finds candidates, shipped code confirms them.
 
-## 0. One feature, or a backlog?
+## 0. Which mode are you in?
 
-Check the size of what you have been pointed at before starting.
+Three shapes of work arrive here, and only the first two belong to this skill.
 
-- **One just-finished feature** — a handful of seeds behind a session's work. That is what this skill is for; continue to step 1.
-- **A backlog** — dozens of stale seeds across unrelated threads, with no single feature in view. That is **triage, not loop-closing**, and it is a different operation (`winnow`, the corpus audit). Say so rather than grinding through it: this skill reconciles deliberation against a specific shipped thing, and pointed at forty unrelated candidates it degrades into exactly the mentions-and-closed guessing that step 2 exists to stop.
+- **Session mode** — one just-finished feature, a handful of seeds behind work you were present
+  for. You already know roughly which seeds are in play. Go to step 1a.
+- **Sweep mode** — you are running this cold, weeks after the fact, to walk the beads that closed
+  recently and find the seeds they discharge. Nobody remembers the lineage; that is the point.
+  This is bead-anchored and code-verifiable exactly like session mode — it merely spans several
+  features instead of one. Go to step 1b.
+- **Backlog** — stale seeds across unrelated threads with *no closed beads behind them*. That is
+  **triage, not loop-closing**, and it belongs to `winnow`, the corpus audit.
 
-If it is a backlog, tell the user the count, say plainly that this is the wrong instrument for it, and offer to scope down to one feature you *can* verify. Do not quietly do a worse job at a bigger task.
+**The test that separates sweep from backlog is provenance, not volume.** A sweep can legitimately
+surface forty candidates — a busy month has that many closed beads — and it is still this skill's
+job, because every one of them traces to a bead that closed. A backlog is seeds with nothing
+downstream to check them against; no amount of care here can verify those, because there is no
+diff to read. Count closed beads, not seeds, when deciding.
 
-## 1. Find the originating seeds — and say how strong the link is
+If it is a backlog, say so, name the count, and offer `winnow` instead. Do not quietly do a worse
+job at a bigger task.
 
-Recover which seeds this work came from, then **state the strength of the evidence you recovered it with**, because the next step depends on it:
+## 1a. Session mode: recover the seeds from what you remember
 
-- **A structured lineage field** on the bead (`Source: seeds-NNN`, written by newer runs of `seeds-to-beads`) — the link is asserted. Still verify in step 2, but the candidate list is trustworthy.
-- **Prose mentions** of seed IDs inside bead descriptions — the link is *inferred by text-matching*. This is the common case: every bead written before the structured field existed has prose lineage only, and those are most of the beads you will be resolving against. Text-matching finds beads that *mention* a seed, which is a strictly weaker claim than beads that *implemented* it.
-- **Neither** — ask the user which seeds the feature traces back to.
-
-Say which of these you are working from, out loud, in your first report to the user. When the evidence is weaker than the method assumes, the failure is not the weak evidence — it is proceeding as though it were strong without saying so.
+Recover which seeds this work came from, then **state the strength of the evidence you recovered it
+with**, because step 2 depends on it. The three classes are in step 1c. If you cannot recover
+lineage at all, ask the user which seeds the feature traces back to — or switch to sweep mode,
+which does not need you to remember.
 
 `seeds show` each candidate to recall what was deliberated and concluded.
+
+## 1b. Sweep mode: let the verb find the candidates
+
+Do not try to recall anything. `seeds candidates` reads closed beads and names the still-open seeds
+they cite:
+
+```
+bd list --status=closed --json | seeds candidates -
+```
+
+Pass the **full** closed set, not a pre-narrowed one — bead IDs and seed IDs are shaped identically,
+and the only thing that tells them apart is whether an ID resolves to a seed file and *not* to a
+bead, which needs the bead IDs present. The verb defaults to a 30-day window; `--since 90d` or
+`--since 2026-06-01` widens it.
+
+**Read the window line back to the user, every time.** The window is stateless by design (ruled
+2026-09-13), so a gap longer than it silently misses its early span. That line is the only thing
+that makes the hole visible, and reporting candidates without it hides exactly what the operator
+needs in order to ask for a wider pass.
+
+The verb also prints what it deliberately withheld — seeds cited on a `Context:` line, seeds
+already resolved, IDs that name nothing in this store. Do not go fishing in those piles. They are
+shown so the withholding is auditable, not so you can re-admit them.
+
+Then `seeds show` each candidate and carry the whole list into step 2. **Every one of them still
+gets verified against code.** A cold sweep needs that more than session mode does, not less:
+nothing in your memory is propping up a bad candidate, so the output's evidence class is all you
+have until you go and look.
+
+## 1c. Say how strong the lineage is
+
+Whichever mode you came from, **your first report to the user names the evidence class**, because
+step 2's burden of proof depends on it. In sweep mode the verb has already labelled each candidate;
+use its labels rather than re-deriving them.
+
+- **`[source]` — a structured lineage field** on the bead (`Source: seeds-NNN`, written by newer
+  runs of `seeds-to-beads`). The link is *asserted by whoever converted the seed*. Still verify in
+  step 2, but the candidate list is trustworthy.
+- **`[prose]` — seed IDs matched out of bead descriptions**. The link is *inferred by text-matching*.
+  Text-matching finds beads that **mention** a seed, which is a strictly weaker claim than beads
+  that **implemented** it.
+- **Neither** — ask the user which seeds the feature traces back to.
+
+**Expect prose, and do not read a missing `Source:` as evidence about a bead's origins — it is
+evidence about the bead's age.** Measured on the seeds project 2026-09-13: **0 of 175** beads
+carried a `Source:` field, while 103 mentioned a seed in prose. Every bead written before that
+field existed has prose lineage only, and those will be most of what you resolve against for a long
+time. Treating the structured field as the normal path returns an empty answer on a corpus with a
+dozen real candidates in it.
+
+When the evidence is weaker than the method assumes, the failure is not the weak evidence — it is
+proceeding as though it were strong without saying so.
 
 ## 2. Verify each candidate against shipped code
 

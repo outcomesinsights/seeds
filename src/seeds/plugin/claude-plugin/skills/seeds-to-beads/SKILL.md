@@ -65,7 +65,7 @@ Separate *motivation* (why the work is worth doing) from *constraints* (what's a
 
 The reason is a real failure. Lineage used to be prose, so the sibling skill `resolve-seeds-from-beads` had to recover it by text-matching seed IDs out of bead descriptions. On 2026-08-31 that reported `seeds-lcfa.1.1` (*"wire seeds sync into git hooks"*) as shipped, because every bead that happened to **mention** it had closed. The bead that closed had shipped a different, downstream fix; the seed's own work had never been started. A bead that mentions a seed is indistinguishable from a bead that implements it, and prose cannot be matched well enough to fix that. The field exists so the answer is recorded at conversion time, by you, who actually knows it — instead of being re-derived later by a reader who does not.
 
-`resolve-seeds-from-beads` step 1 calls this the *structured lineage field* and treats it as its strong-evidence class. Same thing, same wording; do not coin a second name for it.
+`resolve-seeds-from-beads` step 1c calls this the *structured lineage field* and treats it as its strong-evidence class, and the `seeds candidates` verb reads this exact grammar to emit a `[source]` candidate. Same thing, same wording; do not coin a second name for it.
 
 ### Where it lives
 
