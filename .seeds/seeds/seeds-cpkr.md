@@ -4,7 +4,7 @@ title: Adversarial review of a deliberation before it becomes beads — Claude's
 status: exploring
 type: idea
 created_at: 2026-09-16T14:39:34.309564+00:00
-updated_at: 2026-09-16T14:52:43.517505+00:00
+updated_at: 2026-09-16T15:07:01.591479+00:00
 tags:
   - adversarial-review
   - seeds-to-beads
@@ -25,6 +25,9 @@ relationships:
   - target_id: seeds-ryfk
     rel_type: questioned-by
     created_at: 2026-09-16T14:52:43.175112+00:00
+  - target_id: seeds-r8mb
+    rel_type: questioned-by
+    created_at: 2026-09-16T15:07:01.223028+00:00
 ---
 
 Claude's judgment is not stable over time. It goes through stretches where it gets
@@ -81,6 +84,17 @@ from second-guessing all the way to merge.
   earns its place for the reason glean's skill bans context-gleaning: it makes the input
   reproducible, instead of the reviewer working from whatever is left in an agent's head.
 
+- **Compose the existing verbs; do not re-derive their work by reading** (seeds-ryfk).
+  Contradiction and staleness within the seed set come from `seeds winnow` scoped to
+  those seeds; the capture gap comes from `seeds glean`, upstream. Necessary but not
+  sufficient — winnow's contradiction flavor only compares seeds *already linked*, and a
+  contradiction inside one session's output is exactly the case where nobody drew the
+  edge. Composing narrows the reviewer's read; it does not replace it.
+
+- **A missing glean warns, it does not block** (seeds-veup). Scrutinize says the session
+  was never gleaned, then proceeds. A hard gate would make the tool unusable
+  mid-deliberation, which is one of the moments it was asked for.
+
 ## The transcript question, and the correction it forced
 
 An earlier framing of this seed proposed feeding the reviewer the session transcript,
@@ -97,10 +111,7 @@ context, because summarization drops exactly what glean exists to recover — ex
 figures, verbatim quotes, and things mentioned but never acted on.
 
 So scrutinize should NOT take a transcript; it would rebuild glean badly. The boundary:
-**glean runs first, scrutinize audits what got recorded.** At most, scrutinize notices
-the session was never gleaned and says so before it starts. That makes "all the reasoning
-is already in the seeds" an enforceable precondition rather than an aspiration — and lets
-scrutinize assume a complete corpus because something upstream checked.
+**glean runs first, scrutinize audits what got recorded.**
 
 ## The lenses, and how many reviewers
 
@@ -122,9 +133,19 @@ Two is where the tooling and the required ignorance genuinely differ.
 
 They must not see each other's findings, or the second anchors on the first.
 
-**The outside reviewer should be given the problem, not our solution.** Show it our
-decision and it grades our decision. Show it only what we were trying to do and it
-proposes independently — and the divergence between its proposal and ours IS the finding.
+### Outside-in runs in two phases (seeds-xiqc)
+
+1. **Propose blind.** Given ONLY the problem statement — not our solution — it proposes
+   independently and reports what the outside world already does about this problem.
+2. **Critique ours.** Then it is shown our solution and critiques it directly.
+
+The order is the whole design. Its proposal exists before it has seen ours, so it cannot
+be a graded reaction to ours; the divergence between the two is a real finding. And phase
+two still buys the direct critique that a problem-only review never produces.
+
+The cost is a commitment effect: having proposed, it may defend its own proposal rather
+than assess ours on the merits. It must be told explicitly that phase one is not a
+position to defend, and that agreeing with us in phase two is a valid outcome.
 
 ## The uncomfortable part
 
@@ -135,15 +156,24 @@ the same stretch is degraded too. What actually survives that, honestly:
   degradation.
 - **Web lookup** — imports information from outside the session entirely. Real.
 - **Two independent reviewers** — a weak vote, but better than one.
+- **Composed deterministic verbs** (`winnow`, `glean`) — do not degrade at all. This is
+  an argument for pushing as much of the review as possible into them.
 - **"Adversarial" as a prompt adjective** — survives nothing on its own.
 
 This raises the floor. It does not guarantee one, and the design should not be written
 as though it does.
 
+## Still open
+
+- Who writes the problem statement phase one depends on, and how is our solution kept
+  out of it? See seeds-r8mb.
+- Whether scrutinize's verb has enough deterministic narrowing to justify existing at
+  all, or whether this is a skill with no verb. Reproducible input is the argument for
+  it; that may not be enough.
+
 ## Related
 
 `seeds winnow` audits the thinking — neglect, contradiction, staleness, outcome — but it
 audits the *corpus over time*, not a *session's conclusions at the moment of handoff*,
-and it does no outside-world lookup at all. Different instrument, different moment.
-Worth deciding whether scrutinize's inside-out lens should just call winnow's
-contradiction flavor scoped to the seed set rather than re-deriving it.
+and it does no outside-world lookup at all. Different instrument, different moment;
+scrutinize now composes it rather than competing with it.
