@@ -350,8 +350,23 @@ empty." That ruling stands for now, but it stands on a weaker argument than it w
 
 ### Unresolved, and now known to be
 
-- **Where phase-one output lands.** A restatement, a set of alternative proposals and a
-  prior-art survey are not "findings"; the output model has no destination for them.
+- **Where the raw report lands: `claude_stuff/` in the repo the review was made in**,
+  timestamped (`scrutinize-review-<seed>-YYYYmmdd-HHMMSS.md`). Ruled 2026-09-16. The
+  findings themselves still go through triage into seeds; this is the verbatim transcript
+  behind them.
+
+  Worth knowing what that costs, because it argues against itself. `claude_stuff/` is
+  gitignored on every repo and every host, so the file is invisible to `git status`, never
+  reaches another machine, and does not survive a fresh clone — and the reason the raw text
+  is kept at all is that the reviewers found the review's reasoning survives only as
+  whatever the calling agent chose to relay, which is the lossy hop the design is trying to
+  guard. A guard stored where nothing can find it is a weak guard. It is defensible only
+  because the findings *do* land durably in seeds and this is the supporting material; if
+  that stops being true, the location is wrong.
+
+- **Where phase one's non-finding output lands.** A restatement, a set of alternative
+  proposals and a prior-art survey are not findings and do not fit the triage model. The
+  file keeps them; nothing in the corpus does.
 - **Where the empty-review count lives.** "Worth counting" has no counter — no store, no
   field, no verb.
 - **The calling agent is the unguarded end.** It authors the seed set, the problem
