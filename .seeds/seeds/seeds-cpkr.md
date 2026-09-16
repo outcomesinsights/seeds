@@ -199,6 +199,26 @@ the same stretch is degraded too. What actually survives that, honestly:
 This raises the floor. It does not guarantee one, and the design should not be written
 as though it does.
 
+## Running it (recovered by glean, 2026-09-16)
+
+- **The session that deliberated cannot run the review.** Both reviewer roles have
+  preconditions that session fails by construction: inside-out needs fresh context with no
+  sunk cost in the conclusion, and outside-in phase one must not have seen our solution.
+  The deliberating agent has seen all of it. So the skill dispatches subagents with clean
+  context — it does not review in-line — and that is a hard requirement, not a preference.
+  It is also the one requirement most likely to be quietly skipped, because reviewing
+  in-line is cheaper and looks identical in the output.
+- **Do not deliberate further before running it.** Every additional settled decision is
+  more of our vocabulary for the reviewer to argue against, and the questions most worth
+  asking are the ones a blind proposal might reach on its own. Settling "is a review even
+  the right shape" before phase one destroys the experiment. The review is a thing to run
+  EARLY on a converged deliberation, not after polishing it.
+- **The framing itself is authored by the agent under suspicion.** In this deliberation
+  every question and every option menu was written by the assistant; the user ruled, and
+  some of those rulings changed the design — but he chose from lists one agent composed.
+  That is the blindness the proposal targets, operating on the proposal. It is an argument
+  for running the review early and for weighting phase-one divergence heavily.
+
 ## Worked test: the problem statement for this seed, written under rule 2
 
 Rule 2 says the statement may name nothing that does not already exist. Applied to this
