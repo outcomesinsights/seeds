@@ -40,4 +40,16 @@ Worth fixing as a bead, and worth asking the broader question: a measurement emb
 prose has no owner and no expiry. Whether these should be computed at runtime, asserted
 by a test, or simply dated where they are written is the actual decision.
 
+**The three figures were corrected 2026-09-16** to the live measurement (333 seeds, 444
+edges, ~55,000 pairs avoided) and the two load-bearing ones now carry the date they were
+measured, so the next reader can see how old the claim is instead of inferring it. Full
+suite green afterwards: 1416 passed, 1 skipped.
+
+That is the symptom treated, not the cause. The seed stays open on the real decision:
+a measurement embedded in prose has no owner and no expiry, and dating it only makes the
+staleness *visible* rather than impossible. Computing it at runtime in the help text, or
+asserting it in a test that fails when the corpus moves past a tolerance, would both make
+it self-maintaining — and both have costs (a help string that hits the disk; a test that
+fails for a reason nobody did anything wrong to cause).
+
 Found by the inside-out reviewer in the 2026-09-16 adversarial review of \[[seeds-cpkr]\].

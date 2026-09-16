@@ -18,8 +18,8 @@ a commit is a semantic finding people learn to bypass.
 corpus.* Two seeds can only contradict each other if they are about the same
 thing, and parent/child plus ``relates-to`` edges already encode exactly that.
 So the candidate set is **the edge set, not the cross product**: measured on
-this project's own store, 314 seeds and 692 edges — 692 comparisons rather than
-roughly 49,000. There is no corpus-wide pairwise scan here and there is no
+this project's own store on 2026-09-16, 333 seeds and 444 edges — 444 comparisons
+rather than roughly 55,000. There is no corpus-wide pairwise scan here and there is no
 sampling; the unit of review is an edge.
 
 **Hard findings and scoped candidates are separate, and the separation is the

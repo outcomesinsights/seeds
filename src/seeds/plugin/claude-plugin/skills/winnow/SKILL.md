@@ -42,7 +42,7 @@ Discarding is the normal outcome, not a failed pass.
 ## 4. Report — two sections, never one
 
 ```
-314 seeds, 427 edges. Flavors: all.
+333 seeds, 444 edges. Flavors: all.
 
 FACTS (62) — no judgment needed
   … the verb's lines, unedited …
@@ -55,7 +55,7 @@ Keep the two apart even when a candidate looks certain. Confidence goes in your 
 
 ## 5. "Nothing to report" is a good outcome
 
-If no fact fired and no candidate survived judgment, say exactly that — "314 seeds, 427 edges, nothing to report" — and frame it as the corpus being healthy, not as the pass coming up empty. Never pad a short report with marginal findings to look productive. Most passes over a well-tended corpus should be short.
+If no fact fired and no candidate survived judgment, say exactly that — "333 seeds, 444 edges, nothing to report" — and frame it as the corpus being healthy, not as the pass coming up empty. Never pad a short report with marginal findings to look productive. Most passes over a well-tended corpus should be short.
 
 ## 6. Apply the rulings
 
