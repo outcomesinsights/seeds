@@ -4,8 +4,8 @@ title: 'Who writes the problem statement that outside-in phase one depends on, a
 status: resolved
 type: question
 created_at: 2026-09-16T15:07:01.221569+00:00
-updated_at: 2026-09-16T15:20:35.864545+00:00
-resolved_at: 2026-09-16T15:20:35.864533+00:00
+updated_at: 2026-09-16T16:07:52.834990+00:00
+resolved_at: 2026-09-16T16:07:52.834981+00:00
 relationships:
   - target_id: seeds-cpkr
     rel_type: questions
@@ -49,3 +49,17 @@ Accepted as good-enough rather than clean. The calling agent is the same degrade
 that produced the solution, so it cannot write a genuinely uncontaminated statement; the
 mitigation is that the reviewer is told to treat the statement as contaminated and to
 say where.
+
+CONFIRMED 2026-09-16, and given teeth. The two reviewers split on this one and the ruling stands.
+
+The inside-out reviewer asked for a reversal: seed TYPES are an open vocabulary, so a '--type problem' seed written at the start of a deliberation costs zero format change across the 24 stores -- the cost this answer originally used to reject capture-at-the-start. That objection is correct about the cost and the ruling survives it anyway, because the run produced direct evidence the other way.
+
+The outside-in reviewer, which had just spent a phase dismantling the statement from the blind side, reported: rule 2 held. It went looking for invented nouns and found none. Every leak it flagged was a CHARACTERIZATION ('measurably worse', 'degraded stretch', 'indistinguishable in the corpus') or a SELECTION -- no invented mechanism, no 'review step', no 'gate', no 'checkpoint'. Its verdict on this ruling: 'validated by this run, and I would have been wrong to predict otherwise.'
+
+And the prediction the statement was written to test came true: of its four independent proposals, exactly one was a review step, and that was not the one it picked.
+
+THE ADDITION -- rule 1 gets teeth, because it measurably failed. The residue this answer predicted ('rule 1 catches what rule 2 cannot') did not happen. Measured on the reviewer itself: it flagged, explicitly, that 'the user does not read seed bodies' forecloses the direction 'change what the human sees so reading one screen is worth it' -- and then proposed ZERO designs in that direction. Three of its four proposals sat inside the seeds toolchain, the exact layer the statement's bullets enumerated. Its own words: 'Naming a foreclosure is not the same as escaping it.'
+
+So rule 1 becomes: for every presupposing term the reviewer flags, it MUST either propose something in the direction that term forecloses, or state why that direction is genuinely closed. Flagging without that is theatre.
+
+A second instruction that worked and was never written down: the dispatch told the reviewer to 'state explicitly what evidence would change your mind.' That does more than the 'phase one is not a position to defend' prohibition it accompanied, because it converts a prohibition into a producible artifact -- and it is why the phase-two report ended in a falsifiable condition rather than a preference. It belongs in the skill.

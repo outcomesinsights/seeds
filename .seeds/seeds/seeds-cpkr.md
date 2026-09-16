@@ -4,7 +4,7 @@ title: Adversarial review of a deliberation before it becomes beads — Claude's
 status: exploring
 type: idea
 created_at: 2026-09-16T14:39:34.309564+00:00
-updated_at: 2026-09-16T15:07:01.591479+00:00
+updated_at: 2026-09-16T16:08:39.819259+00:00
 tags:
   - adversarial-review
   - seeds-to-beads
@@ -28,6 +28,21 @@ relationships:
   - target_id: seeds-r8mb
     rel_type: questioned-by
     created_at: 2026-09-16T15:07:01.223028+00:00
+  - target_id: seeds-r85y
+    rel_type: relates-to
+    created_at: 2026-09-16T16:08:37.923764+00:00
+  - target_id: seeds-sx1r
+    rel_type: relates-to
+    created_at: 2026-09-16T16:08:38.360999+00:00
+  - target_id: seeds-8s61
+    rel_type: relates-to
+    created_at: 2026-09-16T16:08:38.856246+00:00
+  - target_id: seeds-hxvh
+    rel_type: relates-to
+    created_at: 2026-09-16T16:08:39.351740+00:00
+  - target_id: seeds-w95y
+    rel_type: relates-to
+    created_at: 2026-09-16T16:08:39.818409+00:00
 ---
 
 Claude's judgment is not stable over time. It goes through stretches where it gets
@@ -74,8 +89,10 @@ from second-guessing all the way to merge.
 - **A skill with no verb, for now.** `glean` and `winnow` are each a deterministic
   command plus a judging skill, and both commands say the same thing in their help text:
   *nothing here judges a candidate and nothing here calls a model.* This does not follow
-  that pattern, because it has nothing deterministic to narrow: winnow's verb walks a
-  692-edge graph and glean's diffs a 502KB transcript, while a `scrutinize` verb would
+  that pattern, because it has nothing deterministic to narrow: winnow's verb walks the
+  edge graph (444 edges over 333 seeds, measured 2026-09-16 — the 692 figure this
+  originally quoted is stale, see \[[seeds-w95y]\]) and glean's diffs a transcript, while
+  a `scrutinize` verb would
   only gather files the skill can gather itself — and the hardest lens, prior art on the
   web, cannot be narrowed deterministically at all.
 
@@ -83,12 +100,18 @@ from second-guessing all the way to merge.
   context-gleaning. Not enough on its own. A verb can be added later if the skill turns
   out to need one; a verb written now would be a wrapper around `ls`.
 
-- **Compose the existing verbs; do not re-derive their work by reading** (seeds-ryfk).
-  Contradiction and staleness within the seed set come from `seeds winnow` scoped to
-  those seeds; the capture gap comes from `seeds glean`, upstream. Necessary but not
-  sufficient — winnow's contradiction flavor only compares seeds *already linked*, and a
-  contradiction inside one session's output is exactly the case where nobody drew the
-  edge. Composing narrows the reviewer's read; it does not replace it.
+- **Compose glean. Do not compose winnow** (seeds-ryfk, as revised 2026-09-16). The
+  principle — use the verbs that exist rather than re-deriving their work by reading —
+  stands. The winnow half does not: it takes no seed-set scoping (`--flavor`, `--since`,
+  `--json`, nothing else), and its gates are all age or resolved-status gates
+  (`NEGLECT_DAYS = 90`, `UNRESOLVED_DAYS = 180`, `STALE_DAYS = 180`; contradiction needs
+  both endpoints RESOLVED), so a deliberation that converged yesterday fires none of them.
+  Run live over the whole corpus it returned one candidate, itself a false positive.
+
+  And scrutinize **reads** `.seeds/gleaned.jsonl` to check that someone gleaned — it must
+  never **run** `seeds glean`. `mark_gleaned` fires unconditionally (`cli.py:2269`), so a
+  later real pass would print "was gleaned … pass --force" and file nothing, destroying
+  the capture the design is ordered around.
 
 - **A missing glean warns, it does not block** (seeds-veup). Scrutinize says the session
   was never gleaned, then proceeds. A hard gate would make the tool unusable
@@ -278,9 +301,90 @@ went into the statement was still chosen by the agent that has the solution in m
 different agent would have listed different ones. Selection leakage survives the rule
 intact, and rule 1 — restate and flag presupposing terms — is what has to catch the residue.
 
+## What the 2026-09-16 adversarial review changed
+
+The proposal was reviewed by its own procedure, dogfooded before being built: an
+outside-in reviewer in two phases (blind proposal, then critique) and a cold inside-out
+reviewer, neither seeing the other. Full reports and the ruling are recorded in the
+answers on the four question-seeds; what follows is what survived triage.
+
+### Blocked on evidence
+
+**\[[seeds-r85y]\] now gates this.** Both reviewers, independently, found the premise has
+zero recorded instances — no worked example of a decision that shipped from a degraded
+stretch and turned out wrong, while `seeds-to-beads` justifies itself with a dated named
+failure. And the corpus's one real data point cuts the other way: `seeds-gf69` and
+`seeds-cb6r` both attribute their misses to **bead specificity**, not degraded judgment.
+Make efficacy notes mandatory, sweep ~90 days of closed beads, and ask of each miss
+whether a cold reader would have caught it. If ~20 beads yield none, this proposal scopes
+down to its outside-in / prior-art lens alone — which needs no degradation premise at all,
+because reinvention is a knowledge gap rather than a judgment gap.
+
+### Corrections to this seed's own facts
+
+Every load-bearing figure it quoted was wrong, and each was wrong in the direction that
+supported the argument being made: 692 edges (live: 444 over 333 seeds), "~18 stores"
+(24), and "one ordinary session at 502KB" where the repo elsewhere measures 5.3MB. The
+no-verb argument cited glean's *cost* reason and skipped its *testability* one — *"A verb
+gets pytest coverage. A skill gets none, and a candidate extractor that has quietly gone
+blind reports 'nothing to capture'"* — which lands squarely on "allowed to come back
+empty." That ruling stands for now, but it stands on a weaker argument than it was given.
+
+### Accepted design changes
+
+- **Tier the findings, fact vs candidate**, per winnow's own rule: *"Printing them in one
+  list would let one soft false positive discredit the factual half, which is how a
+  detector loses the credibility that is the only thing making it worth running."* A
+  prior-art finding with a URL is a fact; "this reasoning does not survive a cold re-read"
+  is a candidate. Untiered, candidates bury facts. Cap the count per reviewer and rank.
+- **Make the cold-dispatch requirement detectable.** Naming a silent failure without
+  giving it a signature is the trap. Require both reviewer reports to carry the id of the
+  sub-agent that produced them, and refuse a report without one.
+- **Fix the lens-boundary leak.** Outside-in is told to sweep "practice already
+  established in this repo or fleet: trellises, briefings, prior seeds" *and* to benefit
+  "from knowing nothing about our habits." Reading the trellises IS learning our habits.
+  The internal-precedent sweep moves to inside-out, or becomes a post-hoc check after the
+  blind proposal.
+- **Rule 1 gets teeth** (see seeds-r8mb) — flagging a foreclosed direction without
+  proposing into it was measured to be theatre.
+
+### Unresolved, and now known to be
+
+- **Where phase-one output lands.** A restatement, a set of alternative proposals and a
+  prior-art survey are not "findings"; the output model has no destination for them.
+- **Where the empty-review count lives.** "Worth counting" has no counter — no store, no
+  field, no verb.
+- **The calling agent is the unguarded end.** It authors the seed set, the problem
+  statement, the phase-two summary, both prompts — *and then compresses the critique of
+  its own work into options for the user, who does not read bodies.* Six artifacts, one
+  leakage rule. Fresh context guards the reviewers and nothing guards this hop. The
+  mitigation used in the dogfood run was to extract both reviewers' text verbatim from
+  their transcripts and hand over the file; that worked, and it is not in the design.
+
+### Findings spun out as their own seeds
+
+\[[seeds-r85y]\] the premise test · \[[seeds-sx1r]\] cross-family review, since a Claude
+reviewer judging Claude is the weakest form · \[[seeds-8s61]\] session depth rather than
+wall-clock as the predictor · \[[seeds-hxvh]\] glean is blind to sub-agent transcripts ·
+\[[seeds-w95y]\] three stale, mutually inconsistent corpus figures in winnow's docs.
+
+### What the procedure proved about itself
+
+Rule 2 held — the blind reviewer found no invented nouns, only characterizations and
+selections. The prediction this seed made before the run ("a blind reviewer handed this
+statement would plausibly not propose a review step") was correct: of four independent
+proposals exactly one was a review step, and it was not the one picked. Cost came in at
+about 1.3×, not 2×, because phase two inherits phase one's loaded model of the repo.
+
+Rule 1 failed, and only this procedure could have shown it. The reviewer flagged that "the
+user does not read seed bodies" forecloses the direction *change what the human sees* —
+then proposed nothing in that direction, with three of four proposals sitting inside the
+seeds toolchain the statement had enumerated. **Naming a foreclosure is not the same as
+escaping it.**
+
 ## Still open
 
-- Nothing blocking. Ready to promote to beads when the user says so.
+- Gated on \[[seeds-r85y]\]. Not ready to promote to beads until the premise test reports.
 
 ## Related
 
