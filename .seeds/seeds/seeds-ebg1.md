@@ -4,7 +4,7 @@ title: 'Adversarial review of the append-only storage proposal: git is already t
 status: captured
 type: concern
 created_at: 2026-08-28T17:09:27.758353+00:00
-updated_at: 2026-08-31T20:02:48.379782+00:00
+updated_at: 2026-09-16T14:39:44.259246+00:00
 tags:
   - storage
   - append-only
@@ -50,6 +50,9 @@ relationships:
   - target_id: seeds-sdhc.4
     rel_type: relates-to
     created_at: 2026-08-31T20:09:48.474691+00:00
+  - target_id: seeds-cpkr
+    rel_type: relates-to
+    created_at: 2026-09-16T14:39:44.136175+00:00
 converted_at: 2026-09-01T05:20:22.746832+00:00
 ---
 
