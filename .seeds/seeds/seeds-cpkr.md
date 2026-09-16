@@ -71,18 +71,17 @@ from second-guessing all the way to merge.
 - **Allowed to come back empty**, and worth counting: a reviewer that never comes back
   empty is a rubber stamp pointed the other way.
 
-- **Verb + skill, following the house pattern.** `glean` and `winnow` are each a
-  deterministic command plus a judging skill, and both commands say the same thing in
-  their help text: *nothing here judges a candidate and nothing here calls a model.*
-  So `seeds scrutinize` assembles the dossier — the seed set, their links, questions
-  still open, beads already citing them — and stops. The skill dispatches the reviewers
-  and presents findings.
+- **A skill with no verb, for now.** `glean` and `winnow` are each a deterministic
+  command plus a judging skill, and both commands say the same thing in their help text:
+  *nothing here judges a candidate and nothing here calls a model.* This does not follow
+  that pattern, because it has nothing deterministic to narrow: winnow's verb walks a
+  692-edge graph and glean's diffs a 502KB transcript, while a `scrutinize` verb would
+  only gather files the skill can gather itself — and the hardest lens, prior art on the
+  web, cannot be narrowed deterministically at all.
 
-  Wrinkle worth naming: winnow's verb walks a 692-edge graph and glean's diffs a
-  transcript, so each has real narrowing to do. Scrutinize's hardest lens — prior art
-  on the web — has no deterministic narrowing at all, so its verb may be thin. It still
-  earns its place for the reason glean's skill bans context-gleaning: it makes the input
-  reproducible, instead of the reviewer working from whatever is left in an agent's head.
+  The argument for a verb was reproducible input, the same reason glean's skill bans
+  context-gleaning. Not enough on its own. A verb can be added later if the skill turns
+  out to need one; a verb written now would be a wrapper around `ls`.
 
 - **Compose the existing verbs; do not re-derive their work by reading** (seeds-ryfk).
   Contradiction and staleness within the seed set come from `seeds winnow` scoped to
@@ -200,11 +199,68 @@ the same stretch is degraded too. What actually survives that, honestly:
 This raises the floor. It does not guarantee one, and the design should not be written
 as though it does.
 
+## Worked test: the problem statement for this seed, written under rule 2
+
+Rule 2 says the statement may name nothing that does not already exist. Applied to this
+seed's own problem, that produces:
+
+> Claude's output quality varies over time. There are stretches where its judgment is
+> measurably worse and it makes calls that do not hold up, and neither the model nor the
+> person working with it reliably notices during the stretch.
+>
+> Deliberation in this project is captured with `seeds`: a session produces seeds holding
+> decisions and their rationale, plus questions attached to them. When the user is
+> satisfied, the `seeds-to-beads` skill converts that deliberation into beads. Beads carry
+> each locked decision *with its rationale*, explicitly so the agent executing the bead
+> will not re-open it — the skill's own text names re-opening a locked decision as the
+> failure it exists to prevent. Execution then happens in a worktree, by a Sonnet agent,
+> alone, with no one to ask.
+>
+> What follows from that today:
+>
+> - A decision made during a degraded stretch is indistinguishable in the corpus from one
+>   made well. Both are a seed body stating a conclusion with a rationale.
+> - `seeds-to-beads` propagates it faithfully, and the rationale it attaches actively
+>   discourages the executing agent from questioning it.
+> - `seeds winnow` can find contradictions, but only between seeds already linked, and
+>   only as a corpus-over-time audit. `seeds check` and `seeds doctor` are about files and
+>   store health. Nothing in the toolchain compares a decision against anything outside
+>   the session that produced it.
+> - Nothing in the toolchain consults the outside world at all. A session can spend itself
+>   re-deriving something that already ships as a flag on an existing tool, and the corpus
+>   will record the derivation as a sound decision.
+> - The user does not read seed or bead bodies; he rules on what is put in front of him.
+>   A bad call nobody surfaces is not caught downstream by a human reader.
+>
+> When this goes wrong, the bad call reaches shipped code carrying the authority of a
+> settled decision, and the machinery built to protect good decisions from churn protects
+> this one just as well.
+
+**The rule is usable.** It is a real constraint and it is writable against — it forces
+prose about symptoms and existing machinery, which is what was wanted.
+
+**Where it bit.** Every attempt to write "before the handoff" or "at the hinge" had to be
+dropped. That temporal framing presupposes a checkpoint, and a checkpoint is not a thing
+that exists — it is a location our solution invented. The rule caught it each time.
+
+**It got longer, not shorter.** With no solution to gesture at, the failure has to be
+enumerated instead of alluded to. That is a feature.
+
+**It exposed two things our framing hid.** First, that the user does not read bodies — a
+fact about the human loop our design assumed silently, and one that opens answers we never
+considered, like changing what gets surfaced to him rather than adding an agent. Second,
+that "nothing consults the outside world" is a property of the whole toolchain, not of this
+moment — which suggests the fix may not belong at `seeds-to-beads` at all. A blind reviewer
+handed this statement would plausibly not propose a review step.
+
+**The limitation found.** Rule 2 constrains vocabulary, not emphasis. Which existing facts
+went into the statement was still chosen by the agent that has the solution in mind, and a
+different agent would have listed different ones. Selection leakage survives the rule
+intact, and rule 1 — restate and flag presupposing terms — is what has to catch the residue.
+
 ## Still open
 
-- Whether scrutinize's verb has enough deterministic narrowing to justify existing at
-  all, or whether this is a skill with no verb. Reproducible input is the argument for
-  it; that may not be enough.
+- Nothing blocking. Ready to promote to beads when the user says so.
 
 ## Related
 
