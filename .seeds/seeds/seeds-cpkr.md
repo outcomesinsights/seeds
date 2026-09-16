@@ -147,6 +147,43 @@ The cost is a commitment effect: having proposed, it may defend its own proposal
 than assess ours on the merits. It must be told explicitly that phase one is not a
 position to defend, and that agreeing with us in phase two is a valid outcome.
 
+### The problem statement is written by the calling agent (seeds-r8mb)
+
+Not by the user, and not captured as a first-class field at the start of a deliberation —
+that would be a format change across ~18 stores for a speculative benefit.
+
+Leakage is handled by instructing the reviewer rather than by trying to produce a clean
+statement, because a clean one is not available: the calling agent is the same degraded
+agent that produced the solution. The instruction has to go past "be skeptical of proposed
+solutions," which only catches EXPLICIT leakage. The damaging leak is VOCABULARY — a
+statement written after the fact inherits the terms and the carve-up of the solution we
+landed on, and the reviewer never notices, because there is nothing to be skeptical of,
+only a frame it accepts.
+
+This seed demonstrates it. A problem statement written now would likely say "a deliberation
+needs a review before it becomes beads" — which already presupposes a review, a discrete
+step, and a gate at a hinge. A reviewer handed the actual problem (Claude's judgment
+degrades in stretches, and bad calls get locked into beads deliberately protected from
+re-opening) might not propose a review at all: it might propose making beads cheaper to
+re-open, or not locking decisions in the first place, or checkpointing somewhere else.
+That whole class of answer is invisible to a reviewer handed our framing, and skepticism
+does not recover it.
+
+Three requirements, in order of what they buy:
+
+1. **Restate before proposing.** The reviewer states the problem in its own words first,
+   and flags any term in the statement that presupposes an approach. The restatement is a
+   cheap finding on its own — if it differs from ours, we learn something before a single
+   proposal exists.
+2. **Name nothing that does not already exist.** A mechanical test the calling agent
+   applies to its own draft. "seeds-to-beads locks decisions and the executing agent will
+   not re-open them" is a fact; "the review step" is leakage. Catches most vocabulary
+   leaks without judgment.
+3. **Be deeply skeptical of any solution the statement proposes**, and say so explicitly.
+
+Good enough, not clean — the reviewer is told to treat the statement as contaminated and
+to say where.
+
 ## The uncomfortable part
 
 The premise is that Claude degrades in stretches. A reviewer running on the same model in
@@ -165,8 +202,6 @@ as though it does.
 
 ## Still open
 
-- Who writes the problem statement phase one depends on, and how is our solution kept
-  out of it? See seeds-r8mb.
 - Whether scrutinize's verb has enough deterministic narrowing to justify existing at
   all, or whether this is a skill with no verb. Reproducible input is the argument for
   it; that may not be enough.
