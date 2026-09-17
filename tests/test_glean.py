@@ -41,6 +41,7 @@ from seeds.glean import (
     list_transcripts,
     mark_gleaned,
     parse_transcript,
+    legacy_project_slug,
     project_slug,
     read_gleaned,
     resolve_session_id,
@@ -130,9 +131,51 @@ def project(tmp_path):
 # --- Session resolution ------------------------------------------------------
 
 
-def test_project_slug_flattens_the_path_and_keeps_underscores():
-    assert project_slug(Path("/a/b.c/d_e")) == "-a-b-c-d_e"
-    assert project_slug(Path("/x/code_collector")) == "-x-code_collector"
+def test_project_slug_flattens_the_path_and_converts_underscores():
+    """Claude Code replaces underscores with hyphens like any other separator.
+
+    This test used to assert the opposite, which is why the defect survived a
+    convention change: a repo with an underscore in its path — most of this
+    fleet — resolved to a directory that does not exist, and glean failed with
+    "no transcript at ..." pointing at the wrong place.
+    """
+    assert project_slug(Path("/a/b.c/d_e")) == "-a-b-c-d-e"
+    assert project_slug(Path("/x/code_collector")) == "-x-code-collector"
+    assert (
+        project_slug(Path("/home/ryan/projects/outins/one_offs/icd10cm"))
+        == "-home-ryan-projects-outins-one-offs-icd10cm"
+    )
+
+
+def test_legacy_project_slug_keeps_underscores():
+    assert legacy_project_slug(Path("/x/code_collector")) == "-x-code_collector"
+
+
+def test_transcripts_dir_uses_the_current_spelling_for_underscore_paths(fake_home):
+    project = Path("/home/ryan/projects/outins/one_offs/icd10cm")
+    current = fake_home / ".claude" / "projects" / project_slug(project)
+    current.mkdir(parents=True)
+    assert transcripts_dir(project, home=fake_home) == current
+    assert "_" not in current.name
+
+
+def test_transcripts_dir_falls_back_to_the_legacy_spelling_when_only_it_exists(
+    fake_home,
+):
+    """A transcript written before the convention changed stays gleanable."""
+    project = Path("/home/ryan/projects/outins/code_collector")
+    legacy = fake_home / ".claude" / "projects" / legacy_project_slug(project)
+    legacy.mkdir(parents=True)
+    assert transcripts_dir(project, home=fake_home) == legacy
+
+
+def test_transcripts_dir_prefers_current_when_both_spellings_exist(fake_home):
+    """code_collector really has both on titan; the current one must win."""
+    project = Path("/home/ryan/projects/outins/code_collector")
+    projects = fake_home / ".claude" / "projects"
+    (projects / project_slug(project)).mkdir(parents=True)
+    (projects / legacy_project_slug(project)).mkdir(parents=True)
+    assert transcripts_dir(project, home=fake_home).name == project_slug(project)
 
 
 def test_resolve_session_id_reads_the_environment():

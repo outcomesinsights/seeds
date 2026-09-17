@@ -116,18 +116,48 @@ def project_slug(cwd: Path) -> str:
     """The ``~/.claude/projects`` directory name for a working directory.
 
     Claude Code flattens the absolute path into one name, replacing every
-    character that is not alphanumeric or an underscore with a hyphen.
-    Underscores survive — ``/home/ryan/projects/outins/code_collector`` is
-    stored as ``-home-ryan-projects-outins-code_collector``, and a leading
-    slash becomes a leading hyphen.
+    character that is not alphanumeric with a hyphen — **underscores
+    included**. ``/home/ryan/projects/outins/one_offs/icd10cm`` is stored as
+    ``-home-ryan-projects-outins-one-offs-icd10cm``, and a leading slash
+    becomes a leading hyphen.
+
+    Underscores used to survive, and this function used to keep them. Measured
+    on titan 2026-09-17: of 101 entries under ``~/.claude/projects`` exactly
+    one contains an underscore (``-home-ryan-projects-outins-code_collector``)
+    and its dash spelling exists alongside it, so that entry is a leftover from
+    the older convention rather than evidence for it. Keeping underscores sent
+    every lookup in a repo with one — ``one_offs/*``, ``code_set_catalog``,
+    ``code_collector``, ``ohdsi_supplemental_vocabs``, ``vocab_producers/loinc``
+    — to a directory that does not exist. See :func:`legacy_project_slug` for
+    how the leftovers stay reachable.
+    """
+    return re.sub(r"[^A-Za-z0-9]", "-", str(Path(cwd).resolve()))
+
+
+def legacy_project_slug(cwd: Path) -> str:
+    """The pre-conversion spelling, which kept underscores.
+
+    Only useful for transcripts written before Claude Code changed the rule.
+    :func:`transcripts_dir` falls back to it when the current spelling does not
+    exist on disk, so old sessions stay gleanable.
     """
     return re.sub(r"[^A-Za-z0-9_]", "-", str(Path(cwd).resolve()))
 
 
 def transcripts_dir(cwd: Path, *, home: Path | None = None) -> Path:
-    """Where Claude Code keeps this project's transcripts."""
-    root = home if home is not None else _home()
-    return root / ".claude" / "projects" / project_slug(cwd)
+    """Where Claude Code keeps this project's transcripts.
+
+    The current spelling wins. A path with an underscore had its transcripts
+    written under the legacy spelling before the convention changed, so that
+    directory is returned instead when it exists and the current one does not.
+    """
+    projects = (home if home is not None else _home()) / ".claude" / "projects"
+    current = projects / project_slug(cwd)
+    if not current.is_dir():
+        legacy = projects / legacy_project_slug(cwd)
+        if legacy.is_dir():
+            return legacy
+    return current
 
 
 def resolve_session_id(env: dict[str, str] | None = None) -> str:
