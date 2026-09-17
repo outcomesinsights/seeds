@@ -6,6 +6,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0a7] - 2026-09-17
+
+**Not a public release** — an internal alpha on the `0.7.0` branch, as every
+0.7.0aN is. `main` is still the 0.6.x line and nothing is on PyPI.
+
+The headline is that `glean` could not find a transcript in most of this fleet,
+and had not been able to for as long as the convention has been current.
+`project_slug` preserved underscores while Claude Code replaces them with
+hyphens like any other separator, so every glean in `one_offs/*`,
+`code_set_catalog`, `code_collector`, `ohdsi_supplemental_vocabs` and
+`vocab_producers/loinc` resolved to a directory that does not exist. It failed
+loudly on a named session — but `--all` reported "No transcripts for this
+project", which reads as *nothing to glean* rather than *I looked in the wrong
+place*, and that is the reading that let it sit.
+
+Why it survived the convention change is the part worth keeping. The old rule
+was asserted by a test, `test_project_slug_flattens_the_path_and_keeps_underscores`,
+using `code_collector` as its fixture — which is the one directory on this
+machine still spelled the old way, a leftover rather than evidence. Of 101
+entries under `~/.claude/projects` exactly one contains an underscore, and its
+hyphen spelling sits beside it. So the fixture agreed with the test and both
+were wrong, the suite was green, and green proved nothing. `legacy_project_slug`
+now keeps the old rule and `transcripts_dir` falls back to it only when the
+current spelling is absent, so those leftovers stay gleanable.
+
+Reported by another session that hit it in `one_offs/icd10cm`, worked around it
+with a symlink, and wrote up the repro rather than fixing it in someone else's
+repo.
+
+Smaller, and in the same spirit: winnow's own documentation carried three
+mutually inconsistent corpus measurements — 314/692 in the module and the help
+text, 314/427 in the skill, against a live 333/444 — inside the flavour built to
+catch a conclusion resting on a figure that has moved. Corrected, and the
+load-bearing ones now carry the date they were measured, which makes the
+staleness visible rather than impossible. Whether a measurement in prose should
+be computed, asserted by a test, or merely dated is still open.
+
+### Added
+
+- Seeds candidates — the seeds recently-closed beads may have discharged ([a7cb076](https://github.com/outcomesinsights/seeds/commit/a7cb076264584dd424a8e1cde66aa26c8495a6fe))
+- Give resolve-seeds-from-beads a sweep mode ([a620361](https://github.com/outcomesinsights/seeds/commit/a620361ec901756226f08cfd68a61c7040eb0432))
+
+### Fixed
+
+- Convert underscores in the project slug, as Claude Code does ([8c61e10](https://github.com/outcomesinsights/seeds/commit/8c61e10530f30a4181138066b9f1a4462ef7870e))
+- Correct three stale, mutually inconsistent corpus measurements ([548b741](https://github.com/outcomesinsights/seeds/commit/548b7418a9ea6f47de3fa7da7b36ee040a756a90))
+- Allow "shaped" as prose in the reference validator ([85539cd](https://github.com/outcomesinsights/seeds/commit/85539cd2c17af890dcf593a9cea9062a8c5b5475))
+- Resolve the hooks dir from the git dir, not --git-path ([0106a93](https://github.com/outcomesinsights/seeds/commit/0106a933aa2c7b687547f8851e565af2af12edf1))
+
 ## [0.7.0a6] - 2026-09-13
 
 **Not a public release** — an internal alpha on the `0.7.0` branch, as every
@@ -765,4 +814,6 @@ Initial public beta release.
 [0.7.0a3]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a2...v0.7.0a3
 [0.7.0a4]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a3...v0.7.0a4
 [0.7.0a5]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a4...v0.7.0a5
-[unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a5...HEAD
+[0.7.0a6]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a5...v0.7.0a6
+[0.7.0a7]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a6...v0.7.0a7
+[unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a7...HEAD
