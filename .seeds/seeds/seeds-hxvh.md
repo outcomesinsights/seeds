@@ -45,6 +45,19 @@ Surfaced by the 2026-09-16 adversarial review of \[[seeds-cpkr]\], whose own two
 are an instance: ~11k words of review reasoning, unreachable by glean, preserved only
 because the parent extracted the transcripts by hand.
 
+**Second defect found in the same neighbourhood, 2026-09-17** (bead `seeds-kmx`, fixed in
+8c61e10): `project_slug` preserved underscores while Claude Code converts them to hyphens,
+so glean resolved the transcript *directory* wrong for every repo with an underscore in
+its path — most of the fleet. Different bug, same surface: transcript discovery has now
+been wrong about *where* to look and wrong about *how deep* to look.
+
+Both survived for the same reason, and it is the reason worth keeping. The underscore rule
+was asserted by a test — `test_project_slug_flattens_the_path_and_keeps_underscores` —
+written from the convention that was true when it was written, using the one directory on
+disk that still spells it the old way. The suite was green and proved nothing. Whoever
+fixes the glob depth should treat the fixture as the deliverable, not the fix: a fixture
+that resembles the real filesystem is what neither defect had.
+
 Open question before fixing: recursing the glob would also sweep every sub-agent from
 every unrelated task, which may be the wrong default. A `--subagents` flag, or gleaning
 sub-agents only for sessions already being gleaned, may be the right shape.
