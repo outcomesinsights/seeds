@@ -367,8 +367,10 @@ empty." That ruling stands for now, but it stands on a weaker argument than it w
 - **Where phase one's non-finding output lands.** A restatement, a set of alternative
   proposals and a prior-art survey are not findings and do not fit the triage model. The
   file keeps them; nothing in the corpus does.
+
 - **Where the empty-review count lives.** "Worth counting" has no counter — no store, no
   field, no verb.
+
 - **The calling agent is the unguarded end.** It authors the seed set, the problem
   statement, the phase-two summary, both prompts — *and then compresses the critique of
   its own work into options for the user, who does not read bodies.* Six artifacts, one
