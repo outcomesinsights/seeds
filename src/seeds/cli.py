@@ -15,8 +15,6 @@ import click
 from seeds import __version__
 from seeds.beads import (
     beads_in_use,
-    beads_issues_path,
-    load_bead_ids,
     query_bead_ids,
 )
 from seeds.candidates import (
@@ -164,26 +162,23 @@ def _validate_id_refs(
     in turn against:
 
     1. **seed IDs** — the store;
-    2. **bead IDs** — the sibling ``.beads/`` export, since beads share the
-       project prefix and recording bead lineage in a seed is a supported
-       workflow, not a hallucination (projects without beads are unaffected;
-       see :mod:`seeds.beads`);
-    3. **prose** — :data:`~seeds.models.PROSE_REF_ALLOWLIST`, because
+    2. **prose** — :data:`~seeds.models.PROSE_REF_ALLOWLIST`, because
        ``<prefix>-<word>`` is ordinary English ("a seeds-native workflow") and
-       no rule of shape separates it from a base36 hash.
+       no rule of shape separates it from a base36 hash;
+    3. **bead IDs** — ``bd`` itself, asked only about the tokens still
+       unmatched, since beads share the project prefix and recording bead
+       lineage in a seed is a supported workflow, not a hallucination. Asking
+       only about leftovers keeps the subprocess off the happy path and out of
+       projects with no beads (see :mod:`seeds.beads`).
 
-    Anything still unmatched then gets one last, authoritative check: beads
-    itself, via ``bd``. The export in step 2 is derived and throttled, so a
-    bead created seconds ago is real and missing from it — seeds rejected
-    exactly such an ID and made the author reach for ``--allow-unknown-refs``,
-    which switches off hallucination detection wholesale (bead seeds-4co.23).
-    Asking ``bd`` only about IDs the export did not vouch for keeps the
-    subprocess off the happy path and out of projects with no beads.
+    There used to be a step between 1 and 3: a sibling ``.beads/issues.jsonl``
+    read as a cheap export. It was retired with JSONL on 2026-09-13 and frozen
+    wherever it survived, so it vouched for beads deleted since and
+    ``bd`` never got the chance to deny them (bead seeds-dlq).
 
     Anything still unmatched is a hallucination: exit with an error listing it,
     unless ``allow_unknown`` is true. When beads is in use but could not be
-    consulted, the error says so rather than implying the bead list was
-    complete.
+    consulted, the error says so rather than implying the check was complete.
     """
     if allow_unknown:
         return
@@ -195,13 +190,10 @@ def _validate_id_refs(
         candidates.update(find_id_ref_candidates(text, prefix))
     if not candidates:
         return
-    bead_ids = load_bead_ids(store.seeds_dir)
     unknown = sorted(
         ref
         for ref in candidates
-        if not store.exists(ref)
-        and ref not in bead_ids
-        and not is_allowlisted_prose(ref, prefix)
+        if not store.exists(ref) and not is_allowlisted_prose(ref, prefix)
     )
     if not unknown:
         return
@@ -218,9 +210,8 @@ def _validate_id_refs(
     )
     if live_bead_ids is None and beads_in_use(store.seeds_dir):
         click.echo(
-            "  Note: beads could not be consulted, so the bead list came from"
-            f" {beads_issues_path(store.seeds_dir)}, a throttled export that"
-            " may be stale. A bead created moments ago may be missing from it.",
+            "  Note: `bd` could not be consulted, so any of these that name"
+            " beads could not be checked. Run `bd show <id>` to confirm one.",
             err=True,
         )
     click.echo(

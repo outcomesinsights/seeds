@@ -1866,7 +1866,11 @@ class TestIdRefValidation:
 
 
 def _write_beads_export(project_root: Path, text: str) -> Path:
-    """Write a .beads/issues.jsonl beside the project's .seeds directory."""
+    """Plant a stray, frozen .beads/issues.jsonl -- which nothing may read.
+
+    The export was retired with JSONL on 2026-09-13 (bead seeds-dlq). Tests
+    write one only to prove it is ignored.
+    """
     path = project_root / ".beads" / "issues.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -1877,22 +1881,26 @@ class TestBeadRefValidation:
     """Bead IDs count as known references. See bead seeds-90o.
 
     seeds and beads share a project prefix, so citing a real bead in a seed
-    body used to read as a hallucinated seed ID and hard-fail creation.
+    body used to read as a hallucinated seed ID and hard-fail creation. ``bd``
+    is the only source of bead IDs (bead seeds-dlq).
     """
 
-    def test_create_accepts_bead_ref(self, cli_runner, initialized_env):
-        _write_beads_export(
-            initialized_env,
-            '{"_type":"issue","id":"seeds-230","title":"A real bead"}\n',
-        )
+    def test_create_accepts_bead_ref(
+        self, cli_runner, initialized_env, tmp_path, monkeypatch
+    ):
+        make_beads_workspace(initialized_env / SEEDS_DIR)
+        install_fake_bd(tmp_path, monkeypatch, stdout=json.dumps([{"id": "seeds-230"}]))
         result = cli_runner.invoke(
             main, ["create", "-t", "Test", "-c", "promoted from seeds-230"]
         )
         assert result.exit_code == 0, result.output
         assert "Created seed" in result.output
 
-    def test_update_accepts_bead_ref(self, cli_runner, env_with_seeds):
-        _write_beads_export(env_with_seeds, '{"_type":"issue","id":"seeds-230"}\n')
+    def test_update_accepts_bead_ref(
+        self, cli_runner, env_with_seeds, tmp_path, monkeypatch
+    ):
+        make_beads_workspace(env_with_seeds / SEEDS_DIR)
+        install_fake_bd(tmp_path, monkeypatch, stdout=json.dumps([{"id": "seeds-230"}]))
         result = cli_runner.invoke(
             main, ["update", "seed-test1", "--append", "tracked as seeds-230"]
         )
@@ -1924,37 +1932,50 @@ class TestBeadRefValidation:
         assert "Error" not in result.output
         assert "Warning" not in result.output
 
-    def test_create_survives_corrupt_beads_export(self, cli_runner, initialized_env):
-        """A broken export degrades to 'no bead IDs known', it does not crash."""
+    def test_a_stray_export_never_whitelists_a_ref(
+        self, cli_runner, initialized_env, tmp_path, monkeypatch
+    ):
+        """The regression bead seeds-dlq exists for.
+
+        A frozen export listing a bead that ``bd`` no longer has used to vouch
+        for it, so the reference never reached ``bd`` to be denied.
+        """
+        make_beads_workspace(initialized_env / SEEDS_DIR)
+        _write_beads_export(initialized_env, '{"_type":"issue","id":"seeds-gone"}\n')
+        install_fake_bd(
+            tmp_path,
+            monkeypatch,
+            stdout=json.dumps({"error": "no issues found matching the provided IDs"}),
+        )
+        result = cli_runner.invoke(
+            main, ["create", "-t", "Test", "-c", "built on seeds-gone"]
+        )
+        assert result.exit_code != 0
+        assert "seeds-gone" in result.output
+
+    def test_a_stray_export_is_not_even_opened(self, cli_runner, initialized_env):
+        """Garbage in a surviving export cannot matter, because it is never read."""
         _write_beads_export(initialized_env, "not json\n")
         result = cli_runner.invoke(main, ["create", "-t", "Test", "-c", "plain body"])
         assert result.exit_code == 0, result.output
         assert "Created seed" in result.output
 
-    def test_corrupt_beads_export_does_not_whitelist_refs(
-        self, cli_runner, initialized_env
+    def test_bd_runs_in_the_project_root_not_the_cwd(
+        self, cli_runner, tmp_path, monkeypatch
     ):
-        _write_beads_export(initialized_env, "not json\n")
-        result = cli_runner.invoke(
-            main, ["create", "-t", "Test", "-c", "see seeds-99999"]
-        )
-        assert result.exit_code != 0
-        assert "seeds-99999" in result.output
+        """With SEEDS_DIR pointing elsewhere, bd is asked about THAT project.
 
-    def test_beads_export_resolved_from_seeds_dir_not_cwd(self, cli_runner, tmp_path):
-        """With SEEDS_DIR pointing elsewhere, the export follows the seeds dir.
-
-        cwd holds a decoy .beads/ that must be ignored; the one beside the
-        real seeds directory is what counts.
+        cwd is a different directory; the lookup must follow the seeds dir.
         """
         project = tmp_path / "project"
         (project / ".seeds").mkdir(parents=True)
-        _write_beads_export(project, '{"_type":"issue","id":"seeds-230"}\n')
+        make_beads_workspace(project / ".seeds")
+        log = install_fake_bd(
+            tmp_path, monkeypatch, stdout=json.dumps([{"id": "seeds-230"}])
+        )
 
         elsewhere = tmp_path / "elsewhere"
         elsewhere.mkdir()
-        _write_beads_export(elsewhere, '{"_type":"issue","id":"seeds-99999"}\n')
-
         original_cwd = os.getcwd()
         os.chdir(elsewhere)
         try:
@@ -1965,25 +1986,21 @@ class TestBeadRefValidation:
                 good = cli_runner.invoke(
                     main, ["create", "-t", "Test", "-c", "see seeds-230"]
                 )
-                decoy = cli_runner.invoke(
-                    main, ["create", "-t", "Test", "-c", "see seeds-99999"]
-                )
         finally:
             os.chdir(original_cwd)
 
         assert good.exit_code == 0, good.output
-        assert decoy.exit_code != 0
-        assert "seeds-99999" in decoy.output
+        (line,) = call_lines(log)
+        assert line.split("\t", 1)[0] == project.as_posix()
 
 
 class TestLiveBeadRefValidation:
-    """A bead the throttled export has not caught up with is still real.
+    """``bd`` is asked, and only about what it could possibly answer.
 
-    Bead seeds-4co.23: ``bd create`` writes to Dolt and the JSONL export runs
-    on an interval, so referencing a bead minted seconds ago was rejected as a
-    hallucinated seed ID -- and the only way through was
-    ``--allow-unknown-refs``, which switches the whole check off. seeds now
-    asks ``bd`` about anything the export did not vouch for.
+    Bead seeds-4co.23 made seeds ask ``bd`` about references a throttled
+    export had missed. Bead seeds-dlq removed the export entirely: it was
+    retired with JSONL and frozen, so it vouched for deleted beads. What
+    remains is ``bd``, asked only about the references the store left unknown.
     """
 
     def _bd_knows(self, *ids):
@@ -2031,31 +2048,31 @@ class TestLiveBeadRefValidation:
         assert "seeds-99999" in result.output
         assert "may be stale" not in result.output
 
-    def test_only_the_unknown_ids_reach_bd(
+    def test_a_known_seed_never_reaches_bd(
         self, cli_runner, initialized_env, tmp_path, monkeypatch
     ):
-        """The subprocess is off the happy path: refs the export vouches for
-        are never asked about, and a body with no unknown refs never calls bd.
-        """
+        """Refs the store resolves are never asked about; bd sees only leftovers."""
         make_beads_workspace(initialized_env / SEEDS_DIR)
-        _write_beads_export(initialized_env, '{"_type":"issue","id":"seeds-230"}\n')
+        store = Store(initialized_env / SEEDS_DIR)
+        store.create(new_record("seeds-k3n7", "A real seed"))
         log = install_fake_bd(tmp_path, monkeypatch, stdout=self._bd_knows("seeds-777"))
         result = cli_runner.invoke(
-            main, ["create", "-t", "Test", "-c", "seeds-230 and seeds-777"]
+            main, ["create", "-t", "Test", "-c", "seeds-k3n7 and seeds-777"]
         )
         assert result.exit_code == 0, result.output
         (line,) = call_lines(log)
         _, args = line.split("\t", 1)
         assert args.split() == ["show", "seeds-777", "--json"]
 
-    def test_no_bd_call_when_every_ref_is_known(
+    def test_no_bd_call_when_every_ref_is_a_known_seed(
         self, cli_runner, initialized_env, tmp_path, monkeypatch
     ):
         make_beads_workspace(initialized_env / SEEDS_DIR)
-        _write_beads_export(initialized_env, '{"_type":"issue","id":"seeds-230"}\n')
+        store = Store(initialized_env / SEEDS_DIR)
+        store.create(new_record("seeds-k3n7", "A real seed"))
         log = install_fake_bd(tmp_path, monkeypatch)
         result = cli_runner.invoke(
-            main, ["create", "-t", "Test", "-c", "promoted from seeds-230"]
+            main, ["create", "-t", "Test", "-c", "follows seeds-k3n7"]
         )
         assert result.exit_code == 0, result.output
         assert call_lines(log) == []
@@ -2072,11 +2089,11 @@ class TestLiveBeadRefValidation:
         assert call_lines(log) == []
         assert "may be stale" not in result.output
 
-    def test_reports_a_possibly_stale_bead_list_when_bd_is_missing(
+    def test_says_bd_could_not_be_consulted_when_it_is_missing(
         self, cli_runner, initialized_env, tmp_path, monkeypatch
     ):
-        """Beads in use but unreachable: say the list may be stale, do not
-        pretend the export was the last word.
+        """Beads in use but unreachable: say the check could not run, and do
+        not point at a retired export as if it were a source.
         """
         make_beads_workspace(initialized_env / SEEDS_DIR)
         hide_bd(monkeypatch, tmp_path)
@@ -2085,8 +2102,8 @@ class TestLiveBeadRefValidation:
         )
         assert result.exit_code != 0
         assert "seeds-99999" in result.output
-        assert "may be stale" in result.output
-        assert "issues.jsonl" in result.output
+        assert "could not be consulted" in result.output
+        assert "issues.jsonl" not in result.output
 
     def test_allow_unknown_refs_still_skips_bd_entirely(
         self, cli_runner, initialized_env, tmp_path, monkeypatch
@@ -2181,17 +2198,23 @@ class TestBase36RefValidation:
         )
         assert result.exit_code == 0, result.output
 
-    def test_real_bead_ref_accepted(self, cli_runner, initialized_env):
+    def test_real_bead_ref_accepted(
+        self, cli_runner, initialized_env, tmp_path, monkeypatch
+    ):
         """Bead lookup (seeds-90o) still short-circuits the stricter check."""
-        _write_beads_export(initialized_env, '{"_type":"issue","id":"seeds-230"}\n')
+        make_beads_workspace(initialized_env / SEEDS_DIR)
+        install_fake_bd(tmp_path, monkeypatch, stdout=json.dumps([{"id": "seeds-230"}]))
         result = cli_runner.invoke(
             main, ["create", "-t", "Test", "-c", "promoted from seeds-230"]
         )
         assert result.exit_code == 0, result.output
 
-    def test_hash_shaped_bead_ref_accepted(self, cli_runner, initialized_env):
+    def test_hash_shaped_bead_ref_accepted(
+        self, cli_runner, initialized_env, tmp_path, monkeypatch
+    ):
         """Beads mint base36 IDs too; those were invisible before seeds-819."""
-        _write_beads_export(initialized_env, '{"_type":"issue","id":"seeds-90o"}\n')
+        make_beads_workspace(initialized_env / SEEDS_DIR)
+        install_fake_bd(tmp_path, monkeypatch, stdout=json.dumps([{"id": "seeds-90o"}]))
         result = cli_runner.invoke(
             main, ["create", "-t", "Test", "-c", "tracked as seeds-90o"]
         )

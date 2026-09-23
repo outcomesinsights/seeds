@@ -59,7 +59,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from seeds.beads import load_bead_ids
+from seeds.beads import all_bead_ids
 from seeds.models import (
     RelationType,
     SeedStatus,
@@ -617,7 +617,13 @@ def _outcomes(
     """
     if seeds_dir is None:
         return []
-    bead_ids = load_bead_ids(seeds_dir)
+    # From `bd` itself. This used to read `.beads/issues.jsonl` with no
+    # fallback, and that export was retired on 2026-09-13 -- so on any clone
+    # without the file the flavor returned nothing, clean, having checked
+    # nothing, and where the file survived it read a frozen list (bead
+    # seeds-dlq). `None` (beads unreachable) and an empty set both yield no
+    # findings, but only one of them means there was nothing to find.
+    bead_ids = all_bead_ids(seeds_dir)
     if not bead_ids:
         return []
     seed_ids = {record.id for record in records}

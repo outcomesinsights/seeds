@@ -67,7 +67,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from seeds.beads import load_bead_ids
 from seeds.models import find_id_ref_candidates, now_utc
 from seeds.seedfile import SeedRecord
 from seeds.store import TERMINAL_STATUSES
@@ -256,16 +255,15 @@ def find_candidates(
     ``records`` should be the FULL set of beads the caller is willing to show,
     not only those inside the window: every ID in it contributes to telling a
     bead reference apart from a seed reference, and a narrow input makes that
-    disambiguation weaker. ``seeds_dir``, when given, adds the local beads
-    export to the same purpose — best-effort, absent on most projects, and
-    never required.
+    disambiguation weaker. ``seeds_dir`` is accepted and ignored: it used to add
+    the local ``.beads/issues.jsonl`` export, retired on 2026-09-13 and frozen
+    wherever it survived (bead seeds-dlq). The records piped in from ``bd list``
+    are the authoritative set.
     """
     now = now or now_utc()
     seeds_by_id = {r.id: r for r in seed_records}
 
     bead_ids = {r["id"] for r in records if isinstance(r.get("id"), str)}
-    if seeds_dir is not None:
-        bead_ids |= load_bead_ids(seeds_dir)
 
     report = CandidatesReport(since=since, now=now, beads_in=len(records))
 

@@ -1,9 +1,10 @@
-"""Tests for optional bead-ID loading (seeds.beads).
+"""Tests for optional bead-ID lookup (seeds.beads).
 
-Beads is never a dependency: the three states that matter are the export being
-absent (the normal case for a project with no beads), present and valid, and
-present but unusable. Only the middle one may contribute IDs; the other two
-must degrade silently to "no bead IDs known". See bead seeds-90o.
+Beads is never a dependency, and ``bd`` is the only source. The
+``.beads/issues.jsonl`` export this module used to read first was retired with
+JSONL on 2026-09-13 and was frozen wherever it survived, so it vouched for
+beads deleted since (bead seeds-dlq). The tests that pinned its parsing are
+gone; what replaces them pins that a surviving export is never read at all.
 """
 
 import json
@@ -13,9 +14,8 @@ from pathlib import Path
 import pytest
 
 from seeds.beads import (
+    all_bead_ids,
     beads_in_use,
-    beads_issues_path,
-    load_bead_ids,
     query_bead_ids,
 )
 from tests.beadshelpers import (
@@ -35,7 +35,8 @@ def project(tmp_path):
 
 
 def _write_beads(seeds_dir, text):
-    path = beads_issues_path(seeds_dir)
+    """Plant a stray, frozen ``issues.jsonl`` -- which nothing may read."""
+    path = seeds_dir.parent / ".beads" / "issues.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
     return path
@@ -43,99 +44,6 @@ def _write_beads(seeds_dir, text):
 
 def _issue_line(issue_id, **extra):
     return json.dumps({"_type": "issue", "id": issue_id, **extra})
-
-
-class TestBeadsIssuesPath:
-    """The export is located from the seeds dir's parent, not the cwd."""
-
-    def test_path_is_sibling_of_seeds_dir(self, project):
-        assert beads_issues_path(project) == project.parent / ".beads" / "issues.jsonl"
-
-    def test_path_ignores_cwd(self, project, tmp_path, monkeypatch):
-        elsewhere = tmp_path / "elsewhere"
-        elsewhere.mkdir()
-        monkeypatch.chdir(elsewhere)
-        assert beads_issues_path(project).parent.parent == project.parent
-
-
-class TestLoadBeadIdsAbsent:
-    """No beads at all — the normal case, and never an error."""
-
-    def test_no_beads_dir(self, project):
-        assert load_bead_ids(project) == set()
-
-    def test_beads_dir_without_export(self, project):
-        (project.parent / ".beads").mkdir()
-        assert load_bead_ids(project) == set()
-
-    def test_export_is_a_directory(self, project):
-        beads_issues_path(project).mkdir(parents=True)
-        assert load_bead_ids(project) == set()
-
-
-class TestLoadBeadIdsValid:
-    """A well-formed export contributes every issue's id."""
-
-    def test_reads_ids(self, project):
-        _write_beads(
-            project,
-            "\n".join(
-                [
-                    _issue_line("seeds-mlj", title="Hash IDs"),
-                    _issue_line("seeds-230", status="open"),
-                    _issue_line("seeds-90o"),
-                ]
-            )
-            + "\n",
-        )
-        assert load_bead_ids(project) == {"seeds-mlj", "seeds-230", "seeds-90o"}
-
-    def test_blank_lines_and_missing_trailing_newline(self, project):
-        _write_beads(
-            project,
-            "\n\n" + _issue_line("seeds-abc") + "\n\n" + _issue_line("seeds-1"),
-        )
-        assert load_bead_ids(project) == {"seeds-abc", "seeds-1"}
-
-    def test_empty_file(self, project):
-        _write_beads(project, "")
-        assert load_bead_ids(project) == set()
-
-
-class TestLoadBeadIdsCorrupt:
-    """Anything unusable degrades to an empty set rather than raising."""
-
-    def test_not_json_at_all(self, project):
-        _write_beads(project, "not json\n")
-        assert load_bead_ids(project) == set()
-
-    def test_json_but_not_an_object(self, project):
-        _write_beads(project, '["seeds-1", "seeds-2"]\n')
-        assert load_bead_ids(project) == set()
-
-    def test_truncated_line(self, project):
-        _write_beads(project, '{"_type":"issue","id":"seeds-abc"')
-        assert load_bead_ids(project) == set()
-
-    def test_records_without_usable_ids(self, project):
-        _write_beads(
-            project,
-            '{"_type":"issue"}\n{"id":null}\n{"id":42}\n{"id":""}\n',
-        )
-        assert load_bead_ids(project) == set()
-
-    def test_partial_corruption_keeps_good_lines(self, project):
-        _write_beads(
-            project,
-            "not json\n" + _issue_line("seeds-230") + "\n{oops\n",
-        )
-        assert load_bead_ids(project) == {"seeds-230"}
-
-    def test_binary_garbage(self, project):
-        path = beads_issues_path(project)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"\xff\xfe\x00\x80binary")
-        assert load_bead_ids(project) == set()
 
 
 class TestBeadsInUse:
@@ -166,9 +74,9 @@ class TestQueryBeadIdsNotConsulted:
     """Every route to "beads could not be asked" returns None, never a set.
 
     None and ``set()`` mean different things to the caller: the first says the
-    answer is still coming from the throttled export, the second is beads
-    itself saying no such bead. Collapsing them would either hide a stale
-    export or invent a denial beads never made.
+    references could not be checked at all, the second is beads itself saying
+    no such bead. Collapsing them would either report an unchecked body as
+    clean or invent a denial beads never made.
     """
 
     def test_no_refs(self, project, tmp_path, monkeypatch):
@@ -323,3 +231,73 @@ class TestQueryBeadIdsInvocation:
         log = install_fake_bd(tmp_path, monkeypatch)
         query_bead_ids(project, [f"seeds-{n}" for n in range(20)])
         assert len(call_lines(log)) == 1
+
+
+class TestAFrozenExportIsNeverRead:
+    """The regression bead seeds-dlq exists for.
+
+    A surviving ``issues.jsonl`` is frozen at whatever it held when JSONL was
+    retired. Read as a source, it vouches for a bead deleted since, and that
+    bead never reaches ``bd`` to be denied.
+    """
+
+    def test_query_trusts_bd_over_a_stale_export(self, project, tmp_path, monkeypatch):
+        make_beads_workspace(project)
+        _write_beads(project, _issue_line("seeds-gone") + "\n")
+        install_fake_bd(tmp_path, monkeypatch, stdout="[]")
+        assert query_bead_ids(project, ["seeds-gone"]) == set()
+
+    def test_all_ids_trusts_bd_over_a_stale_export(
+        self, project, tmp_path, monkeypatch
+    ):
+        make_beads_workspace(project)
+        _write_beads(project, _issue_line("seeds-gone") + "\n")
+        install_fake_bd(
+            tmp_path, monkeypatch, stdout=json.dumps([{"id": "seeds-live"}])
+        )
+        assert all_bead_ids(project) == {"seeds-live"}
+
+
+class TestAllBeadIds:
+    """One ``bd list --all`` for callers that need the whole set (winnow)."""
+
+    def test_no_beads_workspace_is_none_and_never_calls_bd(
+        self, project, tmp_path, monkeypatch
+    ):
+        log = install_fake_bd(tmp_path, monkeypatch)
+        assert all_bead_ids(project) is None
+        assert call_lines(log) == []
+
+    def test_bd_not_installed_is_none(self, project, tmp_path, monkeypatch):
+        make_beads_workspace(project)
+        hide_bd(monkeypatch, tmp_path)
+        assert all_bead_ids(project) is None
+
+    def test_unreadable_output_is_none_not_empty(self, project, tmp_path, monkeypatch):
+        """ "Could not ask" must never read as "no beads"."""
+        make_beads_workspace(project)
+        install_fake_bd(tmp_path, monkeypatch, stdout="command not found\n")
+        assert all_bead_ids(project) is None
+
+    def test_an_error_object_is_none(self, project, tmp_path, monkeypatch):
+        make_beads_workspace(project)
+        install_fake_bd(tmp_path, monkeypatch, stdout=json.dumps({"error": "boom"}))
+        assert all_bead_ids(project) is None
+
+    def test_returns_every_id(self, project, tmp_path, monkeypatch):
+        make_beads_workspace(project)
+        install_fake_bd(
+            tmp_path,
+            monkeypatch,
+            stdout=json.dumps([{"id": "seeds-a1"}, {"id": "seeds-b2"}, {"no": "id"}]),
+        )
+        assert all_bead_ids(project) == {"seeds-a1", "seeds-b2"}
+
+    def test_runs_list_all_in_the_project_root(self, project, tmp_path, monkeypatch):
+        make_beads_workspace(project)
+        log = install_fake_bd(tmp_path, monkeypatch, stdout="[]")
+        all_bead_ids(project)
+        (line,) = call_lines(log)
+        cwd, args = line.split("\t")
+        assert cwd == project.parent.as_posix()
+        assert args == "list --all --json"

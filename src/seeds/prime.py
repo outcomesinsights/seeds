@@ -145,7 +145,7 @@ you mean (a habitat's root, `~/projects/<org>/`, or `..` from a sibling repo).
 - `seeds create --title="..." --type=idea --tags=foo,bar` - Full creation
 - `seeds create --title="..." --parent=<id>` - Create child seed
 - Bodies referencing unknown `<prefix>-...` IDs are rejected, base36 hash IDs included; existing seeds, beads and a short allowlist of prose terms all count as known; pass `--allow-unknown-refs` to override
-- Bead IDs are checked against a sibling `.beads/issues.jsonl`, and anything it does not vouch for is confirmed with `bd` itself before being called unknown -- that export is throttled, so a bead created seconds ago is real and missing from it
+- Bead IDs are confirmed with `bd` itself. A `.beads/issues.jsonl` is never read: that export was retired on 2026-09-13 and is frozen wherever it survives, so it vouched for beads deleted since
 
 **NEVER PUT A SEED BODY IN A SHELL WORD.** This is the single most common way
 deliberation gets corrupted, and it is silent. In a double-quoted argument

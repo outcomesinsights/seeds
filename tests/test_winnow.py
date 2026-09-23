@@ -43,7 +43,7 @@ from seeds.winnow import (
     report_as_dict,
     winnow,
 )
-from tests.beadshelpers import make_beads_workspace
+from tests.beadshelpers import install_fake_bd, make_beads_workspace
 
 NOW = datetime(2026, 9, 2, tzinfo=UTC)
 
@@ -450,7 +450,7 @@ def test_a_recently_resolved_premise_is_not_offered():
 # --- Outcomes ----------------------------------------------------------------
 
 
-def test_outcome_candidates_need_a_beads_workspace(tmp_path):
+def test_outcome_candidates_need_a_beads_workspace(tmp_path, monkeypatch):
     seeds_dir = tmp_path / ".seeds"
     (seeds_dir / "seeds").mkdir(parents=True)
     resolved = seed(
@@ -467,23 +467,46 @@ def test_outcome_candidates_need_a_beads_workspace(tmp_path):
     )
 
     make_beads_workspace(seeds_dir)
-    (seeds_dir.parent / ".beads" / "issues.jsonl").write_text(
-        json.dumps({"id": "seeds-999", "title": "Do the thing"}) + "\n",
-        encoding="utf-8",
-    )
+    install_fake_bd(tmp_path, monkeypatch, stdout=json.dumps([{"id": "seeds-999"}]))
     report = winnow([resolved], flavors=["outcome"], seeds_dir=seeds_dir, now=NOW)
     assert ids_for(report.candidates, "outcome-candidate") == [("seeds-a",)]
     assert report.candidates[0].evidence == ("seeds-999",)
 
 
-def test_a_reference_to_another_seed_is_not_a_downstream_bead(tmp_path):
+def test_outcomes_never_read_a_stray_export(tmp_path, monkeypatch):
+    """Bead seeds-dlq. The flavor used to read `.beads/issues.jsonl` with no
+    fallback. A frozen export listing a bead that `bd` no longer has must not
+    produce an outcome candidate.
+    """
     seeds_dir = tmp_path / ".seeds"
     (seeds_dir / "seeds").mkdir(parents=True)
     make_beads_workspace(seeds_dir)
     (seeds_dir.parent / ".beads" / "issues.jsonl").write_text(
-        json.dumps({"id": "seeds-b", "title": "Same id as a seed"}) + "\n",
-        encoding="utf-8",
+        json.dumps({"id": "seeds-999"}) + "\n", encoding="utf-8"
     )
+    install_fake_bd(tmp_path, monkeypatch, stdout="[]")
+    resolved = seed(
+        "seeds-a",
+        "Shipped through seeds-999",
+        body="Implemented by seeds-999.",
+        status=SeedStatus.RESOLVED,
+        resolved=10,
+    )
+    report = winnow([resolved], flavors=["outcome"], seeds_dir=seeds_dir, now=NOW)
+    assert report.candidates == []
+
+
+def test_a_reference_to_another_seed_is_not_a_downstream_bead(tmp_path, monkeypatch):
+    """Needs a stub bd that DOES report seeds-b as a bead.
+
+    Without one the flavor cannot reach beads, returns nothing, and this test
+    passes having exercised nothing -- which is what it did until bead
+    seeds-dlq, when it passed only because no export happened to be read.
+    """
+    seeds_dir = tmp_path / ".seeds"
+    (seeds_dir / "seeds").mkdir(parents=True)
+    make_beads_workspace(seeds_dir)
+    install_fake_bd(tmp_path, monkeypatch, stdout=json.dumps([{"id": "seeds-b"}]))
     a = seed(
         "seeds-a",
         "Refers to a sibling seed",
