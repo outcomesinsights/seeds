@@ -142,8 +142,8 @@ def test_project_slug_flattens_the_path_and_converts_underscores():
     assert project_slug(Path("/a/b.c/d_e")) == "-a-b-c-d-e"
     assert project_slug(Path("/x/code_collector")) == "-x-code-collector"
     assert (
-        project_slug(Path("/home/ryan/projects/outins/one_offs/icd10cm"))
-        == "-home-ryan-projects-outins-one-offs-icd10cm"
+        project_slug(Path("/home/u/projects/acme/one_offs/widget"))
+        == "-home-u-projects-acme-one-offs-widget"
     )
 
 
@@ -152,7 +152,7 @@ def test_legacy_project_slug_keeps_underscores():
 
 
 def test_transcripts_dir_uses_the_current_spelling_for_underscore_paths(fake_home):
-    project = Path("/home/ryan/projects/outins/one_offs/icd10cm")
+    project = Path("/home/u/projects/acme/one_offs/widget")
     current = fake_home / ".claude" / "projects" / project_slug(project)
     current.mkdir(parents=True)
     assert transcripts_dir(project, home=fake_home) == current
@@ -163,15 +163,15 @@ def test_transcripts_dir_falls_back_to_the_legacy_spelling_when_only_it_exists(
     fake_home,
 ):
     """A transcript written before the convention changed stays gleanable."""
-    project = Path("/home/ryan/projects/outins/code_collector")
+    project = Path("/home/u/projects/acme/code_collector")
     legacy = fake_home / ".claude" / "projects" / legacy_project_slug(project)
     legacy.mkdir(parents=True)
     assert transcripts_dir(project, home=fake_home) == legacy
 
 
 def test_transcripts_dir_prefers_current_when_both_spellings_exist(fake_home):
-    """code_collector really has both on titan; the current one must win."""
-    project = Path("/home/ryan/projects/outins/code_collector")
+    """A real store carried both spellings; the current one must win."""
+    project = Path("/home/u/projects/acme/code_collector")
     projects = fake_home / ".claude" / "projects"
     (projects / project_slug(project)).mkdir(parents=True)
     (projects / legacy_project_slug(project)).mkdir(parents=True)

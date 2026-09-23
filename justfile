@@ -157,10 +157,33 @@ fmt-check:
     just --fmt --check --unstable
     git ls-files "*.md" | xargs -r mdformat --check
 
+# Gate: the lock must match pyproject. MUST run before anything invokes
+# `uv run`, which re-locks by default and leaves this passing unconditionally —
+# the same ordering trap ci.yml documents above its own copy (bead seeds-3p1).
+# That is why it is a prerequisite of `ci` and listed first, not a line in a
+# later recipe.
+lock-check:
+    uv lock --check
+
+# The LINTER, which is not the formatter. `ruff format --check` says nothing
+# about unused imports, shadowed names, or anything else in ruff's lint rules,
+# and mypy says nothing that either of them does.
+#
+# Absent from `ci` until 2026-09-23 (bead seeds-6zi). The cost was not
+# hypothetical: 0.7.0a7 shipped two ruff findings and a mypy error, and CI could
+# not have caught them either, because ci.yml only triggered on `main` and this
+# work happens on the 0.7.0 branch. Both gates missed for 213 commits.
+lint:
+    uv run ruff check .
+    uv run mypy src/
+
 # Full local CI equivalent — run this before pushing.
 # The recipe IS the contract: if CI runs a check and this does not, the gate is
-# decorative (see ~/.config/home-manager/docs/ci-gates.md).
-ci: fmt-check test
+# decorative (see ~/.config/home-manager/docs/ci-gates.md). Mirrors ci.yml's
+# lint and test jobs. The nix job is deliberately NOT mirrored — it needs the
+# nix daemon and minutes, and `flake-deps` covers the failure it exists to
+# catch cheaply.
+ci: lock-check lint fmt-check flake-deps test
 
 # What actually runs before a push. Defaults to the complete `ci`; point it at
 # something smaller ONLY where running complete CI locally is impractical.

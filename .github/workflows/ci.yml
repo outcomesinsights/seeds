@@ -1,10 +1,15 @@
 name: CI
 
 on:
+  # Release branches are matched too, not just main. Until 2026-09-23 this was
+  # `[main]` alone, so the 0.7.0 branch went 213 commits and seven alphas
+  # without a single CI run — and was carrying a mypy error and two ruff
+  # findings by the time anyone looked. A branch nobody merges from is exactly
+  # where an unlinted commit hides longest.
   push:
-    branches: [main]
+    branches: [main, "[0-9]+.[0-9]+.[0-9]+"]
   pull_request:
-    branches: [main]
+    branches: [main, "[0-9]+.[0-9]+.[0-9]+"]
 
 jobs:
   lint:

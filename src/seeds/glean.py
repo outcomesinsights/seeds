@@ -117,12 +117,12 @@ def project_slug(cwd: Path) -> str:
 
     Claude Code flattens the absolute path into one name, replacing every
     character that is not alphanumeric with a hyphen — **underscores
-    included**. ``/home/ryan/projects/outins/one_offs/icd10cm`` is stored as
-    ``-home-ryan-projects-outins-one-offs-icd10cm``, and a leading slash
-    becomes a leading hyphen.
+    included**. ``/home/u/projects/acme/one_offs/widget`` is stored as
+    ``-home-u-projects-acme-one-offs-widget``, and a leading slash becomes a
+    leading hyphen.
 
     Underscores used to survive, and this function used to keep them. Measured
-    on titan 2026-09-17: of 101 entries under ``~/.claude/projects`` exactly
+    2026-09-17: of 101 entries under one machine's ``~/.claude/projects`` exactly
     one contains an underscore (``-home-ryan-projects-outins-code_collector``)
     and its dash spelling exists alongside it, so that entry is a leftover from
     the older convention rather than evidence for it. Keeping underscores sent

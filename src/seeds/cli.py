@@ -8,7 +8,7 @@ import shlex
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import IO, Any, NamedTuple
 
 import click
 
@@ -2727,7 +2727,7 @@ def install(reinstall: bool) -> None:
 @click.option("--json", "as_json", is_flag=True, help="Emit the report as JSON.")
 @pass_context
 def candidates_cmd(
-    ctx: Context, source, since_value: str | None, as_json: bool
+    ctx: Context, source: IO[str], since_value: str | None, as_json: bool
 ) -> None:
     """Which seeds did recently-closed beads claim to discharge?
 

@@ -59,7 +59,15 @@ from tests.legacyhelpers import (
     build_pre_relationships_db,
 )
 
-REPO_JSONL = Path(__file__).resolve().parent.parent / ".seeds" / "seeds.jsonl"
+# A frozen copy of this repo's pre-0.7 store, 314 records, moved out of
+# .seeds/ on 2026-09-23. It lived at .seeds/seeds.jsonl, where it read as the
+# store's own export — which JSONL must never be (ruled 2026-09-13: not sync,
+# not a backstop, not disaster recovery) — and it had drifted 25 seeds behind
+# the live store. As a fixture it is exactly right: convert needs a real,
+# messy corpus and needs it to stop moving. Contents are verbatim and must
+# stay so; the tests below assert byte-idempotence and an exact id set, and
+# the absolute paths inside a few bodies are part of that record.
+REPO_JSONL = Path(__file__).resolve().parent / "fixtures" / "pre-0.7-corpus.jsonl"
 
 T0 = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
 
@@ -1657,9 +1665,13 @@ class TestConfig:
 
 @pytest.fixture
 def real_corpus(temp_dir):
-    """A copy of this repo's own JSONL. Nothing here writes to the real store."""
-    if not REPO_JSONL.exists():
-        pytest.skip("no .seeds/seeds.jsonl here (a source tarball, not a checkout)")
+    """A copy of the frozen pre-0.7 corpus. Nothing here writes to a real store.
+
+    No skip guard. The fixture is tracked, so it is present in a source tarball
+    and a checkout alike — and the guard this replaces turned the whole class
+    into five silent skips the moment the file moved, which is how the coverage
+    went missing for the length of one command.
+    """
     seeds_dir = temp_dir / ".seeds"
     seeds_dir.mkdir(parents=True)
     (seeds_dir / "seeds.jsonl").write_bytes(REPO_JSONL.read_bytes())
