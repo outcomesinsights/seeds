@@ -29,7 +29,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "click>=8.1.8",
+    "click>=8.5.0",
     # Pinned, not floated: the formatter's output IS the store's canonical
     # form, so a version whose style changed would make every file
     # non-canonical at once and two hosts disagree on the same body.
@@ -67,7 +67,7 @@ dev = [
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
-    "ruff>=0.16.4",
+    "ruff>=0.16.6",
 ]
 
 [tool.ruff]
