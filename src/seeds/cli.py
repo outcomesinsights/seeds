@@ -2325,7 +2325,8 @@ def winnow_cmd(
     CANDIDATES are the verb narrowing and stopping. A contradiction candidate is
     an edge whose two endpoints assert opposite things about one subject —
     contradictions live inside clusters, so the search walks the edge graph
-    rather than every pair (2026-09-16: 444 edges rather than ~55,000 pairs). A staleness candidate is a resolved seed resting
+    rather than every pair (2026-09-16: 444 edges rather than ~55,000 pairs).
+    A staleness candidate is a resolved seed resting
     on a checkable premise, a version or a measurement; age alone is never
     evidence and never raises one. An outcome candidate is a resolved seed with
     downstream beads, where whether it worked cannot be read out of the corpus
