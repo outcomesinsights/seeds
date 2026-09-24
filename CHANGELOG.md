@@ -6,6 +6,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0a8] - 2026-09-23
+
+**Not a public release** — an internal alpha on the `0.7.0` branch, as every
+0.7.0aN is. `main` is still the 0.6.x line and nothing is on PyPI. This is the
+soak build for 0.7.0: if it holds up in normal use across the fleet, 0.7.0
+final follows with no code change.
+
+The code change is that seeds now asks `bd` for bead IDs and never reads
+`.beads/issues.jsonl`. That export was retired on 2026-09-13 and nothing
+maintains it, so where it survived it was frozen — measured here, 175 IDs
+against `bd`'s 183 — and it failed in both directions. A bead created since
+the freeze was missed, which was harmless because `bd` caught it. A bead
+*deleted* since was still vouched for, so a dangling reference in a seed body
+passed as valid. Worse, `winnow`'s outcome flavour read the file with no
+fallback: on any clone without it, it reported nothing, cleanly, having
+checked nothing. `bd show` answers the few unknown references in one body,
+and `bd list --all` serves `winnow`.
+
+`prime` also documents eight shipped commands it had never mentioned —
+`glean`, `winnow`, `candidates`, `trellis`, `doctor`, `retype`, `normalize`,
+`skills` — and says plainly that `glean` cannot see a sub-agent's transcript.
+AGENTS.md no longer demands a push at the end of every session.
+
+The seed-ID separator change (`seeds-k3n7` → `seeds~k3n7`) was developed
+after 0.7.0a7 and is **not** in this release. It is parked for 0.8.0; the
+reasons are recorded in seed seeds-1a0j.
+
+### Documentation
+
+- Correct stale guidance and close the gap between prime and the CLI ([41205fc](https://github.com/outcomesinsights/seeds/commit/41205fcb36722807157ca10dd620695e8463c99c))
+
+### Fixed
+
+- Read bead IDs from bd only; the frozen export is gone (seeds-dlq) ([90a8718](https://github.com/outcomesinsights/seeds/commit/90a87180659487e49a02d830a3d5aa585919ecb0))
+- Cap click's floor at what nixpkgs ships, not what click releases ([f279f81](https://github.com/outcomesinsights/seeds/commit/f279f81c1f08c1cc55ecf228398cd66b8fa81c67))
+- Run the linter, the type checker and the lock gate locally (seeds-6zi) ([0ecfb53](https://github.com/outcomesinsights/seeds/commit/0ecfb53deb484a0d4cc3422f2ca833f745578f54))
+- Clear the two ruff findings that shipped in 0.7.0a7 ([6594314](https://github.com/outcomesinsights/seeds/commit/659431438283705f5ccab8e88abbc5960ddb6a2c))
+
+### Tooling
+
+- Update ruff requirement from >=0.16.5 to >=0.16.6 (#33) ([f318d89](https://github.com/outcomesinsights/seeds/commit/f318d89be6664e742be0a1e594267b48ac71b7df))
+- Update click requirement from >=8.1.8 to >=8.5.0 (#32) ([fc48a59](https://github.com/outcomesinsights/seeds/commit/fc48a59ad4d220eb37a9a66ef57296a2053abd5d))
+- Update ruff requirement from >=0.16.4 to >=0.16.5 (#31) ([8700509](https://github.com/outcomesinsights/seeds/commit/8700509b01fea04fae24153649c7c0557ca9eeb5))
+
 ## [0.7.0a7] - 2026-09-17
 
 **Not a public release** — an internal alpha on the `0.7.0` branch, as every
@@ -816,4 +860,5 @@ Initial public beta release.
 [0.7.0a5]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a4...v0.7.0a5
 [0.7.0a6]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a5...v0.7.0a6
 [0.7.0a7]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a6...v0.7.0a7
-[unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a7...HEAD
+[0.7.0a8]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a7...v0.7.0a8
+[unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a8...HEAD
