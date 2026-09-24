@@ -213,6 +213,54 @@ Claude Code CLI truncates bash output, so users can't see full seed content from
 - `seeds link <id> --relates-to <other-id>` - Link seeds (default: relates-to)
 - `seeds link <id> --relates-to <other-id> --type=questions` - Typed relationship
 
+### Recovering What A Session Worked Out
+- `seeds glean` - Reads THIS session's Claude Code transcript, extracts the
+  questions raised, decisions with their rationale, figures somebody measured
+  and corrections the user made, subtracts everything a seed already says, and
+  prints what is left. Nothing here judges a candidate and nothing calls a
+  model; deciding which are worth keeping is yours
+
+**`glean` cannot see a sub-agent's transcript.** It globs one level of the
+project's transcript directory, and a dispatched agent writes into a
+`subagents/` subdirectory, so everything worked out inside one is invisible to
+it — including under `--all`. If you fan work out to sub-agents, whatever they
+established survives only as what you chose to relay. Capture it yourself
+before the handoff closes, or extract their text deliberately; do not assume a
+later `glean` will catch it.
+
+**Do not glean from your own context.** Run the verb. Post-compaction context
+is summarised, and what summarisation drops is exact figures, verbatim user
+quotes, and things mentioned but never acted on — precisely the set glean
+exists to recover. The failure is silent and shape-dependent: it looks fine in
+a short session and fails in the long ones that need it most.
+
+### Auditing The Thinking (not the files)
+Three different questions, and it is worth keeping them apart:
+- `seeds check` - are the FILES valid? Gates; exits non-zero on a violation
+- `seeds doctor` - is the STORE healthy? Dangling edges, prefix, a corpus that reads
+- `seeds winnow` - is the THINKING still sound? A deferral nobody came back to,
+  a resolution resting on a figure that has moved, two resolved seeds that
+  cannot both be right. Read-only, always exits 0 — a semantic finding that can
+  fail a build is one people learn to bypass
+- `bd list --status=closed --json | seeds candidates -` - which seeds did
+  recently-closed beads claim to discharge? Closes the loop back from work to
+  the deliberation that produced it
+
+`winnow` separates FACTS (no judgment needed, fully testable) from CANDIDATES
+(the verb narrowing, allowed to be wrong) and the separation is the design: one
+soft false positive in a single undifferentiated list discredits the factual
+half, and then the whole report stops being read.
+
+### Durable Principles
+- `seeds trellis <id> --to <file> --as "<principle>"` - Promote a matured seed
+  into always-on project context (CLAUDE.md / AGENTS.md / README), so future
+  work is trained along it instead of rediscovering it
+
+### One-Time and Housekeeping
+- `seeds retype --from X --to Y` - Bulk-remap one seed type to another
+- `seeds normalize` - Rewrite every file in the store's current canonical form
+- `seeds skills` - Manage the Claude Code skills shipped with seeds
+
 ### Session End
 - `seeds check` - Verify the seed files; exits non-zero on a violation
 

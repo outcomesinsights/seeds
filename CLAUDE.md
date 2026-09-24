@@ -113,6 +113,7 @@ bd list --status=closed --json | uv run seeds candidates -   # Seeds that recent
 uv run seeds doctor                  # Store and installation health
 uv run seeds export --json           # The whole corpus as JSONL on stdout
 uv run seeds convert                 # One-time: pre-0.7 SQLite + JSONL -> .seeds/seeds/
+uv run seeds rename-prefix <new>     # Rename the project prefix across every ID, edge and body reference
 uv run seeds prime                   # AI context output
 uv run pytest                        # Run tests
 ```

@@ -83,12 +83,19 @@ ______________________________________________________________________
 
 Beads uses a **hybrid storage model**:
 
-| Component                         | Purpose                                                                                                    |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **SQLite** (`.beads/beads.db`)    | Local cache for fast queries - enables database-like operations without loading entire project history     |
-| **JSONL** (`.beads/issues.jsonl`) | Git-friendly source of truth - one JSON object per line enables clean diffs and automatic merge resolution |
+| Component                          | Purpose                                                                                                                                           |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Dolt** (`.beads/embeddeddolt/`)  | The store. An in-process Dolt database per repo, holding the issues and their history                                                             |
+| **Dolt remote** (`refs/dolt/data`) | How beads travel between hosts — a git-backed, NON-BRANCH ref, so it is invisible to `git ls-files`, to the GitHub web UI, and to a default clone |
 
-This design gives you the best of both worlds:
+**This table described SQLite + a JSONL "source of truth" until 2026-09-23.** Both
+halves are retired: the embedded Dolt engine replaced SQLite, and JSONL was ruled
+out entirely on 2026-09-13 — not a sync channel, not a backstop, not disaster
+recovery. An `.beads/issues.jsonl` still sitting in a repo is a frozen leftover,
+not a source of truth; check the ref instead, with `git ls-remote origin 'refs/dolt/*'` (`git for-each-ref` answers 0 even where the ref exists, because a
+default clone never fetched it).
+
+This design gives you:
 
 - Database performance for queries
 - Version control for collaboration

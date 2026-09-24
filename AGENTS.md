@@ -9,35 +9,30 @@ bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
 bd close <id>         # Complete work
-bd sync               # Sync with git
+bd dolt push          # Send beads to the Dolt remote (`bd sync` is retired)
 ```
 
 ## Landing the Plane (Session Completion)
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+**Landing the plane here means COMMITTING, not pushing.** This section shipped as
+beads boilerplate demanding a push at the end of every session; that is wrong for
+this repo and was corrected on 2026-09-23.
 
-**MANDATORY WORKFLOW:**
+**Do not `git push` unless you were explicitly asked to.** CI on this repo runs a
+Python matrix and a nix build on every push, those minutes are billed, and whether
+work is ready to leave this machine is the maintainer's call and not an agent's.
+Local commits are not "stranded" — they are the normal resting state here.
 
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd sync
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
+**When ending a work session:**
 
-**CRITICAL RULES:**
+1. **File issues for remaining work** — anything that needs follow-up
+2. **Run the quality gate** (if code changed) — `just ci`, which is the full local
+   CI equivalent: lock check, ruff lint, mypy, formatting, flake deps, pytest
+3. **Update issue status** — close finished work, update in-progress items
+4. **Commit** — a clean tree is the deliverable; leave the push to the maintainer
+5. **Hand off** — say plainly what is committed, what is unpushed, and what is left
 
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
+If you believe a push is genuinely needed, say so and let the maintainer decide.
 
 <!-- BEGIN BEADS INTEGRATION -->
 
@@ -48,7 +43,7 @@ bd sync               # Sync with git
 ### Why bd?
 
 - Dependency-aware: Track blockers and relationships between issues
-- Git-friendly: Auto-syncs to JSONL for version control
+- Git-friendly: beads travel on a git-backed Dolt remote (`refs/dolt/data`)
 - Agent-optimized: JSON output, ready work detection, discovered-from links
 - Prevents duplicate tracking systems and confusion
 
@@ -105,13 +100,27 @@ bd close bd-42 --reason "Completed" --json
    - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
 5. **Complete**: `bd close <id> --reason "Done"`
 
-### Auto-Sync
+### Sync
 
-bd automatically syncs with git:
+Beads live in a per-repo embedded Dolt database and travel on a **git-backed Dolt
+remote at `refs/dolt/data`** — a non-branch ref, so it is invisible to
+`git ls-files`, to the GitHub web UI, and to a default clone. To see whether a repo
+has it you must ask the remote directly:
 
-- Exports to `.beads/issues.jsonl` after changes (5s debounce)
-- Imports from JSONL when newer (e.g., after `git pull`)
-- No manual export/import needed!
+```bash
+git ls-remote origin 'refs/dolt/*'     # NOT `git for-each-ref`, which lies here
+bd dolt push                           # send local beads
+bd dolt pull                           # receive
+```
+
+**JSONL is not a sync channel** (ruled 2026-09-13): not sync, not a backstop, not
+disaster recovery. Do not export it, do not commit it, and do not add a hook that
+maintains it. A `.beads/issues.jsonl` you find in a repo is a frozen leftover —
+measured here on 2026-09-23, this repo's held 175 beads against `bd`'s 183, missing
+every bead created since the export stopped.
+
+Nothing drives the push on its own. Something must run `bd dolt push` — a pre-push
+gate, a `just` recipe, or you.
 
 ### Important Rules
 
