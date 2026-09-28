@@ -21,9 +21,11 @@ from seeds.candidates import (
     EVIDENCE_PROSE,
     EVIDENCE_SOURCE,
     CandidatesError,
+    LineageFinding,
     find_candidates,
     format_report,
     load_bead_records,
+    malformed_lineage,
     parse_lineage,
     report_as_dict,
 )
@@ -34,12 +36,24 @@ NOW = datetime(2026, 9, 13, 12, 0, tzinfo=UTC)
 SINCE = NOW - timedelta(days=30)
 
 
-def bead(bead_id, *, notes="", description="", status="closed", days_ago=5, title="t"):
+def bead(
+    bead_id,
+    *,
+    notes="",
+    description="",
+    design="",
+    acceptance_criteria="",
+    status="closed",
+    days_ago=5,
+    title="t",
+):
     """One bead record in the shape ``bd list --json`` emits."""
     return {
         "id": bead_id,
         "title": title,
         "description": description,
+        "design": design,
+        "acceptance_criteria": acceptance_criteria,
         "notes": notes,
         "status": status,
         "closed_at": (NOW - timedelta(days=days_ago)).isoformat()
@@ -256,6 +270,128 @@ def test_window_line_is_printed_even_with_no_candidates():
     out = format_report(run([], []))
     assert "window: beads closed since 2026-08-14" in out
     assert "No candidate seeds" in out
+
+
+# --------------------------------------------------------------------------
+# Lineage that breaks the contract: reported, never repaired (seeds-nnp)
+# --------------------------------------------------------------------------
+
+EMPTY_LINE = "No candidate seeds — nothing to reconcile in this window."
+
+
+def test_parse_lineage_drops_a_non_id_token_and_reports_the_line():
+    notes = "Source: seed seeds-aaa, seeds-bbb"
+    assert parse_lineage(notes) == (["seeds-bbb"], [])
+    assert malformed_lineage(notes) == [notes]
+
+
+def test_well_formed_lineage_is_not_malformed():
+    notes = "Source: seeds-lcfa.1.1, seeds-187\nContext: other-x1\n\nSource: none"
+    assert malformed_lineage(notes) == []
+
+
+def test_conceptql_7dr_misplaced_source_in_design_only():
+    """The reported miss, rebuilt: `Source: seed <id>` in design, nothing in
+    notes, the seed open. No [source] candidate, a MISPLACED finding naming the
+    bead and field, the seed surfacing as [prose], and no bare empty line."""
+    records = [
+        bead(
+            "seeds-7dr",
+            description="Ship the thing.",
+            design="Source: seed seeds-nz0\n\nWe chose the simple path.",
+        )
+    ]
+    report = run(records, [seed("seeds-nz0")])
+
+    assert report.misplaced_lineage == [
+        LineageFinding(
+            bead_id="seeds-7dr", field="design", line="Source: seed seeds-nz0"
+        )
+    ]
+    assert report.malformed_lineage == []
+    assert [(c.seed_id, c.evidence) for c in report.candidates] == [
+        ("seeds-nz0", EVIDENCE_PROSE)
+    ]
+    assert report.unresolved_refs == []
+
+    out = format_report(report)
+    assert EMPTY_LINE not in out
+    assert "Misplaced lineage" in out
+    assert "seeds-7dr [design]: Source: seed seeds-nz0" in out
+
+
+def test_misplaced_lineage_with_no_candidates_never_prints_the_bare_empty_line():
+    """Even when prose finds nothing, the report must not look clean."""
+    records = [bead("seeds-b1", acceptance_criteria="Source: other-x1")]
+    report = run(records, [])
+    assert report.candidates == []
+    assert [(f.field, f.line) for f in report.misplaced_lineage] == [
+        ("acceptance_criteria", "Source: other-x1")
+    ]
+    out = format_report(report)
+    assert EMPTY_LINE not in out
+    assert "could not use" in out
+
+
+def test_misplaced_source_line_in_description_is_not_promoted_to_source():
+    records = [bead("seeds-b1", description="Source: seeds-aaa")]
+    report = run(records, [seed("seeds-aaa")])
+    assert [c.evidence for c in report.candidates] == [EVIDENCE_PROSE]
+    assert [f.field for f in report.misplaced_lineage] == ["description"]
+
+
+def test_malformed_source_in_notes_is_reported_not_unresolved():
+    records = [bead("seeds-b1", notes="Source: seed seeds-aaa")]
+    report = run(records, [seed("seeds-aaa")])
+    assert report.malformed_lineage == [
+        LineageFinding(bead_id="seeds-b1", field="notes", line="Source: seed seeds-aaa")
+    ]
+    assert report.unresolved_refs == []
+    assert all(c.evidence != EVIDENCE_SOURCE for c in report.candidates)
+    out = format_report(report)
+    assert "Malformed lineage" in out
+    assert "seeds-b1: Source: seed seeds-aaa" in out
+
+
+def test_malformed_lineage_with_no_seed_in_store_is_still_not_unresolved():
+    records = [bead("seeds-b1", notes="Source: seed other-zz9")]
+    report = run(records, [])
+    assert report.unresolved_refs == []
+    assert len(report.malformed_lineage) == 1
+    assert EMPTY_LINE not in format_report(report)
+
+
+def test_prose_scan_reads_design_and_acceptance_criteria():
+    records = [
+        bead("seeds-b1", design="builds on seeds-aaa"),
+        bead("seeds-b2", acceptance_criteria="seeds-bbb is answered"),
+    ]
+    report = run(records, [seed("seeds-aaa"), seed("seeds-bbb")])
+    assert {(c.seed_id, c.evidence) for c in report.candidates} == {
+        ("seeds-aaa", EVIDENCE_PROSE),
+        ("seeds-bbb", EVIDENCE_PROSE),
+    }
+    assert report.misplaced_lineage == []
+
+
+def test_clean_window_still_prints_the_empty_line():
+    """The empty line survives where it is true."""
+    out = format_report(run([bead("seeds-b1", notes="Source: none")], []))
+    assert EMPTY_LINE in out
+
+
+def test_json_carries_both_lineage_finding_categories():
+    records = [
+        bead("seeds-b1", notes="Source: seed seeds-aaa"),
+        bead("seeds-b2", design="Context: seeds-aaa"),
+    ]
+    payload = json.loads(json.dumps(report_as_dict(run(records, [seed("seeds-aaa")]))))
+    assert payload["malformed_lineage"] == [
+        {"bead_id": "seeds-b1", "field": "notes", "line": "Source: seed seeds-aaa"}
+    ]
+    assert payload["misplaced_lineage"] == [
+        {"bead_id": "seeds-b2", "field": "design", "line": "Context: seeds-aaa"}
+    ]
 
 
 # --------------------------------------------------------------------------

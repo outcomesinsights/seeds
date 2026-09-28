@@ -69,6 +69,15 @@ The verb also prints what it deliberately withheld — seeds cited on a `Context
 already resolved, IDs that name nothing in this store. Do not go fishing in those piles. They are
 shown so the withholding is auditable, not so you can re-admit them.
 
+**Malformed and misplaced lineage are the exception: they are leads, not noise.** *Malformed* is a
+`Source:`/`Context:` line in notes with something other than bare IDs on it (`Source: seed conceptql-nz0`); *misplaced* is such a line in description, design or acceptance_criteria. Both mean
+a writer recorded lineage and broke the contract, so the seed it names may well have shipped — that
+is how `conceptql-nz0` sat unfound behind an empty report on 2026-09-28. The verb never promotes
+them to `[source]`, and it will not print "nothing to reconcile" while any exist. **An empty
+candidate list is not "nothing to close" while these findings are present.** Take each named bead,
+`bd show` it, and treat the seed on the line as a `[prose]`-strength candidate in step 2. Tell the
+user which beads broke the contract so their notes can be fixed.
+
 Then `seeds show` each candidate and carry the whole list into step 2. **Every one of them still
 gets verified against code.** A cold sweep needs that more than session mode does, not less:
 nothing in your memory is propping up a bad candidate, so the output's evidence class is all you

@@ -2742,6 +2742,12 @@ def candidates_cmd(
     one that implemented it. Seeds named on a `Context:` line are cited rather
     than discharged and are never offered.
 
+    Lineage that breaks the `Source: <id>[, <id>]*`-in-notes contract is
+    reported, not read: a notes line with a non-ID token (`Source: seed x-1`)
+    is MALFORMED, a `Source:`/`Context:` line in description, design or
+    acceptance_criteria is MISPLACED. Neither yields a [source] candidate.
+    While either is present an empty result does NOT mean nothing to close.
+
     The window is stateless and always printed. A gap longer than it will miss
     its early span, and that line is the only thing that makes the hole visible.
 

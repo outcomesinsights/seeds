@@ -69,7 +69,7 @@ The reason is a real failure. Lineage used to be prose, so the sibling skill `re
 
 ### Where it lives
 
-**`bd`'s `--notes` field, as the first line.**
+**`bd`'s `--notes` field, as the first line.** NOT `--design`, NOT `--description`, NOT `--acceptance`. The reader looks in notes and nowhere else; a `Source:` line in any other field is reported as *misplaced lineage* and never counts as `[source]`.
 
 `notes` is a top-level key in `bd show --json` and in `.beads/issues.jsonl`, so reading lineage back is a field lookup rather than a grep across prose, and `bd show` renders a NOTES block where a person will see it. A line inside `--description` would be greppable too, but the description is exactly the prose field whose incidental seed mentions caused the over-claim above — putting the lineage there leaves the signal inside the noise it replaces. (`--metadata` also round-trips as real JSON and was weighed; it loses because the consumer already reads a `Source:` line, and one idea does not need two vocabularies.)
 
@@ -90,12 +90,21 @@ Source: seeds-lcfa.1.1, seeds-187
 Precisely:
 
 - The **first line** of `--notes`. Nothing above it, no leading whitespace.
-- The literal label `Source:` followed by exactly one space.
+- The literal label `Source:` followed by exactly one space, then the first ID. **Nothing between `Source:` and the IDs** — no `seed`, no `seeds`, no `from`.
 - One or more seed IDs, separated by a comma and exactly one space — `, `. No other separator, no `and`, no bullets, no line wrapping.
 - Each ID verbatim as `seeds show` reports it, dotted child suffixes included, matching `[a-z][a-z0-9]*-[a-z0-9]+(\.[0-9]+)*`.
 - **Nothing else on the line.** No prose, no parentheticals, no trailing period, no explanation of what the seed said. That belongs in the description.
 
 The grammar, in full: `Source: <id>[, <id>]*`
+
+Wrong, each of which has shipped:
+
+```
+Source: seed conceptql-nz0        # extra word: the token "seed conceptql-nz0" is not an ID
+bd create … --design "Source: conceptql-nz0"   # wrong field: design is never read as lineage
+```
+
+The reader does not repair either. `seeds candidates` reports the first as *malformed* and the second as *misplaced*, and neither becomes a `[source]` candidate — the seed can only resurface as weak `[prose]` evidence, which is the over-claim this field exists to replace.
 
 Bead IDs and seed IDs are shaped identically in this project — both tools derive the prefix from the project name, and that collision is known and staying. So the ID shape can never tell a reader which one it is looking at; **the field is what says these are seeds.** Never put a bead ID on a `Source:` line.
 
