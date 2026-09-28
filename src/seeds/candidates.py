@@ -48,6 +48,16 @@ The false positive that step exists for (seeds-lcfa.1.1, reported shipped in
 shipped something else entirely) is exactly what a prose-evidence candidate
 looks like from here.
 
+**Lineage that breaks the contract is reported, never repaired.** The grammar
+is strict on purpose (ruled 2026-09-28, bead seeds-nnp): only the ``notes``
+field is read, and only bare IDs count. But a strict reader that is also silent
+turns a writer's mistake into a clean-looking empty answer — that is how
+conceptql-7dr, with ``Source: seed conceptql-nz0`` in its *design* field, hid a
+real candidate behind "No candidate seeds". So a ``Source:``/``Context:`` token
+in notes that is not a bare ID is reported as MALFORMED, a label line in any
+other field is reported as MISPLACED, and neither is ever promoted to
+``[source]``. They are leads for a human to verify, not evidence.
+
 **The window is stateless.** Thirty days by default, ``--since`` to override,
 no marker file (ruled by @aguynamedryan 2026-09-13). The accepted cost is that
 a gap longer than the window silently misses its early span, so the window used
@@ -68,7 +78,7 @@ from pathlib import Path
 from typing import Any
 
 from seeds.models import find_id_ref_candidates, now_utc
-from seeds.seedfile import SeedRecord
+from seeds.seedfile import SeedRecord, is_valid_id
 from seeds.store import TERMINAL_STATUSES
 
 #: One bead as ``bd list --json`` emits it. Deliberately untyped beyond this:
@@ -96,6 +106,11 @@ _LINEAGE_RE = re.compile(r"^(Source|Context):[ \t]*(.*)$", re.MULTILINE)
 #: convention. Both yield no candidates, but only the first means "we checked".
 _LINEAGE_NONE = "none"
 
+#: Bead fields that must NOT carry lineage, in the order they are reported.
+#: A ``Source:`` line in any of them is the prose over-claim risk the
+#: seeds-to-beads skill warns about, so it is flagged rather than read.
+_NON_LINEAGE_FIELDS = ("description", "design", "acceptance_criteria")
+
 
 @dataclass(frozen=True)
 class BeadRef:
@@ -104,6 +119,19 @@ class BeadRef:
     bead_id: str
     title: str
     closed_at: datetime | None
+
+
+@dataclass(frozen=True)
+class LineageFinding:
+    """A lineage line the reader saw but could not use.
+
+    ``field`` is the bead field the line was found in: always ``notes`` for a
+    malformed line, one of :data:`_NON_LINEAGE_FIELDS` for a misplaced one.
+    """
+
+    bead_id: str
+    field: str
+    line: str
 
 
 @dataclass(frozen=True)
@@ -147,6 +175,17 @@ class CandidatesReport:
     #: Tokens that named neither a live seed nor a bead. Usually a seed from
     #: another project's store quoted in prose, sometimes a hallucinated ID.
     unresolved_refs: list[str] = field(default_factory=list)
+    #: ``Source:``/``Context:`` lines in notes carrying a token that is not a
+    #: bare ID (``Source: seed x-1``). The bad tokens are dropped, not guessed at.
+    malformed_lineage: list[LineageFinding] = field(default_factory=list)
+    #: ``Source:``/``Context:`` lines in a field other than notes. Never read as
+    #: lineage; the IDs on them can still surface as ``[prose]``.
+    misplaced_lineage: list[LineageFinding] = field(default_factory=list)
+
+    @property
+    def has_unusable_lineage(self) -> bool:
+        """True when the window holds lineage the reader could not use."""
+        return bool(self.malformed_lineage or self.misplaced_lineage)
 
 
 class CandidatesError(Exception):
@@ -164,19 +203,61 @@ def parse_lineage(notes: str) -> tuple[list[str], list[str]]:
     Repeated labels are unioned rather than ranked. The convention says one
     line each, but a bead edited by hand can end up with two, and dropping the
     second silently would lose lineage the writer meant to record.
+
+    A token that is not a bare ID is dropped here; :func:`malformed_lineage`
+    reports the lines that carried one.
     """
+    source, context, _ = _parse_lineage(notes)
+    return source, context
+
+
+def malformed_lineage(notes: str) -> list[str]:
+    """Return the lineage lines in ``notes`` that carry a non-ID token.
+
+    ``Source: seed conceptql-nz0`` is the motivating case: the extra word makes
+    the token ``seed conceptql-nz0``, which is not an ID in any store. Before
+    this was reported it fell into ``unresolved_refs`` and read as "a seed from
+    another store" — plausible, and wrong.
+    """
+    return _parse_lineage(notes)[2]
+
+
+def _parse_lineage(notes: str) -> tuple[list[str], list[str], list[str]]:
+    """``(source_ids, context_ids, malformed_lines)`` — see :func:`parse_lineage`."""
     if not notes:
-        return [], []
+        return [], [], []
     found: dict[str, list[str]] = {"Source": [], "Context": []}
+    malformed: list[str] = []
     for match in _LINEAGE_RE.finditer(notes):
         label, rest = match.group(1), match.group(2).strip()
         if not rest or rest.lower() == _LINEAGE_NONE:
             continue
+        bad = False
         for token in rest.split(","):
             token = token.strip()
-            if token and token not in found[label]:
+            # The one seed-ID grammar (seedfile.ID_RE), hyphenated prefixes
+            # included. Any prefix passes: an ID from another store is
+            # well-formed lineage that resolves to nothing here, which is
+            # `unresolved_refs`' business, not a malformed line.
+            if not is_valid_id(token):
+                bad = True
+                continue
+            if token not in found[label]:
                 found[label].append(token)
-    return found["Source"], found["Context"]
+        if bad:
+            malformed.append(match.group(0).strip())
+    return found["Source"], found["Context"], malformed
+
+
+def misplaced_lineage(record: BeadRecord) -> list[tuple[str, str]]:
+    """Return ``(field, line)`` for every lineage line outside ``notes``."""
+    found: list[tuple[str, str]] = []
+    for name in _NON_LINEAGE_FIELDS:
+        text = record.get(name)
+        if not isinstance(text, str):
+            continue
+        found.extend((name, m.group(0).strip()) for m in _LINEAGE_RE.finditer(text))
+    return found
 
 
 def _closed_at(record: BeadRecord) -> datetime | None:
@@ -286,16 +367,29 @@ def find_candidates(
             continue
         report.beads_in_window += 1
 
+        bead_id = record.get("id") or "?"
         notes = record.get("notes") or ""
-        source_ids, context_ids = parse_lineage(notes)
+        source_ids, context_ids, bad_lines = _parse_lineage(notes)
         cited_only.update(context_ids)
+        report.malformed_lineage.extend(
+            LineageFinding(bead_id=bead_id, field="notes", line=line)
+            for line in bad_lines
+        )
+        report.misplaced_lineage.extend(
+            LineageFinding(bead_id=bead_id, field=name, line=line)
+            for name, line in misplaced_lineage(record)
+        )
 
         if source_ids:
             evidence, refs = EVIDENCE_SOURCE, source_ids
         else:
-            prose = find_id_ref_candidates(
-                f"{record.get('description') or ''}\n{notes}", prefix
+            # Every free-text field, not only description: prose is already
+            # the weak class and verified before resolution, so widening where
+            # it looks does not loosen the lineage contract (seeds-nnp).
+            prose_text = "\n".join(
+                str(record.get(name) or "") for name in (*_NON_LINEAGE_FIELDS, "notes")
             )
+            prose = find_id_ref_candidates(prose_text, prefix)
             # A bead's own ID appears in its prose often enough to matter, and
             # `Context:` seeds are cited rather than discharged — neither is a
             # candidate.
@@ -303,7 +397,7 @@ def find_candidates(
             refs = [r for r in prose if r not in bead_ids and r not in context_ids]
 
         bead = BeadRef(
-            bead_id=record.get("id") or "?",
+            bead_id=bead_id,
             title=record.get("title") or "",
             closed_at=closed_at,
         )
@@ -377,7 +471,13 @@ def report_as_dict(report: CandidatesReport) -> dict[str, Any]:
         "cited_only": report.cited_only,
         "already_terminal": report.already_terminal,
         "unresolved_refs": report.unresolved_refs,
+        "malformed_lineage": [_finding_as_dict(f) for f in report.malformed_lineage],
+        "misplaced_lineage": [_finding_as_dict(f) for f in report.misplaced_lineage],
     }
+
+
+def _finding_as_dict(finding: LineageFinding) -> dict[str, str]:
+    return {"bead_id": finding.bead_id, "field": finding.field, "line": finding.line}
 
 
 def format_report(report: CandidatesReport) -> str:
@@ -396,7 +496,16 @@ def format_report(report: CandidatesReport) -> str:
     )
     lines.append("")
 
-    if not report.candidates:
+    if not report.candidates and report.has_unusable_lineage:
+        # Never the bare "nothing to reconcile" line here: that clean-looking
+        # empty answer is exactly what hid conceptql-nz0 (seeds-nnp).
+        lines.append(
+            "No candidate seeds from usable lineage — but this window has "
+            "lineage the reader could not use (below). Verify those beads by "
+            "hand before reading this as nothing to reconcile."
+        )
+        lines.append("")
+    elif not report.candidates:
         lines.append("No candidate seeds — nothing to reconcile in this window.")
     for c in report.candidates:
         cites = ", ".join(
@@ -414,7 +523,7 @@ def format_report(report: CandidatesReport) -> str:
     ):
         lines.append(
             "A [prose] candidate was found by text-matching a seed ID out of a "
-            "bead's description. That a bead MENTIONS a seed is not evidence it "
+            "bead's text. That a bead MENTIONS a seed is not evidence it "
             "implemented one — verify against shipped code before resolving."
         )
         lines.append("")
@@ -432,5 +541,27 @@ def format_report(report: CandidatesReport) -> str:
         lines.append(
             "Referenced but not a seed here (another store, or a bad ID): "
             + ", ".join(report.unresolved_refs)
+        )
+    if report.malformed_lineage:
+        lines.append("")
+        lines.append(
+            "Malformed lineage — a notes line that is not "
+            "`Source: <id>[, <id>]*`; the bad tokens were not read:"
+        )
+        lines.extend(f"    {f.bead_id}: {f.line}" for f in report.malformed_lineage)
+    if report.misplaced_lineage:
+        lines.append("")
+        lines.append(
+            "Misplaced lineage — a Source:/Context: line outside notes; "
+            "never read as [source]:"
+        )
+        lines.extend(
+            f"    {f.bead_id} [{f.field}]: {f.line}" for f in report.misplaced_lineage
+        )
+    if report.has_unusable_lineage:
+        lines.append(
+            "These are leads, not evidence: the seeds they name may have "
+            "shipped. Verify against code, and fix the bead's notes to the "
+            "contract."
         )
     return "\n".join(lines).rstrip() + "\n"
