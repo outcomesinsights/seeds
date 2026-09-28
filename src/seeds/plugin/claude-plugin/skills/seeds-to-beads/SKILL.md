@@ -92,7 +92,7 @@ Precisely:
 - The **first line** of `--notes`. Nothing above it, no leading whitespace.
 - The literal label `Source:` followed by exactly one space, then the first ID. **Nothing between `Source:` and the IDs** — no `seed`, no `seeds`, no `from`.
 - One or more seed IDs, separated by a comma and exactly one space — `, `. No other separator, no `and`, no bullets, no line wrapping.
-- Each ID verbatim as `seeds show` reports it, dotted child suffixes included, matching `[a-z][a-z0-9]*-[a-z0-9]+(\.[0-9]+)*`.
+- Each ID verbatim as `seeds show` reports it, dotted child suffixes included, matching `[a-z][a-z0-9-]*-[0-9a-z]+(\.[0-9]+)*` (a prefix may itself contain hyphens, e.g. `record-demo-0yd`).
 - **Nothing else on the line.** No prose, no parentheticals, no trailing period, no explanation of what the seed said. That belongs in the description.
 
 The grammar, in full: `Source: <id>[, <id>]*`

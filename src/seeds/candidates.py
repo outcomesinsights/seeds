@@ -78,7 +78,7 @@ from pathlib import Path
 from typing import Any
 
 from seeds.models import find_id_ref_candidates, now_utc
-from seeds.seedfile import SeedRecord
+from seeds.seedfile import SeedRecord, is_valid_id
 from seeds.store import TERMINAL_STATUSES
 
 #: One bead as ``bd list --json`` emits it. Deliberately untyped beyond this:
@@ -105,11 +105,6 @@ _LINEAGE_RE = re.compile(r"^(Source|Context):[ \t]*(.*)$", re.MULTILINE)
 #: seed — distinct from an absent field, which only says the bead predates the
 #: convention. Both yield no candidates, but only the first means "we checked".
 _LINEAGE_NONE = "none"
-
-#: A bare ID on a lineage line — the shape ``seeds-to-beads`` documents. Any
-#: prefix is accepted: an ID from another store is well-formed lineage that
-#: merely resolves to nothing here, which is ``unresolved_refs``' business.
-_BARE_ID_RE = re.compile(r"^[a-z][a-z0-9]*-[a-z0-9]+(\.[0-9]+)*$")
 
 #: Bead fields that must NOT carry lineage, in the order they are reported.
 #: A ``Source:`` line in any of them is the prose over-claim risk the
@@ -240,7 +235,11 @@ def _parse_lineage(notes: str) -> tuple[list[str], list[str], list[str]]:
         bad = False
         for token in rest.split(","):
             token = token.strip()
-            if not _BARE_ID_RE.match(token):
+            # The one seed-ID grammar (seedfile.ID_RE), hyphenated prefixes
+            # included. Any prefix passes: an ID from another store is
+            # well-formed lineage that resolves to nothing here, which is
+            # `unresolved_refs`' business, not a malformed line.
+            if not is_valid_id(token):
                 bad = True
                 continue
             if token not in found[label]:

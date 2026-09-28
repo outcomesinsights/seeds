@@ -285,6 +285,33 @@ def test_parse_lineage_drops_a_non_id_token_and_reports_the_line():
     assert malformed_lineage(notes) == [notes]
 
 
+def test_hyphenated_prefix_id_is_well_formed_source_lineage():
+    """Stores with hyphenated prefixes exist (record-demo, ohdsi-supplemental-
+    vocabs); their IDs must parse under the one seed-ID grammar, not a second
+    narrower one."""
+    notes = "Source: record-demo-0yd, ohdsi-supplemental-vocabs-10"
+    assert parse_lineage(notes) == (
+        ["record-demo-0yd", "ohdsi-supplemental-vocabs-10"],
+        [],
+    )
+    assert malformed_lineage(notes) == []
+
+    records = [bead("record-demo-b1", notes="Source: record-demo-0yd")]
+    report = find_candidates(
+        records, [seed("record-demo-0yd")], prefix="record-demo", since=SINCE, now=NOW
+    )
+    assert [(c.seed_id, c.evidence) for c in report.candidates] == [
+        ("record-demo-0yd", EVIDENCE_SOURCE)
+    ]
+    assert report.malformed_lineage == []
+
+
+def test_extra_word_before_the_id_is_still_malformed():
+    notes = "Source: seed conceptql-nz0"
+    assert parse_lineage(notes) == ([], [])
+    assert malformed_lineage(notes) == [notes]
+
+
 def test_well_formed_lineage_is_not_malformed():
     notes = "Source: seeds-lcfa.1.1, seeds-187\nContext: other-x1\n\nSource: none"
     assert malformed_lineage(notes) == []
