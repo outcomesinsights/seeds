@@ -37,6 +37,7 @@ depends on. Hand-parsing the subset also keeps the runtime dependency set at
 
 from __future__ import annotations
 
+import collections
 import functools
 import json
 import os
@@ -1084,6 +1085,61 @@ def _reader() -> MarkdownIt:
     return MarkdownIt("commonmark").enable(["table", "strikethrough"])
 
 
+# --- Memoization (seeds-xoa) --------------------------------------------------
+#
+# Formatting one body used to cost ~19 mdformat/CommonMark renders, and most of
+# them were repeats: `convert` formats each body two or three times over (the
+# left-verbatim test, the canonical render, the write), and `_renders_the_same`
+# renders a text that mdformat left unchanged twice. Measured on one
+# `convert(real_corpus)`: 4418 mdformat calls over 1965 distinct inputs, 13254
+# renders over 2114.
+#
+# Every cache below is keyed on EVERYTHING its function reads, so a hit returns
+# exactly what the call would have computed -- output cannot change by
+# construction. Each is bounded (LRU), so memory stays flat in a long process.
+_MEMO_SIZE = 4096
+
+
+@functools.lru_cache(maxsize=_MEMO_SIZE)
+def _render(text: str) -> str:
+    """The CommonMark reader's HTML for ``text``. The reader never changes."""
+    html: str = _reader().render(text)
+    return html
+
+
+class _BoundedMemo:
+    """A least-recently-used ``dict``, for a key ``lru_cache`` cannot build.
+
+    ``_run_mdformat``'s result depends on the store's formatter options, which
+    are a dict (unhashable, and a TOML list value makes even its items
+    unhashable), so they reach the key as their ``repr``.
+    """
+
+    def __init__(self, size: int) -> None:
+        self._size = size
+        self._data: collections.OrderedDict[tuple[str, str], str] = (
+            collections.OrderedDict()
+        )
+
+    def get(self, key: tuple[str, str]) -> str | None:
+        value = self._data.get(key)
+        if value is not None:
+            self._data.move_to_end(key)
+        return value
+
+    def put(self, key: tuple[str, str], value: str) -> None:
+        self._data[key] = value
+        self._data.move_to_end(key)
+        while len(self._data) > self._size:
+            self._data.popitem(last=False)
+
+
+_mdformat_memo = _BoundedMemo(_MEMO_SIZE)
+
+
+# Pure in `body` (it formats paragraphs under mdformat's defaults and never
+# reads a store's config), so the body alone is the whole key.
+@functools.lru_cache(maxsize=_MEMO_SIZE)
 def autofence(body: str) -> str:
     """Fence the literal text a formatter would otherwise reshape.
 
@@ -1144,9 +1200,8 @@ def _collapse_outside_pre(html: str) -> str:
 
 def _renders_the_same(before: str, after: str, *, ignore_spacing: bool = False) -> bool:
     """Whether two markdown texts mean the same thing to a CommonMark reader."""
-    reader = _reader()
-    first: str = reader.render(before)
-    second: str = reader.render(after)
+    first = _render(before)
+    second = _render(after)
     if ignore_spacing:
         first, second = _collapse_outside_pre(first), _collapse_outside_pre(second)
     return first == second
@@ -1213,9 +1268,17 @@ def _run_mdformat(body: str, seeds_dir: Path | None = None) -> str:
         if extensions is not None
         else set(DEFAULT_EXTENSIONS)
     )
-    return mdformat.text(
-        body, extensions=wanted - _FILE_ONLY_EXTENSIONS, options=options
-    )
+    plugins = wanted - _FILE_ONLY_EXTENSIONS
+    # Keyed on the options' CONTENT, not on which store they came from, so two
+    # stores with different formatter config can never share an entry. `repr`
+    # rather than the values themselves: it keeps `number = true` apart from
+    # `number = 1`, which compare -- and hash -- equal.
+    key = (body, repr((sorted(plugins), sorted(options.items()))))
+    formatted = _mdformat_memo.get(key)
+    if formatted is None:
+        formatted = mdformat.text(body, extensions=plugins, options=options)
+        _mdformat_memo.put(key, formatted)
+    return formatted
 
 
 def render_seed_file(
