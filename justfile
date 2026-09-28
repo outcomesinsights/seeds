@@ -177,11 +177,16 @@ lint:
     uv run ruff check .
     uv run mypy src/
 
+# The fast, serial checks every gate starts with. `lock-check` is first because
+# it has to precede anything that runs `uv run`. Shared by `ci` and `pre-push`
+# so the two cannot drift apart.
+checks: lock-check lint fmt-check flake-deps
+
 # Local CI equivalent for the lint and test jobs, on the local interpreter.
 # The recipe IS the contract: if CI runs a check and this does not, the gate is
 # decorative (see ~/.config/home-manager/docs/ci-gates.md). `pre-push` below
 # adds the rest of ci.yml: the other Python versions and the nix job.
-ci: lock-check lint fmt-check flake-deps test
+ci: checks test
 
 # ci.yml's test job runs 3.11, 3.12 and 3.13; `test` covers only the local
 # interpreter (3.13). Each version gets its OWN environment. The hook this
@@ -190,7 +195,14 @@ ci: lock-check lint fmt-check flake-deps test
 # it re-ran 3.13 twice and never exercised 3.11 or 3.12 (seeds-29i, measured
 # 2026-09-28).
 test-matrix:
-    for v in 3.11 3.12; do echo "--- python $v ---"; UV_PROJECT_ENVIRONMENT=".venv-py$v" uv run --python "$v" pytest -q || exit 1; done
+    for v in {{ matrix }}; do echo "--- python $v ---"; "{{ just_executable() }}" test-python "$v" || exit 1; done
+
+# The non-local interpreters `test-matrix` and `pre-push` cover.
+matrix := "3.11 3.12"
+
+# One interpreter of the matrix, in its own environment (usage: just test-python 3.11).
+test-python VERSION:
+    UV_PROJECT_ENVIRONMENT=".venv-py{{ VERSION }}" uv run --python "{{ VERSION }}" pytest -q
 
 # Mirrors ci.yml's nix job verbatim; its comments explain the two-run split.
 # Skips when nix is absent, since this repo is public and a contributor without
@@ -205,9 +217,68 @@ nix-check:
     nix run . -- --version
 
 # What runs before a push: every job in ci.yml, so a green push means a green CI
-# (seeds-29i, ruled 2026-09-28). `ci` goes first because `lock-check` has to
-# precede anything that runs `uv run`.
-pre-push: ci test-matrix nix-check
+# (seeds-29i, ruled 2026-09-28). The serial `checks` go first, because
+# `lock-check` has to precede anything that runs `uv run`. Then the four test
+# runs -- `test` on the local interpreter, `test-python` for each version in
+# `matrix`, and `nix-check` -- run CONCURRENTLY (seeds-0o5): they were 94% of a
+# 524s serial gate, and each already has its own environment.
+#
+# Why concurrency is safe here, checked rather than assumed (seeds-0o5):
+# - uv.lock: `lock-check` has just proved it current, and UV_LOCKED=1 turns any
+#   re-lock a job would attempt into a loud failure instead of a racing write.
+# - The uv cache is documented as safe for concurrent readers and writers.
+# - pytest's /tmp/pytest-of-$USER/pytest-N dirs are made with an atomic mkdir
+#   and each carries a lock file that stops another session's cleanup deleting
+#   it while in use. The nix job's pytest runs in the build sandbox anyway.
+#
+# Each job logs to claude_stuff/pre-push-<stamp>-<job>.log. Every PID is waited
+# on and its status checked individually; a failure names the job and its log
+# and prints the log's tail, and the recipe exits non-zero.
+pre-push: checks
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export UV_LOCKED=1
+    mkdir -p claude_stuff
+    prefix="claude_stuff/pre-push-$(date +%Y%m%d-%H%M%S)"
+    # Parallel indexed arrays, not `declare -A`: macOS's /bin/bash is 3.2.
+    names=()
+    pids=()
+    launch() { # launch <job name> <command...>
+        local name=$1
+        shift
+        (
+            start=$SECONDS
+            if "$@"; then rc=0; else rc=$?; fi
+            echo "[$name] exit $rc after $((SECONDS - start))s"
+            exit "$rc"
+        ) >"$prefix-$name.log" 2>&1 &
+        pids+=("$!")
+        names+=("$name")
+        echo "started $name (pid $!) -> $prefix-$name.log"
+    }
+    trap 'kill "${pids[@]}" 2>/dev/null || true' INT TERM
+    launch test "{{ just_executable() }}" test
+    for v in {{ matrix }}; do launch "test-py$v" "{{ just_executable() }}" test-python "$v"; done
+    launch nix-check "{{ just_executable() }}" nix-check
+    failed=""
+    for i in "${!names[@]}"; do
+        name=${names[$i]}
+        if wait "${pids[$i]}"; then
+            echo "ok     $name  ($(tail -n 1 "$prefix-$name.log"))"
+        else
+            echo "FAILED $name (exit $?) -- log: $prefix-$name.log"
+            failed="$failed $name"
+        fi
+    done
+    [ -z "$failed" ] && { echo "pre-push passed; logs: $prefix-*.log"; exit 0; }
+    for name in $failed; do
+        echo
+        echo "===== $name: last 40 lines of $prefix-$name.log ====="
+        tail -n 40 "$prefix-$name.log"
+    done
+    echo
+    echo "pre-push FAILED:$failed"
+    exit 1
 
 # Runs on every commit, so it must stay FAST — a sub-minute budget. Tests belong
 # here when they fit; lint alone when they do not. fmt-check never rewrites.
