@@ -177,17 +177,37 @@ lint:
     uv run ruff check .
     uv run mypy src/
 
-# Full local CI equivalent — run this before pushing.
+# Local CI equivalent for the lint and test jobs, on the local interpreter.
 # The recipe IS the contract: if CI runs a check and this does not, the gate is
-# decorative (see ~/.config/home-manager/docs/ci-gates.md). Mirrors ci.yml's
-# lint and test jobs. The nix job is deliberately NOT mirrored — it needs the
-# nix daemon and minutes, and `flake-deps` covers the failure it exists to
-# catch cheaply.
+# decorative (see ~/.config/home-manager/docs/ci-gates.md). `pre-push` below
+# adds the rest of ci.yml: the other Python versions and the nix job.
 ci: lock-check lint fmt-check flake-deps test
 
-# What actually runs before a push. Defaults to the complete `ci`; point it at
-# something smaller ONLY where running complete CI locally is impractical.
-pre-push: ci
+# ci.yml's test job runs 3.11, 3.12 and 3.13; `test` covers only the local
+# interpreter (3.13). Each version gets its OWN environment. The hook this
+# replaced ran `uv run --python 3.11 --no-sync pytest`, and --no-sync makes uv
+# fall back to the existing 3.13 .venv ("Using incompatible environment"), so
+# it re-ran 3.13 twice and never exercised 3.11 or 3.12 (seeds-29i, measured
+# 2026-09-28).
+test-matrix:
+    for v in 3.11 3.12; do echo "--- python $v ---"; UV_PROJECT_ENVIRONMENT=".venv-py$v" uv run --python "$v" pytest -q || exit 1; done
+
+# Mirrors ci.yml's nix job verbatim; its comments explain the two-run split.
+# Skips when nix is absent, since this repo is public and a contributor without
+# nix must still be able to push. ~7s warm; much slower after a flake.lock
+# change.
+nix-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v nix >/dev/null 2>&1 || { echo "nix not on PATH — skipping (CI still runs this job)"; exit 0; }
+    nix flake check --all-systems --no-build
+    nix flake check --print-build-logs
+    nix run . -- --version
+
+# What runs before a push: every job in ci.yml, so a green push means a green CI
+# (seeds-29i, ruled 2026-09-28). `ci` goes first because `lock-check` has to
+# precede anything that runs `uv run`.
+pre-push: ci test-matrix nix-check
 
 # Runs on every commit, so it must stay FAST — a sub-minute budget. Tests belong
 # here when they fit; lint alone when they do not. fmt-check never rewrites.

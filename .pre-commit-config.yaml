@@ -8,7 +8,7 @@ repos:
 
   - repo: local
     hooks:
-      # Runs first, and deliberately before pytest: on 2026-08-26 a test
+      # Runs first, ahead of every uv-invoking hook: on 2026-08-26 a test
       # fixture in an agent worktree wrote core.bare=true plus a test identity
       # into this repo's shared .git/config, and the only symptom was git
       # refusing every command with "fatal: this operation must be run in a
@@ -19,29 +19,6 @@ repos:
         name: git config sanity (not bare, no test identity)
         entry: python3 scripts/check_git_config_sanity.py
         language: system
-        pass_filenames: false
-        always_run: true
-
-      # pre-push, but declared HERE rather than in the pre-push section below,
-      # because it has to run before every other uv-invoking hook. `uv sync`
-      # and `uv run` both re-lock by default and rewrite uv.lock in place,
-      # after which `uv lock --check` passes unconditionally. Measured on titan
-      # 2026-08-31: with click's floor bumped and the lock left stale, `uv lock
-      # --check` exited 1; a single `uv sync --dev` changed uv.lock's md5 and
-      # the same check exited 0. The hooks below (pytest, mypy, ruff) all shell
-      # out through `uv run`, so anywhere after them this gate is a permanent
-      # no-op that reports green.
-      #
-      # Deliberately NOT a commit-stage hook: Dependabot merges arrive on main
-      # without ever passing through a local commit, and that is precisely the
-      # path that shipped the stale lock in e789ac8. git-config-sanity stays
-      # ahead of it: that one diagnoses a poisoned .git/config, which would
-      # otherwise garble every failure reported after it.
-      - id: uv-lock-check
-        name: uv lock --check (uv.lock matches pyproject.toml)
-        entry: uv lock --check
-        language: system
-        stages: [pre-push]
         pass_filenames: false
         always_run: true
 
@@ -57,9 +34,6 @@ repos:
       # D/R in `git diff --name-status`: there is no delete verb, so without it
       # `rm <seed-file>` is the de facto one), and --smells (never blocks, by
       # construction in the command itself).
-      #
-      # Deliberately ahead of pytest: a corrupt store is a data problem, and
-      # reading it first is cheaper and more urgent than a red test.
       #
       # The script wraps the command for two reasons only -- a missing
       # .seeds/seeds/ must not block commits before the conversion lands, and a
@@ -81,13 +55,6 @@ repos:
         pass_filenames: false
         always_run: true
 
-      - id: pytest
-        name: pytest
-        entry: uv run pytest -x -q
-        language: system
-        pass_filenames: false
-        always_run: true
-
       - id: beads-pre-commit
         name: beads pre-commit
         # BD_GIT_HOOK=1 mirrors the .beads/hooks/pre-commit shim so bd knows it
@@ -98,128 +65,13 @@ repos:
         pass_filenames: false
         always_run: true
 
-
-      # --- pre-push: run the same checks CI runs, so CI on remote is the last
-      # line of defense, not the first. Covers ALL THREE jobs in
-      # .github/workflows/ci.yml — lint, test (all four Python versions), and
-      # nix. Measured ~79s on titan for the full stage.
+      # No pre-push hooks here, on purpose (seeds-29i, ruled 2026-09-28). The push
+      # gate is the justfile's `pre-push` recipe, the one place that mirrors
+      # ci.yml. A pre-push section here would duplicate it, and whenever the
+      # framework's pre-push hook is not installed it reads as armed while
+      # running nothing. That is how this repo went from January to September
+      # with 16 declared hooks and none of them running.
       #
-      # One pre-push hook is NOT in this section: uv-lock-check, declared above
-      # with the commit-stage hooks. It mirrors the lint job's `uv lock --check`
-      # and has to precede every `uv run`; the comment there explains why.
-      #
-      # The single deliberate exception: CI passes --cov to pytest, this does
-      # not. There is no fail-under anywhere, so coverage is report-only and
-      # gates nothing; running it here would cost time and change no outcome.
-      #
-      # If you add a step to ci.yml, add it here too — the contract this
-      # section exists to uphold is "if pre-push passes, CI passes," and it is
-      # only worth anything while it stays literally true.
-      #
-      # That contract is one-directional, so one hook here has no ci.yml
-      # counterpart on purpose: flake-deps-check. CI already catches that
-      # mismatch inside the nix job; the hook only makes it fail in
-      # milliseconds instead of two minutes, and an extra local check never
-      # weakens "pre-push passing implies CI passing".
-      - id: mypy-pre-push
-        name: mypy (strict)
-        entry: uv run mypy src/
-        language: system
-        stages: [pre-push]
-        pass_filenames: false
-        always_run: true
-
-      - id: ruff-check-pre-push
-        name: ruff check
-        entry: uv run ruff check .
-        language: system
-        stages: [pre-push]
-        pass_filenames: false
-        always_run: true
-
-      - id: ruff-format-pre-push
-        name: ruff format --check
-        entry: uv run ruff format --check .
-        language: system
-        stages: [pre-push]
-        pass_filenames: false
-        always_run: true
-
-      - id: pytest-pre-push
-        name: pytest (full suite)
-        entry: uv run pytest
-        language: system
-        stages: [pre-push]
-        pass_filenames: false
-        always_run: true
-
-      # ci.yml runs pytest across 3.11-3.13; the hook above only exercises the
-      # local interpreter. Cover the rest here so "pre-push passed" actually
-      # implies "CI will pass" — otherwise two of the three supported versions
-      # are unverified until billed CI minutes discover the problem.
-      # Measured on titan: ~29s for three. 3.13 is deliberately omitted;
-      # it is the local interpreter and is already covered above.
-      - id: pytest-matrix-pre-push
-        name: pytest (3.11, 3.12)
-        entry: bash -c 'for v in 3.11 3.12; do echo "--- python $v ---"; uv run --python "$v" --no-sync pytest -q || exit 1; done'
-        language: system
-        stages: [pre-push]
-        pass_filenames: false
-        always_run: true
-
-      # The cheap half of the nix job below, run first so it fails in
-      # milliseconds instead of two minutes. flake.nix hand-mirrors
-      # pyproject.toml's [project.dependencies]; nothing kept them in step, and
-      # on 2026-08-31 dropping flask from pyproject.toml left flake.nix naming
-      # it while ruff, mypy, the full pytest suite and `uv lock --check` all
-      # reported green. `nix flake check --print-build-logs` was the only
-      # detector, ~2min cold. See bead seeds-8ro.
-      #
-      # This does NOT replace the nix job: a name comparison cannot see a floor
-      # nixpkgs-unstable cannot satisfy, or any other build failure. It moves
-      # the dependency-drift half of that signal to the front.
-      #
-      # Deliberately ahead of nix-pre-push and NOT inside it: that hook skips
-      # cleanly when nix is absent (this repo is public), and a contributor
-      # without nix must still be told when they have desynced the two files.
-      #
-      # `python3`, not `uv run` — the script is pure stdlib (tomllib + re), so
-      # this stays independent of the uv re-lock ordering hazard documented on
-      # uv-lock-check above. Same reasoning as git-config-sanity.
-      - id: flake-deps-check
-        name: flake.nix mirrors [project.dependencies]
-        entry: python3 scripts/flake_deps_check.py
-        language: system
-        stages: [pre-push]
-        pass_filenames: false
-        always_run: true
-
-      # Mirrors the `nix` job in ci.yml verbatim. Flakes are enabled globally
-      # in nix.conf here, so no --extra-experimental-features — same as CI; a
-      # misconfigured local nix should fail loudly rather than be papered over.
-      #
-      # Skips cleanly when nix is absent: this repo is public, and a
-      # contributor without nix must not be blocked from pushing. Measured
-      # ~7s warm; the first run after a flake.lock change is much slower.
-      - id: nix-pre-push
-        name: nix flake check (matches ci.yml nix job)
-        entry: bash -c 'command -v nix >/dev/null 2>&1 || { echo "nix not on PATH — skipping (CI still runs this job)"; exit 0; }; nix flake check --all-systems --no-build && nix flake check --print-build-logs && nix run . -- --version'
-        language: system
-        stages: [pre-push]
-        pass_filenames: false
-        always_run: true
-
-      - id: beads-pre-push
-        name: beads pre-push
-        entry: bd hooks run pre-push
-        language: system
-        stages: [pre-push]
-        pass_filenames: false
-        always_run: true
-      - id: just-ci
-        name: just ci (full local CI gate)
-        entry: just ci
-        language: system
-        pass_filenames: false
-        always_run: true   # without this pre-commit reports it Skipped when nothing staged matches
-        stages: [pre-push]
+      # pytest is not a commit-stage hook either: at ~2 min it is far over the
+      # sub-minute budget a commit gate has to fit (see `pre-commit` in the
+      # justfile). The suite runs at push.
