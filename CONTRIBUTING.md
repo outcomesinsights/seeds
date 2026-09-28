@@ -165,16 +165,19 @@ the three days it went unread. The commit after that clears it. Smells are
 silent in normal use because pre-commit hides a passing hook's output; see them
 with `pre-commit run --verbose seeds-check`.
 
-The pre-push hook runs the full local CI equivalent — `uv lock --check`, mypy
-(strict), `ruff check`, `ruff format --check`, the full pytest suite on the local
-interpreter plus 3.11 and 3.12, `just flake-deps`, and `nix flake check`
-(skipped cleanly when nix is absent). `uv lock --check` is declared out of order, above the commit-stage
-hooks, because `uv sync` and `uv run` both re-lock and would make it pass
-unconditionally. So if it fires green, the GitHub Actions CI on push is the last
-line of defense rather than the first. See `.pre-commit-config.yaml`; if you add a step to
-`.github/workflows/ci.yml`, add it there too.
+Before pushing, run `just pre-push`, the full local CI equivalent. It lives in
+the `justfile`, not in `.pre-commit-config.yaml`, which holds commit-stage hooks
+only. It runs `uv lock --check` first, because `uv sync` and `uv run` both
+re-lock and would otherwise make it pass unconditionally. Then mypy (strict),
+`ruff check`, `ruff format --check` and `just flake-deps`. Then, concurrently,
+the full pytest suite on the local interpreter, on 3.11 and on 3.12, and
+`nix flake check` (skipped cleanly when nix is absent). Each concurrent job logs
+to `claude_stuff/pre-push-<stamp>-<job>.log`, and a failure names the job. If it
+passes, the GitHub Actions CI on push is the last line of defense rather than
+the first. If you add a step to `.github/workflows/ci.yml`, add it to
+`just pre-push` too.
 
-`just flake-deps` is the one pre-push hook with no counterpart in `ci.yml`, and
+`just flake-deps` is the one pre-push check with no counterpart in `ci.yml`, and
 that is deliberate. `flake.nix` copies `[project.dependencies]` by hand, so
 adding or removing a runtime dependency means editing two files; the script
 compares the two lists by name and names whichever dependency only one of them
