@@ -246,7 +246,7 @@ You will rarely type any of these yourself. That is fine.
 The single most important integration is `seeds prime`. It prints a short
 primer — seed or bead, what to capture, the essential commands, and how many
 seeds, open questions and explorations the store holds — sized to be injected
-into every session. `seeds skills install` sets that up for Claude Code: the
+into every session. `seeds setup claude` sets that up for Claude Code: the
 seeds plugin runs `seeds prime` at session start and before compaction.
 `seeds prime --full` prints the full reference and the landscape: what's open,
 what's recently moved, what questions are unanswered.
@@ -384,8 +384,9 @@ A few small habits keep the seed store healthy.
   of got there first.
 - **`seeds doctor` answers "is my install and store healthy?"** The store is
   there, the prefix is recorded, every seed reads, no edge names a missing
-  seed, the type vocabulary has not drifted. Worth running when seeds seem to
-  have gone missing.
+  seed, the type vocabulary has not drifted, and the Claude Code plugin is
+  installed, enabled and current, with the fix command for each that is not.
+  Worth running when seeds, or the `seeds:*` skills, seem to have gone missing.
 - **A merge conflict is an ordinary merge conflict.** One seed per file means
   two people editing different seeds never collide at all, and two people
   editing the same one collide in git, in the file, with the usual markers and

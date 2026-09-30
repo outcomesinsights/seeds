@@ -6,6 +6,7 @@ import functools
 import json
 import os
 import shlex
+import subprocess
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -13,7 +14,7 @@ from typing import IO, Any, NamedTuple
 
 import click
 
-from seeds import __version__
+from seeds import __version__, claude_plugin
 from seeds.beads import (
     beads_in_use,
     query_bead_ids,
@@ -2139,7 +2140,7 @@ def prime(full: bool, no_digest: bool, digest_limit: int) -> None:
     By default prints the SHORT form (about bd prime's size): seed-or-bead,
     capture, essential commands, correcting, session end, and one count line.
     The seeds plugin injects it at every session start and before compaction
-    (`seeds skills install` sets that up). `seeds prime --full` prints the
+    (`seeds setup claude` sets that up). `seeds prime --full` prints the
     full reference and the project-state digest.
 
     Silently exits with code 0 if not in a seeds project.
@@ -2298,6 +2299,10 @@ def doctor(ctx: Context) -> None:
     recorded, the seeds read, no edge names a missing seed, the type
     vocabulary has not drifted. It does NOT verify the files themselves --
     that is `seeds check`, which reads the same tree and gates on it.
+
+    It also asks Claude Code whether the seeds plugin is installed, enabled
+    and the same version as this CLI, and prints the command that fixes each
+    one that is not. Those are warnings: seeds works without Claude Code.
     """
     passed = 0
     warnings = 0
@@ -2420,6 +2425,17 @@ def doctor(ctx: Context) -> None:
         # -- it may be this project's own vocabulary -- so naming one as the
         # "right" type would presume a typo doctor cannot actually detect.
         click.echo("      Remap one with: seeds retype --from <type> --to <type>")
+
+    # The Claude Code plugin (bead seeds-p7ns). seeds works without Claude
+    # Code, so every finding here is a warning and `claude` being absent is
+    # only a note: none of it may fail a gate that is about the store.
+    click.echo()
+    click.echo("Claude Code:")
+    _echo_plugin_check(
+        claude_plugin.check_plugin(__version__),
+        on_pass=check_pass,
+        on_warn=check_warn,
+    )
 
     # There is no second store to disagree with, so there is nothing here to
     # check. `seeds doctor` used to end with a JSONL/DB comparison, and every
@@ -3157,52 +3173,124 @@ def show_prefix(ctx: Context) -> None:
     click.echo(store.get_prefix())
 
 
-@main.group()
-def skills() -> None:
-    """Manage Claude Code skills shipped with seeds."""
-
-
-@skills.command()
-@click.option(
+# One option object on both names, so `--reinstall`/`--upgrade` cannot drift
+# apart between `seeds setup claude` and `seeds skills install`.
+_reinstall_option = click.option(
     "--reinstall",
     "--upgrade",
     "reinstall",
     is_flag=True,
     help="Force a clean refresh: re-read the marketplace from source and replace "
     "the installed plugin. Use after upgrading the seeds CLI so Claude Code picks "
-    "up updated skill content.",
+    "up the new skills and session hooks.",
 )
-def install(reinstall: bool) -> None:
-    """Install (and enable) the seeds Claude Code plugin (provides seeds:* skills).
 
-    The plugin also declares SessionStart and PreCompact hooks that run
-    `seeds prime`, so every session starts, and every compaction resumes, with
-    the short seeds primer in context.
+
+def _echo_plugin_check(
+    plugin_check: claude_plugin.PluginCheck,
+    on_pass: Callable[[str], None],
+    on_warn: Callable[[str, str], None],
+) -> None:
+    """Print what the plugin detector found: `seeds doctor` and
+    `seeds setup claude --check` both render it through here."""
+    if not plugin_check.claude_found:
+        click.echo(
+            "  → `claude` is not on PATH, so the Claude Code integration cannot "
+            "be checked. seeds works without it."
+        )
+    elif plugin_check.error:
+        on_warn("Claude Code plugin", f"cannot be checked: {plugin_check.error}")
+    elif plugin_check.problems:
+        for problem in plugin_check.problems:
+            on_warn("Claude Code plugin", problem.message)
+            click.echo(f"      Fix: {problem.fix}")
+    else:
+        on_pass(f"seeds plugin {__version__} installed and enabled")
+
+
+@main.group()
+def setup() -> None:
+    """Set up Claude Code: skills and session hooks.
+
+    `seeds setup claude` installs the Claude Code plugin: the seeds:* skills,
+    and the SessionStart and PreCompact hooks that run `seeds prime`.
+    """
+
+
+@setup.command("claude")
+@_reinstall_option
+@click.option(
+    "--check",
+    is_flag=True,
+    help="Install nothing: report whether the plugin is installed, enabled and "
+    "current, with the fix for each that is not. Exits 1 unless it is. The same "
+    "check `seeds doctor` runs.",
+)
+def setup_claude(reinstall: bool, check: bool) -> None:
+    """Install seeds' Claude Code integration: skills and session hooks.
+
+    Installs and enables the seeds plugin at user scope, through Claude Code's
+    own `claude plugin` commands. The plugin provides the seeds:* skills, and
+    declares SessionStart and PreCompact hooks that run `seeds prime`, so every
+    session starts, and every compaction resumes, with the short seeds primer
+    in context.
 
     Idempotent and safe to re-run. Always ensures the plugin ends up *enabled* —
     install/update alone can leave it disabled, which silently drops every
     seeds:* skill from new Claude Code sessions. Pass --reinstall (alias
     --upgrade) after upgrading the seeds CLI to replace a stale cached copy.
+
+    `seeds skills install` is the older name for this command, and does the
+    same thing.
     """
+    if check:
+        if reinstall:
+            raise click.UsageError("--check installs nothing; drop --reinstall.")
+        plugin_check = claude_plugin.check_plugin(__version__)
+        click.echo("Claude Code:")
+        _echo_plugin_check(
+            plugin_check,
+            on_pass=lambda name: click.echo(f"  ✓ {name}"),
+            on_warn=lambda name, msg: click.echo(f"  ⚠ {name}: {msg}"),
+        )
+        # Unlike doctor, this is a check of the integration alone, so anything
+        # short of a verified, current, enabled plugin is a failure here.
+        if not plugin_check.claude_found or plugin_check.error or plugin_check.problems:
+            sys.exit(1)
+        return
+    install_claude_integration(reinstall)
+
+
+@main.group()
+def skills() -> None:
+    """Old name: `skills install` = `setup claude`."""
+
+
+@skills.command()
+@_reinstall_option
+def install(reinstall: bool) -> None:
+    """Alias of `seeds setup claude`: install the seeds Claude Code plugin.
+
+    Installs and enables the plugin that provides the seeds:* skills and the
+    SessionStart and PreCompact hooks running `seeds prime`. Identical to
+    `seeds setup claude`, which is the name to use in new instructions.
+    """
+    install_claude_integration(reinstall)
+
+
+def install_claude_integration(reinstall: bool) -> None:
+    """The one installer behind `seeds setup claude` and `seeds skills install`."""
     import importlib.resources
-    import shutil
-    import subprocess
 
-    plugin = "seeds@seeds-marketplace"
-    marketplace = "seeds-marketplace"
-
-    if not shutil.which("claude"):
+    if claude_plugin.claude_path() is None:
         click.echo("`claude` CLI not found. Install Claude Code first.", err=True)
         raise click.Abort()
 
+    plugin = claude_plugin.PLUGIN
+
     def claude(*args: str, fatal: bool = False) -> subprocess.CompletedProcess[str]:
         """Run a `claude` subcommand; abort the install only when fatal."""
-        proc = subprocess.run(
-            ["claude", *args],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        proc = claude_plugin.run_claude(*args)
         if proc.returncode != 0 and fatal:
             click.echo(
                 f"`claude {' '.join(args)}` failed: {proc.stderr.strip()}", err=True
@@ -3217,9 +3305,17 @@ def install(reinstall: bool) -> None:
     if reinstall:
         # Re-read marketplace.json + plugin files from the on-disk source so an
         # upgraded seeds CLI's newer skill content is picked up.
-        claude("plugin", "marketplace", "update", marketplace)
+        claude("plugin", "marketplace", "update", claude_plugin.MARKETPLACE)
 
-    installed = plugin in claude("plugin", "list").stdout
+    # The same detector `seeds doctor` reads, so the two cannot disagree about
+    # what "installed" means. Only the user-scope copy counts: that is the one
+    # every command below names with `--scope user`.
+    try:
+        installs = claude_plugin.plugin_installs()
+    except claude_plugin.ClaudeListError as exc:
+        click.echo(str(exc), err=True)
+        raise click.Abort() from exc
+    installed = claude_plugin.user_install(installs) is not None
 
     if reinstall and installed:
         # Drop the cached copy so we re-copy fresh content. The plugin manifest
