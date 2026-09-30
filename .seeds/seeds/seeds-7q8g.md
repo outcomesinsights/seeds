@@ -4,7 +4,7 @@ title: Should seeds ship its commit-time check to the other repos that keep seed
 status: exploring
 type: exploration
 created_at: 2026-09-30T18:08:42.113398+00:00
-updated_at: 2026-09-30T18:21:18.689660+00:00
+updated_at: 2026-09-30T18:25:32.782973+00:00
 ---
 
 **The question:** Should seeds offer the repos that use it a commit-time `seeds check`, the way the seeds repo itself runs one? If so, how: a documented pre-commit snippet, a `seeds` command that installs it, or `seeds doctor` running `check`?
@@ -70,3 +70,39 @@ Method: the working-tree seeds binary (0.7.0 at f607eb5 plus later commits), rea
 - Whether this repo's own hook (scripts/seeds_check_hook.py, CHECK_ARGS = check --against-git --smells, about 7 s per commit here) drops `--smells` to match the ruling.
 
 Done 2026-09-30 for THIS repo: scripts/seeds_check_hook.py now runs check --against-git without --smells (pinned by a test in tests/test_seeds_check_hook.py). Measured: about 2 s per commit, down from about 7 s. The other two open items (how to ship the check to other repos; the rename-prefix false alarm) remain open.
+
+## Proposed shipping route (Ryan, 2026-09-30, a lean, not yet a ruling): a standard recipe, enforced by gator's doctor
+
+Ryan: "I wonder why we don't have standard recipes or something. I would argue that we have a gator doctor line that checks for seeds check in the justfile for the repo and if it's not being run, we suggest to the agent that it include it."
+
+This answers open item 1 without seeds generating or installing anything, which matches gator's standing ruling: each repo owns its tracked config, gator generates nothing, and doctor reports and suggests.
+
+Survey of the 25 non-archived repos with seed stores (2026-09-30):
+
+- 18 have a justfile; 12 of those have a `pre-commit` recipe. 7 have no justfile at all (epc, self-hosted-runners, agent-economy, marketscan_mdcd, seer_medicare_lung_2026, code_set_conundrum, loinc).
+- NO justfile runs `seeds check`.
+- 3 repos run it from .pre-commit-config.yaml, in three different forms:
+  - seeds: scripts/seeds_check_hook.py, `check --against-git`.
+  - code_collector: `seeds check`, plain and unguarded, so a clone without seeds fails every commit.
+  - code_set_catalog: `sh -c 'command -v seeds >/dev/null 2>&1 || exit 0; exec seeds check'`, guarded but plain.
+    Neither of the other two runs `--against-git`, so neither catches a mass rewrite.
+- CORRECTION to "What exists today" above: seeds is not the only repo with a commit-time check. Three are, in three shapes. That spread is the argument for a standard recipe.
+
+A candidate standard recipe (not ruled):
+
+```
+# The seed store's integrity check (seeds-7q8g): violations + --against-git.
+# Skips cleanly where seeds is not installed. --smells is on demand only.
+seeds-check:
+    @command -v seeds >/dev/null 2>&1 || exit 0; seeds check --against-git
+```
+
+with `pre-commit: ... seeds-check` wired in the repo's existing pre-commit recipe.
+
+The doctor line (gator's to design): for a non-archived repo with .seeds/seeds/, report when no justfile recipe reachable from `pre-commit` runs `seeds check --against-git`, and suggest the recipe above.
+
+Still open on the seeds side:
+
+- This repo would fail that doctor line: its check lives in .pre-commit-config.yaml and scripts/seeds_check_hook.py, not the justfile.
+- `seeds prime` could name the recipe, so an agent in any repo learns it (seeds-gi9k: guidance ships in the package).
+- The rename-prefix false alarm is unchanged.
