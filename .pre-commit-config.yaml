@@ -78,11 +78,13 @@ repos:
       # Publish first, so beads leave this host even when the code gate below
       # refuses the push. refs/dolt/data is a non-branch ref that `git push`
       # does not carry, so this is the only thing that publishes them
-      # (seeds-tkk). The script decides on bd's output, not its exit code, and
-      # allows silently when bd or a sync.remote is absent; see its header.
+      # (seeds-tkk). bd-publish is the shared command home-manager ships; it
+      # decides on bd's output, not its exit code, and allows silently when bd
+      # or a sync.remote is absent (seeds-iaz). Guarded like beads-pre-commit:
+      # a host or clone without bd-publish skips the publish silently.
       - id: beads-publish
         name: bd dolt push (publish this host's beads)
-        entry: scripts/beads-publish
+        entry: sh -c 'command -v bd-publish >/dev/null 2>&1 || exit 0; bd-publish'
         language: system
         pass_filenames: false
         always_run: true
