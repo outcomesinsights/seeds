@@ -1,10 +1,12 @@
 ---
 id: seeds-3iqb
 title: The body-discard guard should protect a body written at create time, not only an edited one
-status: captured
+status: resolved
 type: decision
 created_at: 2026-09-30T13:19:57.775133+00:00
-updated_at: 2026-09-30T13:19:57.775133+00:00
+updated_at: 2026-09-30T16:03:29.825213+00:00
+resolved_at: 2026-09-30T16:03:29.825201+00:00
+resolution: 'Shipped as option 1 in seeds-atw (commit 1c7707a, marked breaking): the discard guard protects every non-empty body, including one written at create time, and --replace is the only way to discard one. The paths that caused the conceptql-a5f loss are closed by seeds-4s8 (append plus replace refused, swallowed --append value refused) and seeds-7ib (swallowed flags refused for every free-text option).'
 ---
 
 The body-discard guard on `seeds update --content` protects a body only after the seed has been edited since creation (`has_been_edited`: `updated_at != created_at`). A body written at `seeds create` time is replaceable with no warning and no `--replace`. The guard's own docstring gives the reason: a never-edited seed "has never been added to", so replacing it is the botched-capture or encoding-repair case.
