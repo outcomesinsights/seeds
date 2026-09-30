@@ -125,8 +125,8 @@ expensive for an agent, which has to re-emit the whole body verbatim as a shell
 argument. `--content-file` and `--content -` take the same body without argv,
 on `create` as well as on `update`.
 All three are mutually exclusive, and on `update` all three respect the guard that refuses
-to replace a body that has been edited since it was created (`--replace`
-overrides it).
+to replace any non-empty body, including one written at create time
+(`--replace` overrides it; `--append` adds to the body instead).
 
 ### Types
 
