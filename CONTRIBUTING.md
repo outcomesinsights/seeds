@@ -173,8 +173,8 @@ Install the hooks for both stages, or the pre-push stage never fires:
 `prek install --hook-type pre-commit --hook-type pre-push` (`pre-commit` works
 too). On push they run `just pre-push`, the full local CI equivalent, which you
 can also run by hand. It lives in the `justfile`; `.pre-commit-config.yaml`
-only wires it to the push, behind a step that publishes this host's beads when
-`bd` is installed and does nothing otherwise.
+only wires it to the push, behind a step that publishes this host's beads with
+the shared `bd-publish` command when it is installed and does nothing otherwise.
 
 `just pre-push` runs `uv lock --check` first, because `uv sync` and `uv run` both
 re-lock and would otherwise make it pass unconditionally. Then mypy (strict),
