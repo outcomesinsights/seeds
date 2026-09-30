@@ -4,5 +4,29 @@
   "version": "0.7.0a8",
   "author": {
     "name": "Outcomes Insights"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "seeds prime"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "seeds prime"
+          }
+        ]
+      }
+    ]
   }
 }

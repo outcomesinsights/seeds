@@ -381,7 +381,8 @@ Every run prints the exact command that reverts the state it just created.
 ### AI Context
 
 ```bash
-seeds prime                              # Output context for AI agents
+seeds prime                              # Short context for AI agents (what the plugin hooks inject)
+seeds prime --full                       # The full reference: every command, recipes, project-state digest
 ```
 
 ## Trellises
@@ -400,7 +401,7 @@ Under the hood this appends a provenance-stamped bullet under a managed `## Prin
 
 ## Claude Code Skills
 
-Seeds ships a small set of skills for use with [Claude Code](https://claude.com/claude-code), distributed as a local plugin. Installing them is step 2 of [Installation](#installation): `seeds skills install`, and `seeds skills install --reinstall` after each CLI upgrade. It registers the bundled marketplace and installs the `seeds` plugin under the `seeds:*` namespace.
+Seeds ships a small set of skills for use with [Claude Code](https://claude.com/claude-code), distributed as a local plugin. Installing them is step 2 of [Installation](#installation): `seeds skills install`, and `seeds skills install --reinstall` after each CLI upgrade. It registers the bundled marketplace and installs the `seeds` plugin under the `seeds:*` namespace. The plugin also runs `seeds prime` (the short form) at every session start and before compaction, as the beads plugin does with `bd prime`.
 
 ### Available skills
 

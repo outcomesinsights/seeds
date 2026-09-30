@@ -2114,30 +2114,44 @@ def tree(ctx: Context, seed_id: str) -> None:
 
 @main.command()
 @click.option(
+    "--full",
+    is_flag=True,
+    help="Print the full reference (every command, capture examples, recipes) "
+    "and the full project-state digest, instead of the short hook-sized form",
+)
+@click.option(
     "--no-digest",
     is_flag=True,
-    help="Omit the project-state digest (counts, recent, exploration, questions, tags)",
+    help="Omit project state: the digest (counts, recent, exploration, questions, "
+    "tags) with --full, the one count line without it",
 )
 @click.option(
     "--digest-limit",
     type=int,
     default=20,
     show_default=True,
-    help="Max entries in the 'Recently Updated' section",
+    help="Max entries in --full's 'Recently Updated' section (the short form "
+    "has no list to cap)",
 )
-def prime(no_digest: bool, digest_limit: int) -> None:
+def prime(full: bool, no_digest: bool, digest_limit: int) -> None:
     """Output AI-optimized workflow context for Claude Code hooks.
+
+    By default prints the SHORT form (about bd prime's size): seed-or-bead,
+    capture, essential commands, correcting, session end, and one count line.
+    The seeds plugin injects it at every session start and before compaction
+    (`seeds skills install` sets that up). `seeds prime --full` prints the
+    full reference and the project-state digest.
 
     Silently exits with code 0 if not in a seeds project.
     This enables cross-platform hook integration where both
     seeds and beads hooks can coexist.
 
-    On an UNCONVERTED project it still emits the full document and still exits
-    0 -- but the document carries the conversion notice twice, once at the top
-    and once where the project-state block would have been. Returning
-    normal-looking context there was the defect (seeds-4co.18): the static half
-    rendered, the state block vanished silently, and an agent reading it
-    concluded the project had no seeds.
+    On an UNCONVERTED project it still emits the document, in either form, and
+    still exits 0 -- but the document carries the conversion notice twice, once
+    at the top and once where the project-state block would have been.
+    Returning normal-looking context there was the defect (seeds-4co.18): the
+    static half rendered, the state block vanished silently, and an agent
+    reading it concluded the project had no seeds.
     """
     from seeds.prime import get_prime_output
 
@@ -2156,6 +2170,7 @@ def prime(no_digest: bool, digest_limit: int) -> None:
         # the reader is told a block is missing.
         click.echo(
             get_prime_output(
+                full=full,
                 include_digest=False,
                 unconverted=needs_conversion(seeds_dir),
             )
@@ -2165,6 +2180,7 @@ def prime(no_digest: bool, digest_limit: int) -> None:
     click.echo(
         get_prime_output(
             store=store,
+            full=full,
             include_digest=not no_digest,
             digest_limit=digest_limit,
         )
@@ -3159,6 +3175,10 @@ def skills() -> None:
 def install(reinstall: bool) -> None:
     """Install (and enable) the seeds Claude Code plugin (provides seeds:* skills).
 
+    The plugin also declares SessionStart and PreCompact hooks that run
+    `seeds prime`, so every session starts, and every compaction resumes, with
+    the short seeds primer in context.
+
     Idempotent and safe to re-run. Always ensures the plugin ends up *enabled* —
     install/update alone can leave it disabled, which silently drops every
     seeds:* skill from new Claude Code sessions. Pass --reinstall (alias
@@ -3220,7 +3240,10 @@ def install(reinstall: bool) -> None:
     claude("plugin", "enable", plugin, "--scope", "user")
 
     click.echo(f"seeds plugin {action} and enabled.")
-    click.echo("Start a new Claude Code session to load the seeds:* skills.")
+    click.echo(
+        "Start a new Claude Code session to load the seeds:* skills "
+        "and the `seeds prime` session hooks."
+    )
 
 
 @main.command("candidates")

@@ -80,7 +80,7 @@ file stops being written on conversion day, so those loops break — or worse,
 keep returning pre-conversion data and reporting nothing. ``--cross-repo``
 therefore runs the *old* recipe (cat the committed JSONL of every repo into
 DuckDB) and the *new* one (``seeds export --json`` of every converted copy into
-DuckDB, the recipe ``seeds prime`` now documents) over the same repo set, and
+DuckDB, the recipe ``seeds prime --full`` now documents) over the same repo set, and
 diffs the two tables. Where they disagree because the committed JSONL was
 already stale against its own SQLite, that is recorded as such — the
 replacement is not merely equivalent there, it is right where the old recipe
@@ -1387,7 +1387,9 @@ def run_repo(
         )
 
     # 4. prime: static template allowlisted, generated digest compared in full.
-    o, n = old("prime"), new("prime")
+    # 0.6 has one prime; its 0.7 equivalent is `--full`, since the default is
+    # now the short hook-sized form with no digest to compare (seeds-oiy).
+    o, n = old("prime"), new("prime", "--full")
     old_head, old_digest = split_prime(o.stdout)
     new_head, new_digest = split_prime(n.stdout)
     prime_findings: list[Finding] = []

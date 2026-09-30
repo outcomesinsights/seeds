@@ -230,7 +230,8 @@ seeds abandon seeds-a1b2                        # decided against
 seeds list                                      # what's open
 seeds show seeds-a1b2                           # one seed in detail
 seeds tree                                      # hierarchy view
-seeds prime                                     # context for an AI agent
+seeds prime                                     # short context for an AI agent
+seeds prime --full                              # the full reference, with the current seeds
 seeds search "<regex>"                          # ripgrep over the seed files
 seeds history seeds-a1b2                        # how it changed, commit by commit
 seeds check                                     # verify the seed files
@@ -242,11 +243,13 @@ You will rarely type any of these yourself. That is fine.
 
 ## How to get your AI to actually drive
 
-The single most important integration is `seeds prime`. Run it at the start
-of a session — or, better, configure your tool to run it automatically —
-and pipe the output into the agent's context. The agent will know the
-landscape: what's open, what's recently moved, what questions are
-unanswered.
+The single most important integration is `seeds prime`. It prints a short
+primer — seed or bead, what to capture, the essential commands, and how many
+seeds, open questions and explorations the store holds — sized to be injected
+into every session. `seeds skills install` sets that up for Claude Code: the
+seeds plugin runs `seeds prime` at session start and before compaction.
+`seeds prime --full` prints the full reference and the landscape: what's open,
+what's recently moved, what questions are unanswered.
 
 After that, the leverage comes from a few prompting patterns. None of these
 are deep magic; they're just the patterns that work best in my experience.
@@ -282,8 +285,9 @@ Questions block the parent seed from resolving until they're answered.
 This is good pressure.
 
 **Run `seeds prime` between sessions.** AI agents lose context between
-conversations. Priming gets the new agent up to speed in seconds. Many
-projects also wire `seeds prime` into a session-start hook.
+conversations. Priming gets the new agent up to speed in seconds. With the
+seeds plugin installed this happens on its own at every session start and
+compaction; elsewhere, wire `seeds prime` into your tool's session-start hook.
 
 ## Patterns I've seen pay off
 

@@ -47,7 +47,9 @@ if TYPE_CHECKING:
 
 PRIME_OUTPUT = """# seeds Workflow Context
 
-> **Context Recovery**: Run `seeds prime` after compaction, clear, or new session
+> **Context Recovery**: this is the full reference (`seeds prime --full`). The short
+> form (`seeds prime`) is what the seeds plugin injects at session start and
+> before compaction.
 
 # SESSION CLOSE PROTOCOL
 
@@ -187,6 +189,7 @@ canonicality is a smell and never a violation.
 - `seeds defer <id>` - Move to backlog
 - `seeds abandon <id> --reason="..."` - Abandon with reason
 - `seeds update <id> --append="..."` - Add to content
+- `seeds update <id> --edit OLD NEW` - Correct one exact span in place (a fact that turned out false; see below)
 - `seeds update <id> --content="..."` - REPLACES the whole body; refused whenever the seed already has a body (use `--append`, or `--replace` to discard deliberately)
 - `seeds update <id> --add-tag=foo --remove-tag=bar` - Edit tags one at a time, leaving every other tag in place (both repeatable; removing a tag the seed lacks is a no-op reported as "0 removed")
 - `seeds update <id> --tags=foo,bar` - REPLACES the whole tag set; cannot be combined with `--add-tag`/`--remove-tag`
@@ -316,6 +319,50 @@ directory name; `seeds rename-prefix` changes it later.
 """
 
 
+PRIME_SHORT_OUTPUT = """# seeds Workflow Context
+
+> **Context Recovery**: this is the short form, injected at session start and after compaction.
+> Run `seeds prime --full` for the full reference: capture examples, every command, current seeds.
+
+## Seed or bead? (decide BEFORE you file anything)
+- **Unruled → seed.** A question, an option list, a "Not ruled. Directions: (a)… (b)…", a design fork inside a bug report. The person rules; the seed holds the argument.
+- **Ruled → bead.** Work with a decision behind it. A bead's `--design` field holds only decisions already made.
+- A report that is part defect, part design question is BOTH: a bead for the defect, a seed (or `seeds ask` on an existing seed) for the fork.
+- Confirming a decision records it in the seed; it does not authorize building it.
+
+## Capture the journey, not just the conclusion
+- Capture DURING the work: what you checked and why, what you found (with counts), what the user said (verbatim).
+- Eliminated options and invalidated assumptions are worth a line each.
+- **Fence** anything that must stay verbatim (logs, output, SQL, tracebacks). Bodies are formatted on write; unfenced literals get mangled.
+
+## Essential Commands
+- `seeds jot "thought"`: capture in one line, title only
+- `seeds create -t "Title" --type idea|question|decision|exploration --content-file F`: a seed with a body; keep multi-paragraph bodies out of argv
+- `seeds ask "question?" --seed <id>` / `seeds answer <id> "answer"`: questions attached to a seed
+- `seeds ready` · `seeds list` · `seeds show <id>` · `seeds search "<regex>"`: find and read
+- `seeds update <id> --append -` (body on stdin): add to a seed's deliberation, the normal way to write to an existing seed
+- `seeds explore` / `defer` / `resolve -r "outcome"` / `abandon -r "why"` `<id>`: lifecycle
+- **WARNING**: `-c/--content` REPLACES a body and is refused on any non-empty one. Never use it to add.
+
+## Correcting what a seed says
+- A fact that turned out **false**: fix it in place with `seeds update <id> --edit OLD NEW`.
+- A position we **moved past**: append a dated note (`RULED YYYY-MM-DD: …`, `UPDATE …`). Do not delete the old position.
+
+## Session end
+- `seeds check`, then commit `.seeds/seeds/*.md` like any source file. There is no export step.
+- Commit new seed files BEFORE starting implementation, so they don't get swept into the implementation's commits.
+"""
+"""The default ``seeds prime``: hook-sized, injected at every session start and
+compaction by the plugin's hooks (bead seeds-oiy, ruled on seed seeds-i9y6.1).
+
+It is sized against ``bd prime`` (~3,300 characters), which the beads plugin
+injects the same way; a test pins a budget so it cannot quietly grow back into
+the ~6,000-token document that nothing could afford to inject. Everything else
+lives in :data:`PRIME_OUTPUT`, printed by ``seeds prime --full``. "Seed or
+bead?" leads because putting deliberation into beads is the failure this form
+exists to stop (seed seeds-i9y6)."""
+
+
 CONVERSION_BANNER = """\
 > **⚠ THIS PROJECT'S SEED STORE IS OUT OF DATE — run `seeds convert` first.**
 > `.seeds/` still holds the pre-0.7 `seeds.jsonl` and no `.seeds/seeds/` tree.
@@ -436,27 +483,51 @@ def build_digest(
     return "\n".join(lines)
 
 
+def build_store_line(store: Store) -> str:
+    """The short form's whole digest: one computed count line.
+
+    The lists (recent, exploring, questions, tags) live in ``--full``; the
+    short form only says how much is there and where to look next.
+    """
+    all_seeds = store.list_seeds(include_terminal=True)
+    questions = store.list_seeds(
+        seed_type=SeedType.QUESTION.value, include_terminal=False
+    )
+    exploring = [s for s in all_seeds if s.status == SeedStatus.EXPLORING]
+    return (
+        f"**Store:** {len(all_seeds)} seeds · {len(questions)} open questions · "
+        f"{len(exploring)} exploring. `seeds ready` shows what needs attention."
+    )
+
+
 def get_prime_output(
     store: Store | None = None,
     *,
+    full: bool = False,
     include_digest: bool = True,
     digest_limit: int = 20,
     unconverted: bool = False,
 ) -> str:
     """Get the prime output for AI context injection.
 
-    If ``store`` is supplied and ``include_digest`` is true, appends a digest
-    of project state (counts, recent activity, exploration, questions, tag
-    clusters) after the static workflow text. ``digest_limit`` caps the
-    "Recently Updated" entries.
+    ``full`` picks the whole reference (:data:`PRIME_OUTPUT`) over the short,
+    hook-sized default (:data:`PRIME_SHORT_OUTPUT`).
+
+    If ``store`` is supplied and ``include_digest`` is true, appends project
+    state after the static text: the full digest (counts, recent activity,
+    exploration, questions, tag clusters) for ``full``, the one count line for
+    the short form. ``digest_limit`` caps the full digest's "Recently Updated"
+    entries and has nothing to cap in the short form.
 
     ``unconverted`` wraps the static text in the two-part conversion notice
-    instead — see the module docstring on why it is two parts and why this
-    still returns a full, usable document.
+    instead, in either form — see the module docstring on why it is two parts
+    and why this still returns a usable document.
     """
-    body = PRIME_OUTPUT.strip()
+    body = (PRIME_OUTPUT if full else PRIME_SHORT_OUTPUT).strip()
     if unconverted:
         return f"{CONVERSION_BANNER}\n\n{body}\n\n{CONVERSION_NOTICE}"
     if store is None or not include_digest:
         return body
+    if not full:
+        return body + "\n\n" + build_store_line(store)
     return body + "\n\n" + build_digest(store, limit_recent=digest_limit).lstrip("\n")

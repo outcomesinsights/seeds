@@ -149,7 +149,7 @@ Cutting a release (manual steps; intentionally no automation yet):
 
 The pre-commit hook runs `seeds check --gate` over the seed-file store: the
 violations tier and `--against-git`, either of which blocks the commit. It is
-the same one-line check every repo using seeds is meant to run (`seeds prime`
+the same one-line check every repo using seeds is meant to run (`seeds prime --full`
 prints the recipe). `--against-git` is
 the gate on the *shape* that corrupted this repo's own corpus — one field
 rewritten across a large slice of the store in a single sweep — and it is also
