@@ -192,6 +192,23 @@ canonicality is a smell and never a violation.
 - `seeds update <id> --tags=foo,bar` - REPLACES the whole tag set; cannot be combined with `--add-tag`/`--remove-tag`
 - `seeds answer <seed-id> "..."` - Answer a question-seed
 
+### Correcting vs. Superseding (classify BEFORE you edit)
+When earlier text in a body is wrong, ask: **was it FALSE, or a position we MOVED PAST?**
+- **A fact that turned out FALSE is replaced in place.** Do not mark it; the
+  old value lives in git (`seeds history <id>`).
+- **A position or argument that was moved past is kept, and marked** — as the
+  first non-blank line after the heading it retires, reason mandatory:
+
+```
+## <heading of the retired position>
+> [!SUPERSEDED] YYYY-MM-DD — <why it no longer holds>
+```
+
+The marker retires everything down to the next heading of the same or higher
+level; there is no mid-section (floating) marker. The known failure is not
+ignorance of the rule but misfiling: marking a corrected fact as superseded.
+`seeds check` refuses a misplaced or reasonless marker.
+
 ### Viewing
 - `seeds list` - All non-terminal seeds
 - `seeds show <id>` - Detailed view; the body renders live content, with superseded text dropped and its heading + marker line kept

@@ -140,6 +140,8 @@ For the candidates that survived step 2, compare the seeds' conclusions with wha
 
 For divergences worth keeping, **append** them to the relevant seed with `seeds update <id> --append` — never `-c/--content`, which *replaces* and would destroy the original deliberation. Both the original reasoning and "what we actually did in the end" should stay legible. Propose the reconciliation; let the user confirm it. Capture only what's genuinely new — don't restate what the seed already says.
 
+If the reconciliation edits the seed's existing text instead, classify it first (`seeds prime`, *Correcting vs. Superseding*): a fact that was false is fixed in place; a position moved past is kept and marked `> [!SUPERSEDED] YYYY-MM-DD — <reason>` under its heading.
+
 A seed from the **not shipped** pile is also worth an append: recording that the work is still outstanding, and which bead was mistaken for it, is more valuable than silence.
 
 ## 4. Capture an efficacy note

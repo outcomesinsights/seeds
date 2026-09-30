@@ -88,6 +88,11 @@ so you can see that a position was moved past and why. `--full` prints
 everything. Nothing is removed from the file either way — the render is what is
 selective.
 
+Only a *position that was moved past* gets that marker. A *fact that turned out
+false* is replaced in place, with the old value left to git. `seeds prime` and
+`seeds update --help` state the rule for agents, because misfiling one as the
+other is the observed failure.
+
 `seeds history` reads a seed's evolution out of git: one line per commit in
 which the seed actually changed, giving the date, the author, the fields that
 differ from the previous revision, and the commit subject. It **structures and

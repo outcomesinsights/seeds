@@ -1638,6 +1638,15 @@ def update(
     --type accepts any string, matching `seeds create`. Before this existed a
     seed's type was write-once and the only way to change it was hand-editing
     the store -- which is how the malformed records in seed seeds-1x6b got in.
+
+    Correcting vs. superseding -- was the old text FALSE, or a position we
+    MOVED PAST? A fact that turned out false is replaced in place; do not mark
+    it, the old value lives in git. A position that was moved past is kept and
+    marked, as the first non-blank line after the heading it retires, with a
+    mandatory reason (no mid-section marker; `seeds check` enforces both):
+
+    \b
+        > [!SUPERSEDED] YYYY-MM-DD — <reason>
     """
     store = ctx.get_store()
     record = get_seed_or_exit(store, seed_id)
