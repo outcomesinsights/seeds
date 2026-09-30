@@ -67,4 +67,6 @@ Present first; the verb writes nothing and neither does this skill until the use
 - **Neglected deferral** — `seeds explore <id>` to pick it back up, or `seeds abandon <id> -r "<reason>"` to let it go.
 - **Long-unresolved** — resolve it, abandon it, or park it with `seeds defer <id>`; `defer` takes no reason flag, so write the reason first with `seeds update <id> --append`.
 
+If a ruling means editing a body's existing text rather than appending, classify it first (`seeds prime`, *Correcting vs. Superseding*): a fact that was false is fixed in place; a position moved past is kept and marked `> [!SUPERSEDED] YYYY-MM-DD — <reason>` under its heading.
+
 Leave anything the user did not rule on untouched. An unresolved finding is a fine place to stop; a finding closed on your own judgment is not.

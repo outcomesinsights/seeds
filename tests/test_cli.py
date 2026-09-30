@@ -3131,6 +3131,60 @@ class TestPrimeCommand:
         assert "FENCE anything that must stay verbatim" in result.output
         assert "mdformat" in result.output
 
+    def test_prime_states_the_correct_vs_supersede_discipline(
+        self, cli_runner, initialized_env
+    ):
+        """Bead seeds-2ya (seed seeds-sdhc.3's lived test).
+
+        The recorded failure was an agent that KNEW the marker but misfiled a
+        corrected fact as a superseded position. So prime has to carry the
+        discriminating question and both halves of the rule, not just syntax.
+        """
+        result = cli_runner.invoke(main, ["prime"])
+
+        assert result.exit_code == 0
+        out = result.output
+        assert "was it FALSE, or a position we MOVED PAST?" in out
+        assert "A fact that turned out FALSE is replaced in place." in out
+        assert "A position or argument that was moved past is kept, and marked" in out
+        assert "first non-blank line after the heading it retires" in out
+        assert "reason mandatory" in out
+        assert "no mid-section (floating) marker" in out
+        assert "> [!SUPERSEDED] YYYY-MM-DD — <why it no longer holds>" in out
+
+    def test_prime_supersede_example_obeys_the_marker_grammar(
+        self, cli_runner, initialized_env
+    ):
+        """The example prime teaches must parse under the strict reader (§6.1),
+        so the guidance cannot drift from the spec it summarises."""
+        from seeds.seedfile import superseded_scopes
+
+        out = cli_runner.invoke(main, ["prime"]).output
+        _, _, section = out.partition("### Correcting vs. Superseding")
+        example = section.split("```")[1].strip("\n")
+        body = (
+            example.replace("<heading of the retired position>", "Old position")
+            .replace("YYYY-MM-DD", "2026-09-30")
+            .replace("<why it no longer holds>", "overtaken by the new design")
+            + "\n\nretired text\n"
+        )
+
+        (scope,) = superseded_scopes(body)
+        assert scope.reason == "overtaken by the new design"
+
+    def test_update_help_states_the_correct_vs_supersede_discipline(self, cli_runner):
+        """`update` is the verb agents edit bodies with, so its --help carries
+        the rule too (bead seeds-2ya)."""
+        result = cli_runner.invoke(main, ["update", "--help"])
+
+        assert result.exit_code == 0
+        text = " ".join(result.output.split())
+        assert "was the old text FALSE, or a position we MOVED PAST?" in text
+        assert "A fact that turned out false is replaced in place" in text
+        assert "A position that was moved past is kept and marked" in text
+        assert "first non-blank line after the heading it retires" in text
+        assert "> [!SUPERSEDED] YYYY-MM-DD — <reason>" in result.output
+
     def test_prime_teaches_the_cross_repo_rg_recipe(self, cli_runner, initialized_env):
         """Bead seeds-4co.20: the gap prime exists to close.
 
