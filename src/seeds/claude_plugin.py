@@ -1,8 +1,9 @@
 """The seeds Claude Code plugin, as seen through Claude Code's own CLI.
 
 One detector, shared: the installer asks it whether the plugin is already
-there, and ``seeds doctor`` asks it whether the plugin is missing, disabled or
-stale (bead seeds-p7ns). A second copy of the parsing would be free to disagree
+there, and ``seeds doctor`` and ``seeds setup claude --check`` ask it whether
+the plugin is missing, disabled or stale (beads seeds-p7ns, seeds-fuiz). A
+second copy of the parsing would be free to disagree
 with the first about what "installed" means, which is the drift this module
 exists to prevent.
 
@@ -25,8 +26,8 @@ MARKETPLACE = "seeds-marketplace"
 # The commands a finding tells the user to run. `install` always ends by
 # enabling, so it is the fix for both "missing" and "disabled"; `--reinstall`
 # replaces a cached copy whose version no longer matches the CLI.
-INSTALL_FIX = "seeds skills install"
-REINSTALL_FIX = "seeds skills install --reinstall"
+INSTALL_FIX = "seeds setup claude"
+REINSTALL_FIX = "seeds setup claude --reinstall"
 
 
 class ClaudeListError(Exception):
@@ -94,7 +95,7 @@ def plugin_installs() -> list[PluginInstall]:
 
 
 def user_install(installs: list[PluginInstall]) -> PluginInstall | None:
-    """The user-scope install -- the one `seeds skills install` manages."""
+    """The user-scope install -- the one `seeds setup claude` manages."""
     return next((i for i in installs if i.scope == "user"), None)
 
 
@@ -151,7 +152,7 @@ def check_plugin(expected_version: str) -> PluginCheck:
         if install.scope == "user":
             fix = REINSTALL_FIX
         else:
-            # `seeds skills install` touches user scope only. Updating in place
+            # `seeds setup claude` touches user scope only. Updating in place
             # is the least that fixes this copy: it leaves the project's own
             # settings, and its choice to install seeds there, alone.
             fix = f"claude plugin update {PLUGIN} --scope {install.scope}"

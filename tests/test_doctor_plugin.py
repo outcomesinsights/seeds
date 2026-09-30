@@ -98,7 +98,7 @@ class TestCheckPlugin:
         check = claude_plugin.check_plugin(__version__)
 
         assert [(p.message, p.fix) for p in check.problems] == [
-            ("not installed at user scope", "seeds skills install")
+            ("not installed at user scope", "seeds setup claude")
         ]
 
     def test_a_project_scope_copy_does_not_count_as_installed(self, fake_claude):
@@ -108,7 +108,7 @@ class TestCheckPlugin:
 
         check = claude_plugin.check_plugin(__version__)
 
-        assert [p.fix for p in check.problems] == ["seeds skills install"]
+        assert [p.fix for p in check.problems] == ["seeds setup claude"]
 
     def test_disabled(self, fake_claude):
         fake_claude([entry(enabled=False)])
@@ -116,7 +116,7 @@ class TestCheckPlugin:
         check = claude_plugin.check_plugin(__version__)
 
         assert [(p.message, p.fix) for p in check.problems] == [
-            ("installed but disabled", "seeds skills install")
+            ("installed but disabled", "seeds setup claude")
         ]
 
     def test_stale(self, fake_claude):
@@ -127,7 +127,7 @@ class TestCheckPlugin:
         assert [(p.message, p.fix) for p in check.problems] == [
             (
                 f"stale: user scope has 0.5.0, this CLI is {__version__}",
-                "seeds skills install --reinstall",
+                "seeds setup claude --reinstall",
             )
         ]
 
@@ -165,7 +165,7 @@ class TestCheckPlugin:
             ),
             (
                 f"stale: user scope has 0.5.0, this CLI is {__version__}",
-                "seeds skills install --reinstall",
+                "seeds setup claude --reinstall",
             ),
         ]
 
@@ -200,7 +200,7 @@ class TestDoctorReportsThePlugin:
 
         assert result.exit_code == 0, result.output
         assert "⚠ Claude Code plugin: not installed at user scope" in result.output
-        assert "Fix: seeds skills install\n" in result.output
+        assert "Fix: seeds setup claude\n" in result.output
 
     def test_disabled(self, project, fake_claude):
         fake_claude([entry(enabled=False)])
@@ -209,7 +209,7 @@ class TestDoctorReportsThePlugin:
 
         assert result.exit_code == 0, result.output
         assert "⚠ Claude Code plugin: installed but disabled" in result.output
-        assert "Fix: seeds skills install\n" in result.output
+        assert "Fix: seeds setup claude\n" in result.output
 
     def test_stale(self, project, fake_claude):
         fake_claude([entry(version="0.5.0")])
@@ -218,7 +218,7 @@ class TestDoctorReportsThePlugin:
 
         assert result.exit_code == 0, result.output
         assert "stale: user scope has 0.5.0" in result.output
-        assert "Fix: seeds skills install --reinstall" in result.output
+        assert "Fix: seeds setup claude --reinstall" in result.output
 
     def test_current_is_one_ok_line(self, project, fake_claude):
         fake_claude([entry()])

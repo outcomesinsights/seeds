@@ -246,7 +246,7 @@ You will rarely type any of these yourself. That is fine.
 The single most important integration is `seeds prime`. It prints a short
 primer — seed or bead, what to capture, the essential commands, and how many
 seeds, open questions and explorations the store holds — sized to be injected
-into every session. `seeds skills install` sets that up for Claude Code: the
+into every session. `seeds setup claude` sets that up for Claude Code: the
 seeds plugin runs `seeds prime` at session start and before compaction.
 `seeds prime --full` prints the full reference and the landscape: what's open,
 what's recently moved, what questions are unanswered.

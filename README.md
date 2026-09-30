@@ -59,19 +59,22 @@ obscurely.
 [Claude Code](https://claude.com/claude-code)):
 
 ```bash
-seeds skills install
+seeds setup claude
 ```
 
-This installs and enables the `seeds` Claude Code plugin at user scope, which
-provides the `seeds:*` skills (see [Claude Code Skills](#claude-code-skills)).
+This installs and enables the `seeds` Claude Code plugin at user scope. The
+plugin provides the `seeds:*` skills (see [Claude Code Skills](#claude-code-skills))
+and the SessionStart and PreCompact hooks that run `seeds prime`, so every
+session starts, and every compaction resumes, with the seeds primer in context.
 It uses Claude Code's own `claude plugin` commands and changes nothing else in
 your Claude Code settings. It is idempotent, so re-running it is safe.
+`seeds skills install` is the older name for the same command.
 
 **After every upgrade of the CLI**, refresh the plugin. Claude Code keeps a
 cached copy, and it does not change until you do:
 
 ```bash
-seeds skills install --reinstall
+seeds setup claude --reinstall
 ```
 
 **3. In each project that should hold seeds**, once:
@@ -405,7 +408,7 @@ Under the hood this appends a provenance-stamped bullet under a managed `## Prin
 
 ## Claude Code Skills
 
-Seeds ships a small set of skills for use with [Claude Code](https://claude.com/claude-code), distributed as a local plugin. Installing them is step 2 of [Installation](#installation): `seeds skills install`, and `seeds skills install --reinstall` after each CLI upgrade. It registers the bundled marketplace and installs the `seeds` plugin under the `seeds:*` namespace. The plugin also runs `seeds prime` (the short form) at every session start and before compaction, as the beads plugin does with `bd prime`.
+Seeds ships a small set of skills for use with [Claude Code](https://claude.com/claude-code), distributed as a local plugin. Installing them is step 2 of [Installation](#installation): `seeds setup claude`, and `seeds setup claude --reinstall` after each CLI upgrade (`seeds skills install` is the older name for the same command). It registers the bundled marketplace and installs the `seeds` plugin under the `seeds:*` namespace. The plugin also runs `seeds prime` (the short form) at every session start and before compaction, as the beads plugin does with `bd prime`.
 
 ### Available skills
 
@@ -417,7 +420,7 @@ Seeds ships a small set of skills for use with [Claude Code](https://claude.com/
 - **`seeds:trellis`** — fires when you say "trellis this" or "make this a trellis"; distills the seed's deliberation into one bounded principle and writes it into durable context via `seeds trellis`.
 - **`seeds:winnow`** — health-checks the *thinking* in the corpus rather than its files ("winnow the seeds", "is our deliberation still sound?") — resolved seeds that contradict each other, resolutions resting on a premise that has since moved, deferrals nobody came back to; runs `seeds winnow`, judges the candidates it scopes, and presents findings for you to rule on.
 
-Re-run `seeds skills install` after upgrading the seeds CLI to pick up updated skill content.
+Run `seeds setup claude --reinstall` after upgrading the seeds CLI to pick up updated skills and session hooks. `seeds doctor` reports a missing, disabled or stale plugin, with the command that fixes it.
 
 ## Acknowledgments
 

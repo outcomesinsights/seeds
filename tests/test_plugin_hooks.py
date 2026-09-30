@@ -4,7 +4,7 @@
 SessionStart and PreCompact hooks in its OWN manifest. ``seeds prime`` once
 reached sessions through a hand edit to the user's settings file, which a
 settings regeneration wiped without a word. A hook in the package survives that
-and reaches every machine that ran ``seeds skills install`` (seeds-gi9k), so the
+and reaches every machine that ran ``seeds setup claude`` (seeds-gi9k), so the
 manifest is the one place these may live, and this test is what keeps them
 there.
 

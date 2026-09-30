@@ -1,6 +1,6 @@
 """Guard that README's skills list still names every shipped skill (bead seeds-xiy).
 
-Skills are discovered by *directory*: ``seeds skills install`` copies
+Skills are discovered by *directory*: ``seeds setup claude`` copies
 ``src/seeds/plugin/claude-plugin/skills/`` wholesale, and ``plugin.json``
 enumerates nothing. So the only declaration of what ships is the directory
 listing — and README carries a second, hand-maintained copy of it under
