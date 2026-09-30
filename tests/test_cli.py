@@ -1697,6 +1697,180 @@ class TestUpdateAppendRefusals:
         assert "swallowed" in result.output
 
 
+class TestUpdateEdit:
+    """``update --edit OLD NEW``: correct one exact span in place (seeds-5i1).
+
+    The sanctioned route for a fact that turned out false (seeds-zxq8, option
+    C): without it the only way to fix one sentence was a whole-body rewrite
+    plus ``--replace``, so corrections got appended below the false text
+    instead. Every refusal is asserted against the seed FILE's bytes.
+    """
+
+    BODY = (
+        "## Findings\n\n"
+        "The cache holds 4 GB. It is rebuilt nightly.\n\n"
+        "The cache holds 4 GB according to the dashboard."
+    )
+
+    def _create(self, cli_runner, content=BODY):
+        result = cli_runner.invoke(
+            main, ["create", "--title", "Edit target", "--content", "-"], input=content
+        )
+        assert result.exit_code == 0, result.output
+        return _extract_created_id(result.output)
+
+    def _bytes_of(self, seed_id):
+        return _store().path_for(seed_id).read_bytes()
+
+    def test_one_occurrence_is_replaced_at_exactly_that_span(
+        self, cli_runner, initialized_env
+    ):
+        seed_id = self._create(cli_runner)
+        before = _store().get(seed_id)
+
+        result = cli_runner.invoke(
+            main,
+            ["update", seed_id, "--edit", "rebuilt nightly", "rebuilt hourly"],
+        )
+        assert result.exit_code == 0, result.output
+
+        after = _store().get(seed_id)
+        assert after.body == before.body.replace("rebuilt nightly", "rebuilt hourly")
+        assert after.updated_at > before.updated_at
+        assert after.title == before.title
+        assert after.tags == before.tags
+        assert after.created_at == before.created_at
+
+    def test_needs_no_replace_on_a_body_the_guard_protects(
+        self, cli_runner, initialized_env
+    ):
+        """An edit, not a discard: the seeds-atw guard does not apply."""
+        seed_id = self._create(cli_runner)
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--edit", "It is rebuilt nightly.", ""]
+        )
+        assert result.exit_code == 0, result.output
+        assert "nightly" not in _store().get(seed_id).body
+
+    @pytest.mark.parametrize(
+        ("old", "count"),
+        [("not in the body", 0), ("The cache holds 4 GB", 2)],
+    )
+    def test_zero_or_several_matches_are_refused_and_name_the_count(
+        self, cli_runner, initialized_env, old, count
+    ):
+        seed_id = self._create(cli_runner)
+        before = self._bytes_of(seed_id)
+
+        result = cli_runner.invoke(main, ["update", seed_id, "--edit", old, "X"])
+        assert result.exit_code != 0
+        assert f"occurs {count} times" in result.stderr
+        assert "Nothing was changed" in result.stderr
+        assert self._bytes_of(seed_id) == before
+
+    def test_an_empty_old_is_refused(self, cli_runner, initialized_env):
+        seed_id = self._create(cli_runner)
+        before = self._bytes_of(seed_id)
+
+        result = cli_runner.invoke(main, ["update", seed_id, "--edit", "", "X"])
+        assert result.exit_code != 0
+        assert "empty" in result.stderr
+        assert self._bytes_of(seed_id) == before
+
+    def test_old_copied_from_show_matches_the_stored_body(
+        self, cli_runner, initialized_env
+    ):
+        """OLD is matched against the stored body, which is what show prints.
+
+        The formatter escapes a stray asterisk on write, so the text an agent
+        typed and the text it reads back differ; the read-back one is the one
+        that matches.
+        """
+        seed_id = self._create(cli_runner, content="Use *foo for the count.")
+        shown = cli_runner.invoke(main, ["show", seed_id]).output
+        assert "Use \\*foo for the count." in shown
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--edit", "Use \\*foo", "Use bar"]
+        )
+        assert result.exit_code == 0, result.output
+        assert _store().get(seed_id).body.strip() == "Use bar for the count."
+
+    def test_the_result_goes_through_the_formatter(self, cli_runner, initialized_env):
+        seed_id = self._create(cli_runner, content="Use bar for the count.")
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--edit", "Use bar", "Use *foo"]
+        )
+        assert result.exit_code == 0, result.output
+        assert _store().get(seed_id).body.strip() == "Use \\*foo for the count."
+
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            ["--content", "new body"],
+            ["--content", "-"],
+            ["--content-file", "F.md"],
+            ["--append", "more"],
+            ["--append", "-"],
+        ],
+    )
+    def test_combined_with_another_body_route_is_refused(
+        self, cli_runner, initialized_env, extra
+    ):
+        seed_id = self._create(cli_runner)
+        (initialized_env / "F.md").write_text("file body\n")
+        before = self._bytes_of(seed_id)
+
+        result = cli_runner.invoke(
+            main,
+            ["update", seed_id, "--edit", "nightly", "hourly", *extra],
+            input="stdin body\n",
+        )
+        assert result.exit_code != 0
+        assert "contradictory" in result.stderr
+        assert self._bytes_of(seed_id) == before
+
+    @pytest.mark.parametrize("position", [0, 1])
+    def test_a_value_that_is_exactly_a_flag_name_is_refused_as_swallowed(
+        self, cli_runner, initialized_env, position
+    ):
+        seed_id = self._create(cli_runner)
+        before = self._bytes_of(seed_id)
+        values = ["nightly", "hourly"]
+        values[position] = "--allow-unknown-refs"
+
+        result = cli_runner.invoke(main, ["update", seed_id, "--edit", *values])
+        assert result.exit_code != 0
+        assert "--edit took --allow-unknown-refs" in result.stderr
+        assert '--edit "..." "..." --allow-unknown-refs' in result.stderr
+        assert self._bytes_of(seed_id) == before
+
+    def test_other_text_starting_with_dashes_is_taken_as_written(
+        self, cli_runner, initialized_env
+    ):
+        seed_id = self._create(cli_runner, content="The flag is --verbose here.")
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--edit", "--verbose here", "--quiet here"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "--quiet here" in _store().get(seed_id).body
+
+    def test_new_is_checked_for_unknown_seed_refs(self, cli_runner, initialized_env):
+        seed_id = self._create(cli_runner)
+        before = self._bytes_of(seed_id)
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--edit", "nightly", "per seeds-zzzz"]
+        )
+        assert result.exit_code != 0
+        assert self._bytes_of(seed_id) == before
+
+    def test_documented_in_help(self, cli_runner):
+        result = cli_runner.invoke(main, ["update", "--help"])
+        assert result.exit_code == 0
+        assert "--edit OLD NEW" in result.output
+
+
 class TestSwallowedFlagRefusals:
     """Free-text options eating the next flag as their value (seeds-7ib).
 
