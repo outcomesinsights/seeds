@@ -4,7 +4,7 @@ title: Should seeds ship its commit-time check to the other repos that keep seed
 status: exploring
 type: exploration
 created_at: 2026-09-30T18:08:42.113398+00:00
-updated_at: 2026-09-30T18:25:32.782973+00:00
+updated_at: 2026-09-30T18:27:55.174946+00:00
 ---
 
 **The question:** Should seeds offer the repos that use it a commit-time `seeds check`, the way the seeds repo itself runs one? If so, how: a documented pre-commit snippet, a `seeds` command that installs it, or `seeds doctor` running `check`?
@@ -106,3 +106,5 @@ Still open on the seeds side:
 - This repo would fail that doctor line: its check lives in .pre-commit-config.yaml and scripts/seeds_check_hook.py, not the justfile.
 - `seeds prime` could name the recipe, so an agent in any repo learns it (seeds-gi9k: guidance ships in the package).
 - The rename-prefix false alarm is unchanged.
+
+Update 2026-09-30: gator filed the doctor line as gator-38o and implemented it on Ryan's lean (vetoable). For any repo with .seeds/seeds it reports either nothing on the commit path running seeds check (it looks at the justfile pre-commit/ci closure OR a pre-commit config entry), suggesting the guarded --against-git recipe above; or seeds check run without --against-git, naming the in-place-rewrite blind spot and the rename-prefix false alarm. It never suggests --smells. First fleet run: 25 repos run nothing; code_set_catalog and code_collector run it without --against-git; seeds and gator are clean. Because doctor also accepts a config entry, this repo's hook-script wiring already passes, so the open point that this repo would fail the line is moot.
