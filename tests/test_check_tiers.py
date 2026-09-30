@@ -47,8 +47,8 @@ NOW = datetime(2026, 8, 31, 12, 0, 0, tzinfo=UTC)
 CREATED = datetime(2026, 8, 28, 14, 2, 11, 481293, tzinfo=UTC)
 UPDATED = datetime(2026, 8, 30, 9, 41, 7, 220118, tzinfo=UTC)
 
-# 100 paragraphs of 24 bytes each = 2400 bytes, comfortably over the 2000-byte
-# LONG_BODY_BYTES threshold and computed here rather than guessed at.
+# 100 paragraphs of 24 bytes each = 2400 bytes: over the 2000 bytes the retired
+# unsuperseded-long-body smell counted as long, computed rather than guessed at.
 LONG_BODY = "Deliberation paragraph.\n" * 100
 SHORT_BODY = "One line of thinking.\n"
 
@@ -165,8 +165,15 @@ class TestDuplicateBodySmell:
         assert codes(check_smells(seeds_dir)) == ["empty-body"] * 3
 
 
-class TestUnsupersededLongBodySmell:
-    """Long AND much-edited AND unmarked. Any one of the three alone is fine."""
+class TestRetiredUnsupersededLongBodySmell:
+    """Bead seeds-oq2 retired ``unsuperseded-long-body`` (option C, seed seeds-zxq8).
+
+    A moved-past position is now recorded as an appended, dated note and the
+    ``[!SUPERSEDED]`` marker is optional, so a long, much-edited body without a
+    marker is the norm. The smell fired on exactly that shape (5 commits and
+    2000 bytes, no marker), so that shape, with and without dated notes, must
+    now score zero.
+    """
 
     def build(self, tmp_path: Path, body: str, *, commits: int) -> Path:
         """A repo whose one seed has been touched by ``commits`` commits."""
@@ -181,22 +188,22 @@ class TestUnsupersededLongBodySmell:
             git(tmp_path, "commit", "-q", "-m", f"edit {n}")
         return seeds_dir
 
-    def test_long_and_much_edited_and_unmarked_is_a_smell(self, tmp_path):
-        seeds_dir = self.build(tmp_path, LONG_BODY, commits=5)
-        findings = check_smells(seeds_dir)
-        assert codes(findings) == ["unsuperseded-long-body"]
-        assert "5 commits" in findings[0].message
-
-    def test_a_long_body_with_few_commits_is_not_flagged(self, tmp_path):
-        """Four commits is under the threshold; the smell is about history."""
-        seeds_dir = self.build(tmp_path, LONG_BODY, commits=4)
+    def test_a_long_much_edited_unmarked_body_is_not_a_smell(self, tmp_path):
+        """The exact shape the smell used to report: 2400 bytes, 8 commits."""
+        seeds_dir = self.build(tmp_path, LONG_BODY, commits=8)
         assert check_smells(seeds_dir) == []
 
-    def test_a_short_body_with_many_commits_is_not_flagged(self, tmp_path):
-        seeds_dir = self.build(tmp_path, SHORT_BODY, commits=8)
+    def test_a_long_body_carrying_appended_dated_notes_is_not_a_smell(self, tmp_path):
+        body = (
+            LONG_BODY
+            + "\nUPDATE 2026-09-30: the earlier position no longer holds.\n"
+            + "\nRULED 2026-09-30: option C.\n"
+        )
+        seeds_dir = self.build(tmp_path, body, commits=8)
         assert check_smells(seeds_dir) == []
 
-    def test_a_supersede_marker_anywhere_in_the_body_clears_it(self, tmp_path):
+    def test_a_marked_long_body_is_still_not_a_smell(self, tmp_path):
+        """The marker stays valid grammar: optional, never penalised."""
         body = (
             "## Dolt would give us cell-level merge\n"
             "> [!SUPERSEDED] 2026-08-28 — ordinary git line-merge surfaces the "
@@ -204,19 +211,7 @@ class TestUnsupersededLongBodySmell:
         )
         seeds_dir = self.build(tmp_path, body, commits=8)
         assert check_smells(seeds_dir) == []
-
-    def test_outside_a_git_repo_the_smell_is_silent_not_guessed(self, tmp_path):
-        """Without history there is no second half of the AND to test."""
-        seeds_dir = store(tmp_path, record("seeds-aaa", body=LONG_BODY))
-        assert check_smells(seeds_dir) == []
-
-    def test_an_uncommitted_seed_has_no_history_and_is_not_flagged(self, tmp_path):
-        git_init(tmp_path)
-        seeds_dir = store(tmp_path, record("seeds-aaa", body=LONG_BODY))
-        git(tmp_path, "add", "-A")
-        git(tmp_path, "commit", "-q", "-m", "first")
-        write_seed(seeds_dir, record("seeds-bbb", body=LONG_BODY + "Distinct.\n"))
-        assert check_smells(seeds_dir) == []
+        assert check_violations(seeds_dir, now=NOW) == []
 
 
 class TestSmellFalsePositives:

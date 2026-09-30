@@ -473,8 +473,11 @@ on it.
 
 ### 6.1 The marker
 
-A position that has been moved past is **marked in place**, immediately after
-the heading it retires:
+A position that has been moved past **may be marked in place**, immediately
+after the heading it retires. The marker is optional (option C, seed
+`seeds-zxq8`, ruled 2026-09-30): the usual record of a moved-past position is an
+appended, labelled, dated note (`UPDATE YYYY-MM-DD: …`), which the format treats
+as ordinary body text. When a marker is written, it must follow this grammar:
 
 ```markdown
 ## Dolt would give us cell-level merge
@@ -525,12 +528,14 @@ hit inside a fold lands with no indication it is dead text. With an in-place
 marker, the retiring line sits a few lines above every hit in the section, so
 context arrives with the match.
 
-Supersession is marked by the agent that learned the old claim was wrong, in the
-same edit — not by a later review pass. That agent has the context to write the
-reason clause in one line; a reviewer three weeks later has to reconstruct it and
-will write something vaguer. This is why there is no `tend` verb: with marking at
-write time there is nothing editorial left for it to do, and the noticing
-function lives in `check --smells`.
+Supersession, marked or appended as a dated note, is recorded by the agent that
+learned the old claim was wrong, in the same session — not by a later review
+pass. That agent has the context to write the reason in one line; a reviewer
+three weeks later has to reconstruct it and will write something vaguer. This is
+why there is no `tend` verb: with recording at write time there is nothing
+editorial left for it to do. (`check --smells` once flagged a long, much-edited
+body with no marker as `unsuperseded-long-body`; with the marker optional that
+shape is the norm, and bead `seeds-oq2` retired the smell.)
 
 ### 6.4 Body emptiness
 
@@ -565,11 +570,13 @@ in one pass with a remediation per finding.
 Two different things, two different treatments, and confusing them is how a
 store becomes either a lie or an unreadable pile.
 
-- **A fact that turned out false is fixed in place.** The prior value is in git.
-  Carrying a wrong number forward costs context and risks an agent acting on it.
-- **A position that was moved past is marked, never deleted.** It is what stops
-  the question being re-litigated. Deleting the losing argument means someone
-  makes it again next month.
+- **A fact that turned out false is fixed in place**, with `--edit OLD NEW` on
+  `seeds update`. The prior value is in git. Carrying a wrong number forward
+  costs context and risks an agent acting on it.
+- **A position that was moved past is kept, never deleted**, and the move is
+  recorded as an appended, dated note; the §6.1 marker is optional. It is what
+  stops the question being re-litigated. Deleting the losing argument means
+  someone makes it again next month.
 
 ### Nothing is destroyed; the RENDER is what is selective
 

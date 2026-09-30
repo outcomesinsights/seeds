@@ -3308,38 +3308,48 @@ class TestPrimeCommand:
     def test_prime_states_the_correct_vs_supersede_discipline(
         self, cli_runner, initialized_env
     ):
-        """Bead seeds-2ya (seed seeds-sdhc.3's lived test).
+        """Beads seeds-2ya and seeds-oq2 (option C, seed seeds-zxq8).
 
-        The recorded failure was an agent that KNEW the marker but misfiled a
-        corrected fact as a superseded position. So prime has to carry the
-        discriminating question and both halves of the rule, not just syntax.
+        The recorded failure is misfiling, not ignorance, so prime carries the
+        discriminating question and both halves of the rule: a FALSE fact goes
+        through --edit in place; a position MOVED PAST gets an appended, dated
+        note. The marker is still named, as optional, never as asked for.
         """
         result = cli_runner.invoke(main, ["prime"])
 
         assert result.exit_code == 0
         out = result.output
         assert "was it FALSE, or a position we MOVED PAST?" in out
-        assert "A fact that turned out FALSE is replaced in place." in out
-        assert "A position or argument that was moved past is kept, and marked" in out
-        assert "first non-blank line after the heading it retires" in out
-        assert "reason mandatory" in out
-        assert "no mid-section (floating) marker" in out
-        assert "> [!SUPERSEDED] YYYY-MM-DD — <why it no longer holds>" in out
+        assert "A fact that turned out FALSE is corrected in place" in out
+        assert "`seeds update <id> --edit OLD NEW`" in out
+        assert "MOVED PAST is kept, and a labelled, dated note" in out
+        assert "`seeds update <id> --append`, labelled RULED, UPDATE or" in out
+        assert "UPDATE YYYY-MM-DD: <what changed" in out
+        assert "still valid but optional" in out
+        # The old instruction, that a moved-past position is MARKED, is gone.
+        assert "is kept, and marked" not in out
+        assert "reason mandatory" not in out
 
-    def test_prime_supersede_example_obeys_the_marker_grammar(
+    def test_prime_names_the_marker_in_a_form_the_strict_reader_accepts(
         self, cli_runner, initialized_env
     ):
-        """The example prime teaches must parse under the strict reader (§6.1),
-        so the guidance cannot drift from the spec it summarises."""
+        """Under C the example block shows a dated note, not a marker, so this
+        test (seeds-2ya's grammar check, changed by seeds-oq2) now parses the
+        marker prime names inline: optional guidance still cannot drift from
+        the §6.1 grammar it summarises."""
         from seeds.seedfile import superseded_scopes
 
         out = cli_runner.invoke(main, ["prime"]).output
         _, _, section = out.partition("### Correcting vs. Superseding")
-        example = section.split("```")[1].strip("\n")
+        section = section.split("\n### ")[0]
+        (marker,) = [
+            span for span in section.split("`") if span.startswith("> [!SUPERSEDED]")
+        ]
         body = (
-            example.replace("<heading of the retired position>", "Old position")
-            .replace("YYYY-MM-DD", "2026-09-30")
-            .replace("<why it no longer holds>", "overtaken by the new design")
+            "## Old position\n"
+            + marker.replace("YYYY-MM-DD", "2026-09-30").replace(
+                "<reason>", "overtaken by the new design"
+            )
             + "\n\nretired text\n"
         )
 
@@ -3348,16 +3358,17 @@ class TestPrimeCommand:
 
     def test_update_help_states_the_correct_vs_supersede_discipline(self, cli_runner):
         """`update` is the verb agents edit bodies with, so its --help carries
-        the rule too (bead seeds-2ya)."""
+        the rule too (beads seeds-2ya, seeds-oq2)."""
         result = cli_runner.invoke(main, ["update", "--help"])
 
         assert result.exit_code == 0
         text = " ".join(result.output.split())
         assert "was the old text FALSE, or a position we MOVED PAST?" in text
-        assert "A fact that turned out false is replaced in place" in text
-        assert "A position that was moved past is kept and marked" in text
-        assert "first non-blank line after the heading it retires" in text
-        assert "> [!SUPERSEDED] YYYY-MM-DD — <reason>" in result.output
+        assert "turned out false is corrected in place with --edit" in text
+        assert "a labelled, dated note is appended with --append" in text
+        assert "UPDATE YYYY-MM-DD: <what changed, and why>" in result.output
+        assert "still valid, but optional" in text
+        assert "is kept and marked" not in text
 
     def test_prime_teaches_the_cross_repo_rg_recipe(self, cli_runner, initialized_env):
         """Bead seeds-4co.20: the gap prime exists to close.
