@@ -18,10 +18,21 @@ body = """
 {% else -%}
 ## [Unreleased]
 {% endif %}
+{#- Breaking changes lead the release, with the BREAKING CHANGE footer text,
+    because they decide the version number (a breaking change warrants the
+    minor bump, decided before pushing). Until seeds-e4q this template never
+    read `breaking`, so a `!` commit rendered as an ordinary line. -#}
+{% set breaking = commits | filter(attribute="breaking", value=true) -%}
+{% if breaking | length > 0 %}
+### Breaking changes
+{% for commit in breaking -%}
+- {{ commit.message | split(pat="\\n") | first | upper_first | trim }}{% if commit.id %} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/outcomesinsights/seeds/commit/{{ commit.id }})){% endif %}{% if commit.breaking_description and commit.breaking_description != commit.message %}: {{ commit.breaking_description | replace(from="\n", to=" ") | trim }}{% endif %}
+{% endfor %}
+{%- endif -%}
 {% for group, commits in commits | group_by(attribute="group") %}
 ### {{ group }}
 {% for commit in commits -%}
-- {{ commit.message | split(pat="\\n") | first | upper_first | trim }}{% if commit.id %} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/outcomesinsights/seeds/commit/{{ commit.id }})){% endif %}
+- {% if commit.breaking %}**Breaking:** {% endif %}{{ commit.message | split(pat="\\n") | first | upper_first | trim }}{% if commit.id %} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/outcomesinsights/seeds/commit/{{ commit.id }})){% endif %}
 {% endfor %}
 {%- endfor %}
 """
