@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
-from seeds.cli import main
+from seeds.cli import _seeds_flag_names, main
 from seeds.idgen import is_hash_suffix
 from seeds.models import (
     RelationType,
@@ -1695,6 +1695,240 @@ class TestUpdateAppendRefusals:
         assert result.exit_code == 0
         assert "contradict" in result.output
         assert "swallowed" in result.output
+
+
+class TestSwallowedFlagRefusals:
+    """Free-text options eating the next flag as their value (seeds-7ib).
+
+    ``create -t swallow -c --allow-unknown-refs`` wrote the body
+    "--allow-unknown-refs" and ``resolve ID --resolution --force`` recorded the
+    resolution "--force", both exit 0. Two rules, one helper:
+
+    * ``-c/--content`` has a stdin and a file route, so any argv value starting
+      with "--" is refused, as ``--append``'s is (seeds-4s8).
+    * ``--title``, ``--resolution``, ``--reason``, ``--as`` and ``--section``
+      have no other route, so only a value exactly equal to a seeds flag name
+      is refused; other "--" text is taken as written.
+
+    "Nothing was changed" is asserted against every file in the store.
+    """
+
+    def _snapshot(self):
+        root = Path.cwd() / SEEDS_DIR
+        return {
+            p.relative_to(root): p.read_bytes()
+            for p in sorted(root.rglob("*"))
+            if p.is_file()
+        }
+
+    def _create(self, cli_runner, *extra):
+        result = cli_runner.invoke(main, ["create", "--title", "Target", *extra])
+        assert result.exit_code == 0, result.output
+        return _extract_created_id(result.output)
+
+    # -- the two demonstrated cases ---------------------------------------
+
+    def test_create_content_swallowing_a_flag_creates_nothing(
+        self, cli_runner, initialized_env
+    ):
+        before = self._snapshot()
+
+        result = cli_runner.invoke(
+            main, ["create", "-t", "swallow", "-c", "--allow-unknown-refs"]
+        )
+        assert result.exit_code != 0
+        assert "swallowed" in result.stderr
+        assert "Nothing was created." in result.stderr
+        assert "--content -" in result.stderr
+        assert "--content-file PATH" in result.stderr
+        assert self._snapshot() == before
+
+    def test_resolve_resolution_swallowing_a_flag_changes_nothing(
+        self, cli_runner, initialized_env
+    ):
+        seed_id = self._create(cli_runner)
+        before = self._snapshot()
+
+        result = cli_runner.invoke(
+            main, ["resolve", seed_id, "--resolution", "--force"]
+        )
+        assert result.exit_code != 0
+        assert "--resolution took --force" in result.stderr
+        assert "Nothing was changed." in result.stderr
+        assert "no way" in result.stderr
+        assert self._snapshot() == before
+
+    # -- -c/--content: any "--" value, with the stdin and file routes -----
+
+    @pytest.mark.parametrize("value", ["--replace", "--verbose is broken"])
+    def test_update_content_starting_with_dashes_is_refused(
+        self, cli_runner, initialized_env, value
+    ):
+        seed_id = self._create(cli_runner)
+        before = self._snapshot()
+
+        result = cli_runner.invoke(main, ["update", seed_id, "-c", value])
+        assert result.exit_code != 0
+        assert "swallowed" in result.stderr
+        assert f"| seeds update {seed_id} --content -" in result.stderr
+        assert f"seeds update {seed_id} --content-file PATH" in result.stderr
+        assert self._snapshot() == before
+
+    def test_create_content_text_starting_with_dashes_is_refused_too(
+        self, cli_runner, initialized_env
+    ):
+        before = self._snapshot()
+        result = cli_runner.invoke(main, ["create", "-t", "t", "-c", "--x y"])
+        assert result.exit_code != 0
+        assert self._snapshot() == before
+
+    def test_create_body_starting_with_dashes_arrives_on_stdin(
+        self, cli_runner, initialized_env
+    ):
+        # The route the refusal names, run as printed (printf adds the newline).
+        result = cli_runner.invoke(
+            main,
+            ["create", "--title", "swallow", "--content", "-"],
+            input="--allow-unknown-refs\n",
+        )
+        assert result.exit_code == 0, result.output
+        seed_id = _extract_created_id(result.output)
+        assert _store().get(seed_id).body.rstrip("\n") == "--allow-unknown-refs"
+
+    def test_create_body_starting_with_dashes_arrives_from_a_file(
+        self, cli_runner, initialized_env
+    ):
+        path = initialized_env / "body.md"
+        path.write_text("--verbose is broken\n")
+        seed_id = self._create(cli_runner, "--content-file", str(path))
+        assert _store().get(seed_id).body.rstrip("\n") == "--verbose is broken"
+
+    def test_update_body_starting_with_dashes_arrives_on_stdin(
+        self, cli_runner, initialized_env
+    ):
+        seed_id = self._create(cli_runner)
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--content", "-"], input="--replace\n"
+        )
+        assert result.exit_code == 0, result.output
+        assert _store().get(seed_id).body.rstrip("\n") == "--replace"
+
+    def test_update_body_starting_with_dashes_arrives_from_a_file(
+        self, cli_runner, initialized_env
+    ):
+        seed_id = self._create(cli_runner)
+        path = initialized_env / "body.md"
+        path.write_text("--replace\n")
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--content-file", str(path)]
+        )
+        assert result.exit_code == 0, result.output
+        assert _store().get(seed_id).body.rstrip("\n") == "--replace"
+
+    def test_a_single_dash_content_is_still_text(self, cli_runner, initialized_env):
+        seed_id = self._create(cli_runner, "-c", "-1 vote")
+        assert _store().get(seed_id).body.rstrip("\n") == "-1 vote"
+
+    # -- no-route options: only an exact seeds flag name ------------------
+
+    def _no_route_argv(self, command, seed_id, initialized_env, value):
+        target = str(initialized_env / "TARGET.md")
+        return {
+            "create --title": ["create", "--title", value],
+            "update --title": ["update", seed_id, "--title", value],
+            "resolve --resolution": ["resolve", seed_id, "--resolution", value],
+            "abandon --reason": ["abandon", seed_id, "--reason", value],
+            "trellis --as": ["trellis", seed_id, "--to", target, "--as", value],
+            "trellis --section": [
+                "trellis",
+                seed_id,
+                "--to",
+                target,
+                "--as",
+                "a principle",
+                "--section",
+                value,
+            ],
+        }[command]
+
+    NO_ROUTE = (
+        "create --title",
+        "update --title",
+        "resolve --resolution",
+        "abandon --reason",
+        "trellis --as",
+        "trellis --section",
+    )
+
+    @pytest.mark.parametrize("command", NO_ROUTE)
+    @pytest.mark.parametrize(
+        "flag",
+        # The command's own flags, and another command's (--force is glean's,
+        # --no-rewrite-bodies a secondary name on rename-prefix).
+        ["--allow-unknown-refs", "--no-resolve", "--force", "--no-rewrite-bodies"],
+    )
+    def test_a_seeds_flag_name_is_refused(
+        self, cli_runner, initialized_env, command, flag
+    ):
+        seed_id = self._create(cli_runner)
+        before = self._snapshot()
+
+        result = cli_runner.invoke(
+            main, self._no_route_argv(command, seed_id, initialized_env, flag)
+        )
+        assert result.exit_code != 0
+        option = command.split()[1]
+        assert f"{option} took {flag}" in result.stderr
+        assert "swallowed" in result.stderr
+        assert "there is no way" in result.stderr
+        assert self._snapshot() == before
+        assert not (initialized_env / "TARGET.md").exists()
+
+    @pytest.mark.parametrize("command", NO_ROUTE)
+    def test_other_text_starting_with_dashes_is_taken_as_written(
+        self, cli_runner, initialized_env, command
+    ):
+        """The working route the refusal names: anything but a bare flag name."""
+        seed_id = self._create(cli_runner)
+        value = "--force is broken"
+
+        result = cli_runner.invoke(
+            main, self._no_route_argv(command, seed_id, initialized_env, value)
+        )
+        assert result.exit_code == 0, result.output
+        if command == "create --title":
+            record = _store().get(_extract_created_id(result.output))
+            assert record.title == value
+        elif command == "update --title":
+            assert _store().get(seed_id).title == value
+        elif command in ("resolve --resolution", "abandon --reason"):
+            assert _store().get(seed_id).resolution == value
+        else:
+            assert value in (initialized_env / "TARGET.md").read_text()
+
+    def test_flag_names_are_read_off_every_command(self):
+        """Derived from the Click tree, so a new flag is covered when it lands."""
+        names = _seeds_flag_names()
+        for flag in [
+            "--help",
+            "--version",
+            "--allow-unknown-refs",
+            "--force",
+            "--no-resolve",
+            "--rewrite-bodies",
+            "--no-rewrite-bodies",
+            "--relates-to",
+        ]:
+            assert flag in names, flag
+        assert all(name.startswith("--") for name in names)
+        assert "-c" not in names
+        assert "--force is broken" not in names
+
+    def test_the_refusals_are_documented_in_help(self, cli_runner):
+        for command in (["create"], ["update"]):
+            result = cli_runner.invoke(main, [*command, "--help"])
+            assert result.exit_code == 0
+            assert "swallowed flag" in result.output
 
 
 class TestCreateContentInput:

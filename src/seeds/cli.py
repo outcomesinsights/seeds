@@ -515,37 +515,119 @@ def _reject_append_with_replacement(
     sys.exit(1)
 
 
-def _reject_swallowed_flag_as_append(seed_id: str, append_text: str | None) -> None:
-    """Refuse an ``--append`` value that is really the next flag.
+def _seeds_flag_names() -> frozenset[str]:
+    """Every long option name any seeds command accepts, read off the Click tree.
 
-    ``--append`` takes a value, so Click hands it whatever token follows --
-    ``--append --allow-unknown-refs`` appends the literal text
-    "--allow-unknown-refs" and drops the flag (seeds-4s8). Text starting with
-    "--" is refused on argv; the stdin route (``--append -``) is not checked,
-    because nothing there can have been swallowed, and it is the way the
-    refusal gives for appending such text on purpose.
+    Walked at runtime rather than kept as a list, so a flag added to any
+    command is covered by :func:`_reject_swallowed_flag` the moment it exists.
+    ``--help`` is added by hand because Click builds the help option per
+    invocation instead of storing it in ``params``.
     """
-    if append_text is None or not append_text.startswith("--"):
+    names = {"--help"}
+    pending: list[click.Command] = [main]
+    while pending:
+        command = pending.pop()
+        for param in command.params:
+            if isinstance(param, click.Option):
+                names.update(
+                    o
+                    for o in (*param.opts, *param.secondary_opts)
+                    if o.startswith("--")
+                )
+        if isinstance(command, click.Group):
+            pending.extend(command.commands.values())
+    return frozenset(names)
+
+
+class SwallowCopy(NamedTuple):
+    """How :func:`_reject_swallowed_flag` words its refusal for one option.
+
+    ``stdin_purpose`` is set only for an option with a stdin route (``OPTION
+    -``), and names what that route is for ("append text", "write a body").
+    ``file_route`` is an extra working command for an option that can also
+    read a file.
+    """
+
+    option: str
+    takes: str
+    command: str
+    outcome: str = "Nothing was changed."
+    stdin_purpose: str | None = None
+    file_route: str | None = None
+
+
+def _reject_swallowed_flag(value: str | None, copy: SwallowCopy) -> None:
+    """Refuse a free-text option value that is really the next flag.
+
+    A value-taking option gets whatever token follows it, so ``--append
+    --allow-unknown-refs`` appended the literal text "--allow-unknown-refs"
+    and dropped the flag (seeds-4s8), and ``create -c --allow-unknown-refs`` and
+    ``resolve ID --resolution --force`` did the same, exit 0 (seeds-7ib).
+
+    What counts as swallowed depends on whether the option has another way in:
+
+    * With a stdin route (``--append -``, ``--content -``), any argv value
+      starting with "--" is refused, and the refusal names that route -- text
+      that really starts with dashes arrives that way, where nothing can have
+      been swallowed.
+    * Without one (``--title``, ``--resolution``, ``--reason``, ``--as``,
+      ``--section``), refusing every "--" value would make such text
+      impossible, so only a value exactly equal to a seeds flag name -- any
+      command's, see :func:`_seeds_flag_names` -- is refused. Other text
+      starting with "--" is taken as written.
+
+    Runs before anything is read from a file or stdin, or written anywhere.
+    """
+    if value is None or not value.startswith("--"):
+        return
+    if copy.stdin_purpose is None and value not in _seeds_flag_names():
         return
 
+    quoted = shlex.quote(value)
     click.echo(
-        f"Error: --append took {shlex.quote(append_text)} as the text to "
-        "append. That looks like the next flag, swallowed because --append "
-        "takes a value. Nothing was changed.",
+        f"Error: {copy.option} took {quoted} as {copy.takes}. That looks like "
+        f"the next flag, swallowed because {copy.option} takes a value. "
+        f"{copy.outcome}",
         err=True,
     )
     click.echo(
-        f"  If it is a flag, give --append its text first:  seeds update {seed_id} "
-        f'--append "..." {shlex.quote(append_text)}',
+        f"  If it is a flag, give {copy.option} its text first:  {copy.command} "
+        f'{copy.option} "..." {quoted}',
         err=True,
     )
-    click.echo(
-        '  To append text that really starts with "--", pipe it in:  '
-        f"printf '%s\\n' {shlex.quote(append_text)} "
-        f"| seeds update {seed_id} --append -",
-        err=True,
-    )
+    if copy.stdin_purpose is None:
+        click.echo(
+            '  Other text starting with "--" is taken as written. Only a value '
+            f"that is exactly a seeds flag name is refused, and there is no way "
+            f"to pass one as {copy.takes}.",
+            err=True,
+        )
+    else:
+        click.echo(
+            f'  To {copy.stdin_purpose} that really starts with "--", pipe it '
+            f"in:  printf '%s\\n' {quoted} | {copy.command} {copy.option} -",
+            err=True,
+        )
+    if copy.file_route is not None:
+        click.echo(f"  Or read it from a file:  {copy.file_route}", err=True)
     sys.exit(1)
+
+
+def _reject_swallowed_content(
+    content: str | None, command: str, outcome: str = "Nothing was changed."
+) -> None:
+    """``-c/--content`` on ``create`` and ``update``: the stdin-route rule."""
+    _reject_swallowed_flag(
+        content,
+        SwallowCopy(
+            option="--content",
+            takes="the body",
+            command=command,
+            outcome=outcome,
+            stdin_purpose="write a body",
+            file_route=f"{command} --content-file PATH",
+        ),
+    )
 
 
 def _apply_tag_edits(
@@ -704,7 +786,9 @@ SEED_TYPES = [t.value for t in SeedType]
     metavar="TEXT",
     help="Full content/description, single line only. Pass - to read the body "
     "from stdin; a body that spans lines must use --content-file or --content -, "
-    "because a shell substitutes `backticks` in argv before seeds sees them.",
+    "because a shell substitutes `backticks` in argv before seeds sees them. "
+    'Text starting with "--" is refused on argv as a swallowed flag; pipe it in '
+    "with --content - or use --content-file.",
 )
 @click.option(
     "--content-file",
@@ -748,6 +832,17 @@ def create(
     was `create` followed by `update --content-file`.
     """
     store = ctx.get_store()
+
+    created = "Nothing was created."
+    _reject_swallowed_flag(
+        title,
+        SwallowCopy(
+            option="--title", takes="the title", command="seeds create", outcome=created
+        ),
+    )
+    _reject_swallowed_content(
+        content, f"seeds create --title {shlex.quote(title)}", created
+    )
 
     body = _resolve_content(content, content_file)
     if body is None:
@@ -1276,9 +1371,22 @@ def defer(ctx: Context, seed_id: str) -> None:
 @click.option("--resolution", "-r", help="What was decided or what happened")
 @pass_context
 def resolve(ctx: Context, seed_id: str, resolution: str | None) -> None:
-    """Mark a seed as resolved."""
+    """Mark a seed as resolved.
+
+    A --resolution value that is exactly a seeds flag name (--force, say) is
+    refused as a flag swallowed by --resolution; other text starting with "--"
+    is recorded as written.
+    """
     store = ctx.get_store()
     record = get_seed_or_exit(store, seed_id)
+    _reject_swallowed_flag(
+        resolution,
+        SwallowCopy(
+            option="--resolution",
+            takes="the resolution",
+            command=f"seeds resolve {record.id}",
+        ),
+    )
 
     record.status = SeedStatus.RESOLVED
     record.resolved_at = now_utc()
@@ -1295,9 +1403,19 @@ def resolve(ctx: Context, seed_id: str, resolution: str | None) -> None:
 @click.option("--reason", "-r", help="Reason for abandoning")
 @pass_context
 def abandon(ctx: Context, seed_id: str, reason: str | None) -> None:
-    """Abandon a seed (decided not to pursue)."""
+    """Abandon a seed (decided not to pursue).
+
+    A --reason value that is exactly a seeds flag name is refused as a flag
+    swallowed by --reason; other text starting with "--" is recorded as written.
+    """
     store = ctx.get_store()
     record = get_seed_or_exit(store, seed_id)
+    _reject_swallowed_flag(
+        reason,
+        SwallowCopy(
+            option="--reason", takes="the reason", command=f"seeds abandon {record.id}"
+        ),
+    )
 
     record.status = SeedStatus.ABANDONED
     record.resolved_at = now_utc()
@@ -1349,11 +1467,23 @@ def trellis(
     the file named by --to, records two-way provenance (a bullet citing the
     seed in the file; a resolution naming the file on the seed), tags the seed
     'trellis', and resolves it (unless --no-resolve is passed).
+
+    An --as or --section value that is exactly a seeds flag name is refused as
+    a swallowed flag, before the file or the seed is touched; other text
+    starting with "--" is taken as written.
     """
     from seeds.trellis import append_to_managed_section
 
     store = ctx.get_store()
     record = get_seed_or_exit(store, seed_id)
+    command = f"seeds trellis {record.id} --to {shlex.quote(target_file)}"
+    _reject_swallowed_flag(
+        principle, SwallowCopy(option="--as", takes="the principle", command=command)
+    )
+    _reject_swallowed_flag(
+        section,
+        SwallowCopy(option="--section", takes="the section heading", command=command),
+    )
 
     date_str = now_utc().strftime("%Y-%m-%d")
     bullet = f"- {principle} — {record.id}, {date_str}"
@@ -1397,7 +1527,9 @@ def trellis(
         "New content, single line only (replaces existing; refused once a seed "
         "has been edited). Pass - to read the body from stdin; a body that "
         "spans lines must use --content-file or --content -, because a shell "
-        "substitutes `backticks` in argv before seeds sees them."
+        "substitutes `backticks` in argv before seeds sees them. Text starting "
+        'with "--" is refused on argv as a swallowed flag; pipe it in with '
+        "--content - or use --content-file."
     ),
 )
 @click.option(
@@ -1499,6 +1631,9 @@ def update(
     both. --append takes a value, so an --append value starting with "--" is
     refused too -- it is almost always the next flag, swallowed as the text.
     To append text that really starts with "--", pipe it in with --append -.
+    The same holds for -c/--content (use --content - or --content-file). A
+    --title that is exactly a seeds flag name is refused as swallowed too;
+    other titles starting with "--" are taken as written.
 
     --type accepts any string, matching `seeds create`. Before this existed a
     seed's type was write-once and the only way to change it was hand-editing
@@ -1507,12 +1642,25 @@ def update(
     store = ctx.get_store()
     record = get_seed_or_exit(store, seed_id)
 
-    # Both refusals run before anything is read from a file or stdin, so a
+    # Every refusal runs before anything is read from a file or stdin, so a
     # refused command consumes nothing and writes nothing.
     _reject_append_with_replacement(
         record.id, append_text, content, content_file, allow_unknown_refs
     )
-    _reject_swallowed_flag_as_append(record.id, append_text)
+    command = f"seeds update {record.id}"
+    _reject_swallowed_flag(
+        append_text,
+        SwallowCopy(
+            option="--append",
+            takes="the text to append",
+            command=command,
+            stdin_purpose="append text",
+        ),
+    )
+    _reject_swallowed_content(content, command)
+    _reject_swallowed_flag(
+        title, SwallowCopy(option="--title", takes="the title", command=command)
+    )
 
     content = _resolve_content(content, content_file)
     if append_text == STDIN_SENTINEL:
