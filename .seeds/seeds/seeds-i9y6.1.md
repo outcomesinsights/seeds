@@ -5,7 +5,7 @@ status: exploring
 type: question
 parent: seeds-i9y6
 created_at: 2026-09-30T19:56:30.176056+00:00
-updated_at: 2026-09-30T19:59:14.433800+00:00
+updated_at: 2026-09-30T20:02:06.122302+00:00
 tags:
   - cutting
 ---
@@ -78,3 +78,12 @@ tags:
 
 **Store:** <N> seeds · <Q> open questions · <E> exploring (computed). `seeds ready` shows what needs attention.
 ```
+
+## RULED 2026-09-30 (Ryan), on the five points above
+
+1. Yes: SessionStart and PreCompact hooks in the seeds plugin manifest, running `seeds prime`, as beads does.
+2. `seeds prime` IS the short form. The full reference is `seeds prime --full`.
+3. The digest is one computed count line in the short form; the lists live in `--full`.
+4. The seed-vs-bead section leads, worded as in the draft.
+5. This lands after bead seeds-5i1 (`seeds update --edit`), because the short form names `--edit`.
+   Implementation: see the bead sourced from this seed.
