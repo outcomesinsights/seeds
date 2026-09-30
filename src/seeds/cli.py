@@ -79,7 +79,6 @@ from seeds.store import (
     Store,
     StoreError,
     find_seeds_dir,
-    has_been_edited,
     is_terminal,
     needs_conversion,
     new_record,
@@ -263,17 +262,19 @@ def _guard_content_replacement(record: SeedRecord, copy: GuardCopy) -> None:
     of it there is: a short seed refined over a week deserves more protection
     than a long one mispasted ten seconds ago.
 
-    A seed still carrying its creation timestamp has never been added to, so
-    the replacement proceeds silently -- that is the botched-capture and
-    encoding-repair case. So does a seed with an empty body, where there is
-    nothing to lose. Anything else exits non-zero; ``--replace`` is the
-    deliberate override.
+    So the test is only "a non-empty body exists". A seed with an empty body
+    takes the replacement silently, because there is nothing to lose; any
+    other body is refused non-zero, and ``--replace`` is the one deliberate
+    override. That includes a body never touched since ``seeds create``: whole
+    deliberations are written at create time (``--content-file``, the cutting
+    and glean skills), and exempting a never-edited body is how one of those
+    was lost (seeds-3iqb). A botched capture is fixed with ``--replace``.
 
     The *decision* above is shared by every caller; the *prose* is not, and
     arrives in ``copy``. See :class:`GuardCopy` for why that is mandatory
     rather than defaulted.
     """
-    if not record.body.strip() or not has_been_edited(record):
+    if not record.body.strip():
         return
 
     first_line = record.body.strip().splitlines()[0]
@@ -1447,8 +1448,8 @@ def trellis(
     "--replace",
     is_flag=True,
     help=(
-        "Let a --content/--content-file replacement discard content "
-        "accumulated since the seed was created. "
+        "Let a --content/--content-file replacement discard the seed's "
+        "existing body. "
         "For redactions only -- and it does not finish the job: the old body "
         "stays in git history and needs separate scrubbing."
     ),
@@ -1475,10 +1476,11 @@ def update(
 ) -> None:
     """Update a seed's fields.
 
-    --content replaces the body wholesale, so it is refused on a seed that has
-    been edited since it was created; use --append to add to the deliberation,
-    or --replace to discard it deliberately. --title and --tags carry no such
-    guard: tags are working state whose normal verb is replacement.
+    --content replaces the body wholesale, so it is refused on any seed that
+    already has a body -- including one written at create time; use --append
+    to add to the deliberation, or --replace to discard it deliberately.
+    --title and --tags carry no such guard: tags are working state whose
+    normal verb is replacement.
 
     The replacement body does not have to travel through argv: --content-file
     PATH reads it from a file and --content - reads it from stdin. Both are the
@@ -1529,7 +1531,7 @@ def update(
         _guard_content_replacement(
             record,
             GuardCopy(
-                reason="has been edited since it was created",
+                reason="already has a body",
                 subject="--content",
                 append_cmd=f'seeds update {record.id} --append "..."',
                 replace_cmd=f'seeds update {record.id} --content "..." --replace',

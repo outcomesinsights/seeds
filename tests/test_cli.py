@@ -19,7 +19,7 @@ from seeds.models import (
     SeedType,
 )
 from seeds.seedfile import SeedFileError, SeedRecord
-from seeds.store import SEEDS_DIR, Store, new_record
+from seeds.store import SEEDS_DIR, Store, has_been_edited, new_record
 from tests.beadshelpers import (
     call_lines,
     hide_bd,
@@ -1121,8 +1121,9 @@ class TestUpdateCommand:
 class TestUpdateContentGuard:
     """Tests for the --content guard against discarding deliberation.
 
-    The gate is whether the seed has been edited since creation, never how
-    much content it holds -- see the module docstring on ``update``.
+    The gate is whether a non-empty body exists -- never how much content it
+    holds, and never whether it was edited after `create` (seeds-atw, ruled in
+    seeds-3iqb). See the docstring on ``_guard_content_replacement``.
     """
 
     def _create(self, cli_runner, content="Original capture"):
@@ -1150,17 +1151,62 @@ class TestUpdateContentGuard:
         """
         return _store().get(seed_id).body.rstrip("\n")
 
-    def test_virgin_seed_content_replaced_silently(self, cli_runner, initialized_env):
-        """A seed never edited since creation accepts -c with no complaint."""
+    def _bytes_of(self, seed_id):
+        return _store().path_for(seed_id).read_bytes()
+
+    @pytest.mark.parametrize("route", ["argv", "content-file", "stdin"])
+    def test_never_edited_body_is_refused_byte_identical(
+        self, cli_runner, initialized_env, route
+    ):
+        """A body written at `create` is deliberation too (seeds-atw).
+
+        This case replaces the old "virgin seed is replaced silently" test: the
+        never-edited carve-out is exactly how the conceptql-a5f body was lost.
+        """
+        seed_id = self._create(cli_runner)
+        assert not has_been_edited(_store().get(seed_id))
+        before = self._bytes_of(seed_id)
+
+        if route == "argv":
+            args, stdin = ["-c", "wiped"], None
+        elif route == "content-file":
+            body = initialized_env / "body.md"
+            body.write_text("wiped\n")
+            args, stdin = ["--content-file", str(body)], None
+        else:
+            args, stdin = ["-c", "-"], "wiped\n"
+
+        result = cli_runner.invoke(main, ["update", seed_id, *args], input=stdin)
+        assert result.exit_code != 0
+        assert self._bytes_of(seed_id) == before
+        assert "already has a body" in result.stderr
+        assert f'seeds update {seed_id} --append "..."' in result.stderr
+        assert f'seeds update {seed_id} --content "..." --replace' in result.stderr
+
+    def test_never_edited_body_yields_to_replace(self, cli_runner, initialized_env):
+        """--replace is the one way to discard a create-time body."""
         seed_id = self._create(cli_runner)
 
-        result = cli_runner.invoke(main, ["update", seed_id, "-c", "replaced"])
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "-c", "replaced", "--replace"]
+        )
         assert result.exit_code == 0, result.output
-        assert result.stderr == ""
         assert self._content_of(seed_id) == "replaced"
 
-        shown = cli_runner.invoke(main, ["show", seed_id])
-        assert "replaced" in shown.output
+    def test_swallowed_replace_flag_is_no_longer_written_as_the_body(
+        self, cli_runner, initialized_env
+    ):
+        """`-c --replace` takes "--replace" as the TEXT, so no override is set.
+
+        Before seeds-atw a never-edited body was silently set to the literal
+        "--replace". The guard now refuses it like any other replacement.
+        """
+        seed_id = self._create(cli_runner)
+        before = self._bytes_of(seed_id)
+
+        result = cli_runner.invoke(main, ["update", seed_id, "-c", "--replace"])
+        assert result.exit_code != 0
+        assert self._bytes_of(seed_id) == before
 
     def test_edited_seed_content_refused(self, cli_runner, initialized_env):
         """Once appended to, -c exits non-zero and changes nothing."""
@@ -1218,10 +1264,8 @@ class TestUpdateContentGuard:
         assert result.exit_code == 0, result.output
         assert self._content_of(seed_id) == "wiped"
 
-    def test_guard_fires_for_any_edit_not_just_append(
-        self, cli_runner, initialized_env
-    ):
-        """The gate is updated_at, so a status change arms it too."""
+    def test_guard_still_fires_after_a_status_change(self, cli_runner, initialized_env):
+        """A status change leaves the body exactly as protected as before."""
         seed_id = self._create(cli_runner)
         assert cli_runner.invoke(main, ["explore", seed_id]).exit_code == 0
 
@@ -1229,10 +1273,23 @@ class TestUpdateContentGuard:
         assert result.exit_code != 0
         assert self._content_of(seed_id) == "Original capture"
 
-    def test_empty_content_seed_can_be_filled_after_an_edit(
+    def test_empty_content_seed_can_be_filled_without_replace(
         self, cli_runner, initialized_env
     ):
         """Nothing accumulated means nothing to protect: -c just works."""
+        result = cli_runner.invoke(main, ["create", "--title", "Bodyless seed"])
+        assert result.exit_code == 0, result.output
+        seed_id = _extract_created_id(result.output)
+
+        result = cli_runner.invoke(main, ["update", seed_id, "-c", "the body"])
+        assert result.exit_code == 0, result.output
+        assert result.stderr == ""
+        assert self._content_of(seed_id) == "the body"
+
+    def test_empty_content_seed_can_be_filled_after_an_edit(
+        self, cli_runner, initialized_env
+    ):
+        """An edit to an empty seed does not arm the guard either."""
         jotted = cli_runner.invoke(main, ["jot", "A bodyless thought"])
         seed_id = _extract_jot_id(jotted.output)
         assert cli_runner.invoke(main, ["explore", seed_id]).exit_code == 0
@@ -1290,6 +1347,16 @@ class TestUpdateContentInput:
         assert result.exit_code == 0, result.output
         return _extract_created_id(result.output)
 
+    def _create_bodyless(self, cli_runner):
+        """A seed with no body, so a replacement needs no --replace (seeds-atw).
+
+        The route tests below are about how the body arrives, not about the
+        guard; a create-time body would now be refused without --replace.
+        """
+        result = cli_runner.invoke(main, ["create", "--title", "Empty seed"])
+        assert result.exit_code == 0, result.output
+        return _extract_created_id(result.output)
+
     def _content_of(self, seed_id):
         """The seed's body, minus the file's own terminating newline.
 
@@ -1300,7 +1367,7 @@ class TestUpdateContentInput:
         return _store().get(seed_id).body.rstrip("\n")
 
     def test_content_file_replaces_the_body(self, cli_runner, initialized_env):
-        seed_id = self._create(cli_runner)
+        seed_id = self._create_bodyless(cli_runner)
         body = initialized_env / "body.md"
         body.write_text("line one\n\nline two\n")
 
@@ -1314,7 +1381,7 @@ class TestUpdateContentInput:
         self, cli_runner, initialized_env
     ):
         """The whole point: text argv would mangle survives the file route."""
-        seed_id = self._create(cli_runner)
+        seed_id = self._create_bodyless(cli_runner)
         awkward = 'it\'s "quoted" $HOME `backticks`\nand a second line'
         body = initialized_env / "body.md"
         body.write_text(awkward)
@@ -1326,7 +1393,7 @@ class TestUpdateContentInput:
         assert self._content_of(seed_id) == awkward
 
     def test_content_dash_reads_stdin(self, cli_runner, initialized_env):
-        seed_id = self._create(cli_runner)
+        seed_id = self._create_bodyless(cli_runner)
 
         result = cli_runner.invoke(
             main, ["update", seed_id, "-c", "-"], input="piped body\n"
@@ -1373,9 +1440,7 @@ class TestUpdateContentInput:
         assert "ambiguous" in result.stderr
         assert self._content_of(seed_id) == "Original capture"
 
-    def test_content_file_respects_the_edited_seed_guard(
-        self, cli_runner, initialized_env
-    ):
+    def test_content_file_respects_the_body_guard(self, cli_runner, initialized_env):
         seed_id = self._create(cli_runner)
         assert cli_runner.invoke(main, ["update", seed_id, "-a", "more"]).exit_code == 0
         body = initialized_env / "body.md"
@@ -1388,7 +1453,7 @@ class TestUpdateContentInput:
         assert "--replace" in result.stderr
         assert "wiped" not in self._content_of(seed_id)
 
-    def test_stdin_respects_the_edited_seed_guard(self, cli_runner, initialized_env):
+    def test_stdin_respects_the_body_guard(self, cli_runner, initialized_env):
         seed_id = self._create(cli_runner)
         assert cli_runner.invoke(main, ["update", seed_id, "-a", "more"]).exit_code == 0
 
@@ -1596,7 +1661,14 @@ class TestUpdateAppendRefusals:
         )
 
     def test_content_file_alone_still_replaces(self, cli_runner, initialized_env):
-        seed_id = self._create(cli_runner)
+        """Without --append, --content-file still replaces an empty body.
+
+        Bodyless since seeds-atw: a create-time body is now guarded, and this
+        test is about the append refusal staying out of the way.
+        """
+        result = cli_runner.invoke(main, ["create", "--title", "Append target"])
+        assert result.exit_code == 0, result.output
+        seed_id = _extract_created_id(result.output)
         path = self._file(initialized_env)
 
         result = cli_runner.invoke(
@@ -1825,8 +1897,8 @@ class TestUpdateTagEdits:
     def test_no_op_removal_does_not_touch_updated_at(self, cli_runner, initialized_env):
         """A request that matched nothing must not count as an edit.
 
-        Otherwise a typo would silently arm the --content guard on a seed
-        nobody actually changed.
+        Otherwise a typo would make a seed nobody actually changed read as
+        edited (``updated_at == created_at`` is the "never edited" test, §3).
         """
         seed_id = self._create(cli_runner)
         store = _store()
@@ -2560,8 +2632,9 @@ class TestAnswerContentGuard:
     seeds-btr: `answer` assigned the body unconditionally, so re-answering an
     already-answered question destroyed the previous answer with no warning.
     Mirrors TestUpdateContentGuard: reuses `_guard_content_replacement`, so a
-    question that has never been answered (empty content, untouched
-    updated_at) is unaffected -- only a re-answer is guarded.
+    question that has never been answered (`ask` leaves the body empty) is
+    unaffected -- only a re-answer is guarded, whether or not the answer body
+    was ever edited (seeds-atw).
     """
 
     def _ask(self, cli_runner, seed_id="seed-test1"):
@@ -2608,6 +2681,34 @@ class TestAnswerContentGuard:
         result = cli_runner.invoke(main, ["answer", q_id, "an overwriting answer"])
         assert result.exit_code != 0
         assert self._content_of(q_id) == "the original answer"
+
+    def test_re_answer_is_refused_even_when_the_answer_was_never_edited(
+        self, cli_runner, env_with_seeds
+    ):
+        """A never-edited answer body (e.g. converted from pre-0.7) is guarded.
+
+        Before seeds-atw the guard skipped any body whose updated_at still
+        equalled created_at, so this answer would have been overwritten.
+        """
+        record = new_record(
+            "seed-qconv",
+            "What was decided?",
+            body="the converted answer",
+            seed_type="question",
+            status=SeedStatus.RESOLVED,
+        )
+        record.resolved_at = record.created_at
+        _store().create(record)
+        assert not has_been_edited(_store().get("seed-qconv"))
+        path = _store().path_for("seed-qconv")
+        before = path.read_bytes()
+
+        result = cli_runner.invoke(main, ["answer", "seed-qconv", "overwritten"])
+        assert result.exit_code != 0
+        assert "has already been answered" in result.stderr
+        assert 'seeds answer seed-qconv "..." --append' in result.stderr
+        assert 'seeds answer seed-qconv "..." --replace' in result.stderr
+        assert path.read_bytes() == before
 
     def test_replace_flag_overwrites_the_prior_answer(self, cli_runner, env_with_seeds):
         """--replace performs the discard the bare re-answer refused."""
