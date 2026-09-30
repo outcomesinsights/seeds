@@ -1536,8 +1536,9 @@ def _rewritten_bodies(
                     f"inside seeds-154 this way). Exclude .seeds/ from that "
                     f"tool, then `git checkout {before_label} -- {relpath}` "
                     f"puts the deliberation back. If the edit was wanted, "
-                    f"`seeds update {seed_id} --content-file -` records it and "
-                    f"stamps it"
+                    f"piping the wanted body into "
+                    f"`seeds update {seed_id} --content - --replace` records "
+                    f"it and stamps it"
                 ),
             )
         )
