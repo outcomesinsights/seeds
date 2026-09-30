@@ -1,0 +1,13 @@
+# mdformat settings for this repo's markdown (seeds-mwf).
+#
+# Without this file, `just fmt` / `just fmt-check` picked up whatever
+# ~/.mdformat.toml the host had: they passed inside ~ and failed about 25 files
+# in a clone under /tmp. mdformat searches upward from each file, so this
+# file is the nearest config for everything outside the seed store; the store
+# keeps its own .seeds/.mdformat.toml.
+#
+# `frontmatter` is the critical line: the shipped SKILL.md files carry YAML
+# frontmatter, and mdformat without the plugin mangles it. The plugins are
+# pinned in pyproject.toml, and the recipes run mdformat through uv.
+extensions = ["frontmatter", "gfm"]
+number = true

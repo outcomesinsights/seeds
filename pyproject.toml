@@ -78,6 +78,7 @@ packages = ["src/seeds"]
 
 [dependency-groups]
 dev = [
+    "mdformat-frontmatter==2.1.2",
     "mypy>=2.3.1",
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",

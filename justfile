@@ -147,7 +147,7 @@ fmt:
     uv run ruff format .
     git ls-files "*.nix" | xargs -r nixfmt
     just --fmt --unstable
-    git ls-files "*.md" | xargs -r mdformat
+    git ls-files "*.md" | xargs -r uv run mdformat
 
 # Report format drift without changing anything. This is what the hooks run —
 # a formatter that rewrites files mid-commit changes what you already reviewed.
@@ -155,7 +155,7 @@ fmt-check:
     uv run ruff format --check .
     git ls-files "*.nix" | xargs -r nixfmt --check
     just --fmt --check --unstable
-    git ls-files "*.md" | xargs -r mdformat --check
+    git ls-files "*.md" | xargs -r uv run mdformat --check
 
 # Gate: the lock must match pyproject. MUST run before anything invokes
 # `uv run`, which re-locks by default and leaves this passing unconditionally —
