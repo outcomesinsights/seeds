@@ -1,11 +1,13 @@
 ---
 id: seeds-sdhc.2
 title: Detection under files-as-truth is content plausibility — and the two-store doctor vanishes, so it must be replaced not extended
-status: captured
+status: resolved
 type: decision
 parent: seeds-sdhc
 created_at: 2026-08-31T20:05:23.254050+00:00
-updated_at: 2026-09-30T17:22:59.908007+00:00
+updated_at: 2026-09-30T18:08:27.258183+00:00
+resolved_at: 2026-09-30T18:08:27.258175+00:00
+resolution: "Shipped: content-plausibility checks in check.py (title is a path/URL/empty, timestamp order and future timestamps, parent and cycle rules, missing targets and one-sided edges, conflict markers, duplicate bodies, mass-field-rewrite), violation and smell tiers, run from the CLI, the commit hook (cc1ee22) and the converter; doctor's two-store checks removed. Divergence: this seed claimed the mass rule subsumes gating deletions; it does not catch a single deleted seed. Ruled by Ryan 2026-09-30 that this is acceptable, because git keeps every seed file (bead seeds-w9h closed won't-fix). Efficacy: minor, planning-miss (the single-file case was asserted, not tested). resolve-seeds-from-beads sweep 2026-09-30."
 tags:
   - storage
   - detection
