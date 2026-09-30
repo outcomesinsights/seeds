@@ -444,6 +444,109 @@ def _resolve_content(content: str | None, content_file: str | None) -> str | Non
     return content
 
 
+def _flags_meant(append_text: str | None, allow_unknown_refs: bool) -> str:
+    """The trailing flags a corrected ``update`` command should carry.
+
+    A flag-shaped ``--append`` value is almost always a flag the author meant
+    to pass, so a suggestion that dropped it would just trade one wrong command
+    for another (seeds-4s8's report swallowed ``--allow-unknown-refs``).
+    """
+    flags = []
+    if append_text is not None and append_text.startswith("--"):
+        flags.append(append_text)
+    if allow_unknown_refs and "--allow-unknown-refs" not in flags:
+        flags.append("--allow-unknown-refs")
+    return "".join(f" {shlex.quote(f)}" for f in flags)
+
+
+def _reject_append_with_replacement(
+    seed_id: str,
+    append_text: str | None,
+    content: str | None,
+    content_file: str | None,
+    allow_unknown_refs: bool,
+) -> None:
+    """Refuse ``--append`` alongside any route that replaces the body.
+
+    Appending adds to the body and ``-c``/``--content-file``/``--content -``
+    replace it, so a command carrying both cannot mean both. Applying them in
+    sequence -- the old behaviour -- replaced the deliberation and appended to
+    the replacement, silently, exit 0 (seeds-4s8: it wiped a real seed's
+    measured deliberation). Refused rather than ranked, for the same reason as
+    :func:`_reject_ambiguous_tag_flags`.
+    """
+    if append_text is None or (content is None and content_file is None):
+        return
+
+    replacing = []
+    if content == STDIN_SENTINEL:
+        replacing.append("--content -")
+    elif content is not None:
+        replacing.append("--content")
+    if content_file is not None:
+        replacing.append("--content-file")
+
+    click.echo(
+        f"Error: --append adds to the body and {' / '.join(replacing)} "
+        "replaces it, so passing both is contradictory. Nothing was changed.",
+        err=True,
+    )
+    flags = _flags_meant(append_text, allow_unknown_refs)
+    # Suggest both commands in the route the author already chose -- a file,
+    # stdin, or argv -- so either can be run as printed.
+    pipe = ""
+    if content_file not in (None, STDIN_SENTINEL):
+        path = shlex.quote(str(content_file))
+        add = f"--append -{flags} < {path}"
+        replace = f"--content-file {path}{flags}"
+    elif content == STDIN_SENTINEL:
+        add = f"--append -{flags}"
+        replace = f"--content -{flags}"
+        pipe = "... | "
+    else:
+        add = f'--append "..."{flags}'
+        replace = f'--content "..."{flags}'
+    click.echo("  Pick one, as its own command:", err=True)
+    click.echo(f"    Add to the body:   {pipe}seeds update {seed_id} {add}", err=True)
+    click.echo(
+        f"    Replace the body:  {pipe}seeds update {seed_id} {replace}", err=True
+    )
+    sys.exit(1)
+
+
+def _reject_swallowed_flag_as_append(seed_id: str, append_text: str | None) -> None:
+    """Refuse an ``--append`` value that is really the next flag.
+
+    ``--append`` takes a value, so Click hands it whatever token follows --
+    ``--append --allow-unknown-refs`` appends the literal text
+    "--allow-unknown-refs" and drops the flag (seeds-4s8). Text starting with
+    "--" is refused on argv; the stdin route (``--append -``) is not checked,
+    because nothing there can have been swallowed, and it is the way the
+    refusal gives for appending such text on purpose.
+    """
+    if append_text is None or not append_text.startswith("--"):
+        return
+
+    click.echo(
+        f"Error: --append took {shlex.quote(append_text)} as the text to "
+        "append. That looks like the next flag, swallowed because --append "
+        "takes a value. Nothing was changed.",
+        err=True,
+    )
+    click.echo(
+        f"  If it is a flag, give --append its text first:  seeds update {seed_id} "
+        f'--append "..." {shlex.quote(append_text)}',
+        err=True,
+    )
+    click.echo(
+        '  To append text that really starts with "--", pipe it in:  '
+        f"printf '%s\\n' {shlex.quote(append_text)} "
+        f"| seeds update {seed_id} --append -",
+        err=True,
+    )
+    sys.exit(1)
+
+
 def _apply_tag_edits(
     record: SeedRecord, add: Sequence[str], remove: Sequence[str]
 ) -> str:
@@ -1333,7 +1436,12 @@ def trellis(
     "-a",
     "append_text",
     metavar="TEXT",
-    help="Append to content. Pass - to read the appendix from stdin.",
+    help=(
+        "Append to content. Pass - to read the appendix from stdin. Cannot be "
+        "combined with -c/--content-file (append and replace contradict); text "
+        'starting with "--" is refused on argv as a swallowed flag, so pipe '
+        "it in with --append - instead."
+    ),
 )
 @click.option(
     "--replace",
@@ -1384,12 +1492,25 @@ def update(
     than resolved by a precedence rule. Removing a tag the seed does not carry
     is a silent no-op reported as "0 removed".
 
+    --append adds to the body and -c/--content-file/--content - replace it, so
+    combining --append with any of them is refused: the command cannot mean
+    both. --append takes a value, so an --append value starting with "--" is
+    refused too -- it is almost always the next flag, swallowed as the text.
+    To append text that really starts with "--", pipe it in with --append -.
+
     --type accepts any string, matching `seeds create`. Before this existed a
     seed's type was write-once and the only way to change it was hand-editing
     the store -- which is how the malformed records in seed seeds-1x6b got in.
     """
     store = ctx.get_store()
     record = get_seed_or_exit(store, seed_id)
+
+    # Both refusals run before anything is read from a file or stdin, so a
+    # refused command consumes nothing and writes nothing.
+    _reject_append_with_replacement(
+        record.id, append_text, content, content_file, allow_unknown_refs
+    )
+    _reject_swallowed_flag_as_append(record.id, append_text)
 
     content = _resolve_content(content, content_file)
     if append_text == STDIN_SENTINEL:
