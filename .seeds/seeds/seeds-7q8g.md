@@ -4,7 +4,7 @@ title: Should seeds ship its commit-time check to the other repos that keep seed
 status: exploring
 type: exploration
 created_at: 2026-09-30T18:08:42.113398+00:00
-updated_at: 2026-09-30T18:14:56.068033+00:00
+updated_at: 2026-09-30T18:19:31.121513+00:00
 ---
 
 **The question:** Should seeds offer the repos that use it a commit-time `seeds check`, the way the seeds repo itself runs one? If so, how: a documented pre-commit snippet, a `seeds` command that installs it, or `seeds doctor` running `check`?
@@ -56,3 +56,15 @@ Method: the working-tree seeds binary (0.7.0 at f607eb5 plus later commits), rea
 
 - A shipped commit-time check could run violations plus `--against-git` (about 2 s, small output, deterministic, and it catches the in-place rewrites found above) and leave `--smells` out of the commit path. `--smells` costs about 94% of the time and most of the output, and it never gates.
 - A rename-prefix commit needs to be recognized, or the escape hatch named in the refusal. Today it reads as mass deletion.
+
+## Ruled 2026-09-30 (Ryan)
+
+- The commit-time check is violations plus `--against-git`. That is about 2 s, deterministic, with a few lines of output, and it catches in-place rewrites and mass rewrites.
+- `--smells` is NOT part of it, and `seeds doctor` does not run it either ("31s for a doctor to return seems like a long time"). Doctor SUGGESTS it: it names `seeds check --smells` as the thing to run when you want the non-gating report.
+- Archived repos are out of scope, for this and for any rollout. mani (aguynamedryan/mani, a fork of the mani CLI's source whose last real work was 2026-02-26) was not archived and has now been archived on GitHub. Its 5 in-place-rewrite findings above are therefore moot. Note: the fleet's seeds-store conversion sweep committed to mani on 2026-09-02 and 09-09, so that sweep did not skip it. Those sweeps should skip archived repos.
+
+## Still open
+
+- How the check reaches other repos: a documented pre-commit snippet, a `seeds` command that installs it, or something else.
+- The rename-prefix false alarm: a legitimate `seeds rename-prefix` commit reads as a 95% mass deletion under `--against-git` (marketscan_mdcd, 596555b). Recognize the rename, or name the SKIP escape plainly in the refusal.
+- Whether this repo's own hook (scripts/seeds_check_hook.py, CHECK_ARGS = check --against-git --smells, about 7 s per commit here) drops `--smells` to match the ruling.
