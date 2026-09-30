@@ -1433,6 +1433,198 @@ class TestUpdateContentInput:
         assert "--content-file" in result.output
 
 
+class TestUpdateAppendRefusals:
+    """``--append`` next to a replacement, and ``--append`` eating a flag (seeds-4s8).
+
+    ``seeds update <id> --append --allow-unknown-refs --content-file F`` exited
+    0 and replaced a real seed's deliberation: Click handed the flag to
+    ``--append`` as its text, nothing refused append-plus-replace, and the two
+    were applied in sequence. Every refusal here is asserted against the seed
+    FILE's bytes, because "nothing was changed" is the whole claim.
+    """
+
+    def _create(self, cli_runner, content="ORIGINAL BODY line"):
+        result = cli_runner.invoke(
+            main, ["create", "--title", "Append target", "--content", content]
+        )
+        assert result.exit_code == 0, result.output
+        return _extract_created_id(result.output)
+
+    def _bytes_of(self, seed_id):
+        return _store().path_for(seed_id).read_bytes()
+
+    def _content_of(self, seed_id):
+        return _store().get(seed_id).body.rstrip("\n")
+
+    def _file(self, initialized_env, text="new line one\nnew line two\n"):
+        path = initialized_env / "F.md"
+        path.write_text(text)
+        return path
+
+    def test_the_reported_command_is_refused_and_changes_nothing(
+        self, cli_runner, initialized_env
+    ):
+        seed_id = self._create(cli_runner)
+        path = self._file(initialized_env)
+        before = self._bytes_of(seed_id)
+
+        result = cli_runner.invoke(
+            main,
+            [
+                "update",
+                seed_id,
+                "--append",
+                "--allow-unknown-refs",
+                "--content-file",
+                str(path),
+            ],
+        )
+        assert result.exit_code != 0
+        assert self._bytes_of(seed_id) == before
+        # The corrected command keeps the flag that was swallowed.
+        assert f"--append - --allow-unknown-refs < {path}" in result.stderr
+
+    def test_the_suggested_append_command_works(self, cli_runner, initialized_env):
+        """The refusal's own 'add to the body' line, run as printed."""
+        seed_id = self._create(cli_runner)
+        path = self._file(initialized_env)
+
+        result = cli_runner.invoke(
+            main,
+            ["update", seed_id, "--append", "-", "--allow-unknown-refs"],
+            input=path.read_text(),
+        )
+        assert result.exit_code == 0, result.output
+        assert self._content_of(seed_id) == (
+            "ORIGINAL BODY line\n\nnew line one\nnew line two"
+        )
+
+    @pytest.mark.parametrize(
+        ("replacement", "named"),
+        [
+            (["-c", "replaced"], "--content"),
+            (["--content-file", "FILE"], "--content-file"),
+            (["--content", "-"], "--content -"),
+        ],
+    )
+    def test_append_with_any_replacement_is_refused(
+        self, cli_runner, initialized_env, replacement, named
+    ):
+        """Refused, not applied in sequence -- the sequence is what lost the body."""
+        seed_id = self._create(cli_runner)
+        path = self._file(initialized_env)
+        argv = [str(path) if arg == "FILE" else arg for arg in replacement]
+        before = self._bytes_of(seed_id)
+
+        result = cli_runner.invoke(
+            main,
+            ["update", seed_id, "--append", "more", *argv],
+            input="from stdin\n",
+        )
+        assert result.exit_code != 0
+        assert "--append" in result.stderr
+        assert named in result.stderr
+        assert "contradictory" in result.stderr
+        assert self._bytes_of(seed_id) == before
+
+    def test_append_with_replacement_is_refused_even_with_replace(
+        self, cli_runner, initialized_env
+    ):
+        """--replace licenses discarding the body, not appending to its replacement."""
+        seed_id = self._create(cli_runner)
+        before = self._bytes_of(seed_id)
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "-a", "more", "-c", "new", "--replace"]
+        )
+        assert result.exit_code != 0
+        assert self._bytes_of(seed_id) == before
+
+    @pytest.mark.parametrize("value", ["--allow-unknown-refs", "--replace", "--x y"])
+    def test_a_flag_shaped_append_value_is_refused(
+        self, cli_runner, initialized_env, value
+    ):
+        seed_id = self._create(cli_runner)
+        before = self._bytes_of(seed_id)
+
+        result = cli_runner.invoke(main, ["update", seed_id, "--append", value])
+        assert result.exit_code != 0
+        assert "swallowed" in result.stderr
+        assert "--append -" in result.stderr
+        assert self._bytes_of(seed_id) == before
+
+    def test_dash_text_can_still_be_appended_through_stdin(
+        self, cli_runner, initialized_env
+    ):
+        """The way the refusal gives for appending such text on purpose."""
+        seed_id = self._create(cli_runner)
+
+        refused = cli_runner.invoke(main, ["update", seed_id, "--append", "--foo bar"])
+        assert "| seeds update" in refused.stderr
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--append", "-"], input="--foo bar\n"
+        )
+        assert result.exit_code == 0, result.output
+        assert self._content_of(seed_id) == "ORIGINAL BODY line\n\n--foo bar"
+
+    def test_a_single_dash_value_is_still_text(self, cli_runner, initialized_env):
+        """Only '--' is refused; '- item' and '-1' are ordinary appendices."""
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(main, ["update", seed_id, "--append", "-1 vote"])
+        assert result.exit_code == 0, result.output
+        assert self._content_of(seed_id).endswith("-1 vote")
+
+    def test_append_text_still_works(self, cli_runner, initialized_env):
+        seed_id = self._create(cli_runner)
+
+        result = cli_runner.invoke(main, ["update", seed_id, "--append", "more"])
+        assert result.exit_code == 0, result.output
+        assert self._content_of(seed_id) == "ORIGINAL BODY line\n\nmore"
+
+    def test_append_from_a_file_on_stdin_still_works(self, cli_runner, initialized_env):
+        seed_id = self._create(cli_runner)
+        path = self._file(initialized_env)
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--append", "-"], input=path.read_text()
+        )
+        assert result.exit_code == 0, result.output
+        assert self._content_of(seed_id) == (
+            "ORIGINAL BODY line\n\nnew line one\nnew line two"
+        )
+
+    def test_content_file_alone_still_replaces(self, cli_runner, initialized_env):
+        seed_id = self._create(cli_runner)
+        path = self._file(initialized_env)
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--content-file", str(path)]
+        )
+        assert result.exit_code == 0, result.output
+        assert self._content_of(seed_id) == "new line one\nnew line two"
+
+    def test_content_file_with_replace_still_works_on_an_edited_seed(
+        self, cli_runner, initialized_env
+    ):
+        seed_id = self._create(cli_runner)
+        assert cli_runner.invoke(main, ["update", seed_id, "-a", "more"]).exit_code == 0
+        path = self._file(initialized_env)
+
+        result = cli_runner.invoke(
+            main, ["update", seed_id, "--content-file", str(path), "--replace"]
+        )
+        assert result.exit_code == 0, result.output
+        assert self._content_of(seed_id) == "new line one\nnew line two"
+
+    def test_the_refusals_are_documented_in_help(self, cli_runner):
+        result = cli_runner.invoke(main, ["update", "--help"])
+        assert result.exit_code == 0
+        assert "contradict" in result.output
+        assert "swallowed" in result.output
+
+
 class TestCreateContentInput:
     """Tests for 'create --content-file' / '--content -' (see bead seeds-3mt).
 
