@@ -224,6 +224,16 @@ class TestMassRewriteBlocks:
 # --- The smells tier reports and never gates ---------------------------------
 
 
+def test_the_hook_does_not_run_the_smells_tier():
+    """--smells never gates, and it was ~94% of the hook's time (seeds-7q8g).
+
+    Ruled 2026-09-30: the commit-time check is violations plus --against-git.
+    This pins it, so the slow, non-gating tier cannot drift back into every
+    commit.
+    """
+    assert hook.CHECK_ARGS == ("check", "--against-git")
+
+
 class TestSmellsDoNotBlock:
     def test_empty_bodies_across_the_corpus_pass(self, tmp_path, monkeypatch):
         """20 empty bodies and 20 duplicate bodies — every smell there is, at scale.

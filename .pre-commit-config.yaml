@@ -34,11 +34,12 @@ repos:
       # reaches a commit eventually, so this is where detection has to live.
       # See bead seeds-4co.13 and the script's own docstring.
       #
-      # Runs violations (blocks), --against-git (blocks on one field rewritten
-      # across >=20% of the corpus AND >=10 seeds, which also subsumes gating
-      # D/R in `git diff --name-status`: there is no delete verb, so without it
-      # `rm <seed-file>` is the de facto one), and --smells (never blocks, by
-      # construction in the command itself).
+      # Runs violations (blocks) and --against-git (blocks on one field
+      # rewritten across >=20% of the corpus AND >=10 seeds, which catches a
+      # MASS deletion; a single deleted seed is allowed, because git keeps every
+      # seed file -- seeds-w9h). --smells is NOT run: it never blocks and was
+      # ~94% of the hook's time (seeds-7q8g). Run `seeds check --smells` on
+      # demand.
       #
       # The script wraps the command for two reasons only -- a missing
       # .seeds/seeds/ must not block commits before the conversion lands, and a

@@ -48,11 +48,16 @@ import sys
 from seeds.check import check_violations
 from seeds.store import find_seeds_dir
 
-# The full three-tier run. --against-git is not optional here: without it,
+# The two gating tiers. --against-git is not optional here: without it,
 # `rm <seed-file>` is the de facto delete verb (the format has no delete verb
 # at all), and a mass deletion would pass every violation check by being, in
 # the surviving files, perfectly well formed.
-CHECK_ARGS = ("check", "--against-git", "--smells")
+#
+# --smells is deliberately NOT run (seeds-7q8g, ruled 2026-09-30). It never
+# gates, yet it was ~94% of the hook's time -- 7 s per commit here and 31 s on
+# a 568-seed store -- and nearly all of its output. Run `seeds check --smells`
+# on demand when you want that report.
+CHECK_ARGS = ("check", "--against-git")
 
 CONFIRMATION = """
 ────────────────────────────────────────────────────────────────────────────

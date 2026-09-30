@@ -4,7 +4,7 @@ title: Should seeds ship its commit-time check to the other repos that keep seed
 status: exploring
 type: exploration
 created_at: 2026-09-30T18:08:42.113398+00:00
-updated_at: 2026-09-30T18:19:31.121513+00:00
+updated_at: 2026-09-30T18:21:18.689660+00:00
 ---
 
 **The question:** Should seeds offer the repos that use it a commit-time `seeds check`, the way the seeds repo itself runs one? If so, how: a documented pre-commit snippet, a `seeds` command that installs it, or `seeds doctor` running `check`?
@@ -68,3 +68,5 @@ Method: the working-tree seeds binary (0.7.0 at f607eb5 plus later commits), rea
 - How the check reaches other repos: a documented pre-commit snippet, a `seeds` command that installs it, or something else.
 - The rename-prefix false alarm: a legitimate `seeds rename-prefix` commit reads as a 95% mass deletion under `--against-git` (marketscan_mdcd, 596555b). Recognize the rename, or name the SKIP escape plainly in the refusal.
 - Whether this repo's own hook (scripts/seeds_check_hook.py, CHECK_ARGS = check --against-git --smells, about 7 s per commit here) drops `--smells` to match the ruling.
+
+Done 2026-09-30 for THIS repo: scripts/seeds_check_hook.py now runs check --against-git without --smells (pinned by a test in tests/test_seeds_check_hook.py). Measured: about 2 s per commit, down from about 7 s. The other two open items (how to ship the check to other repos; the rename-prefix false alarm) remain open.

@@ -148,11 +148,13 @@ Cutting a release (manual steps; intentionally no automation yet):
    CLI" section says the same thing — keep the two in sync.
 
 The pre-commit hook runs `seeds check` over the seed-file store: the violations
-tier and `--against-git`, either of which blocks the commit, plus `--smells`,
-which never does. `--against-git` is the gate on the *shape* that corrupted this
-repo's own corpus — one field rewritten across a large slice of the store in a
-single sweep — and it is also what gates a mass deletion, since the format has
-no delete verb and `rm` is therefore the de facto one.
+tier and `--against-git`, either of which blocks the commit. `--against-git` is
+the gate on the *shape* that corrupted this repo's own corpus — one field
+rewritten across a large slice of the store in a single sweep — and it is also
+what gates a mass deletion, since the format has no delete verb and `rm` is
+therefore the de facto one. Deleting a single seed is allowed: git keeps every
+seed file. The hook does not run `--smells`, which never blocks and was most of
+its runtime; run `seeds check --smells` yourself when you want that report.
 
 If it refuses a change you meant to make, confirm it explicitly with
 `SKIP=seeds-check git commit`. Use `SKIP`, not `git commit --no-verify`:
@@ -161,9 +163,7 @@ have nothing to do with the store. Expect to need it **twice** for one intended
 mass rewrite — when the store is unchanged relative to `HEAD`, `--against-git`
 falls back to comparing `HEAD~1` with `HEAD` and audits the commit that just
 landed, which is the reading that would have caught the original sweep on any of
-the three days it went unread. The commit after that clears it. Smells are
-silent in normal use because pre-commit hides a passing hook's output; see them
-with `pre-commit run --verbose seeds-check`.
+the three days it went unread. The commit after that clears it.
 
 Install the hooks for both stages, or the pre-push stage never fires:
 `prek install --hook-type pre-commit --hook-type pre-push` (`pre-commit` works
