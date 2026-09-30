@@ -5,7 +5,7 @@ status: exploring
 type: question
 parent: seeds-i9y6
 created_at: 2026-09-30T19:56:30.176056+00:00
-updated_at: 2026-09-30T20:02:06.122302+00:00
+updated_at: 2026-09-30T20:05:47.017585+00:00
 tags:
   - cutting
 ---
@@ -87,3 +87,11 @@ tags:
 4. The seed-vs-bead section leads, worded as in the draft.
 5. This lands after bead seeds-5i1 (`seeds update --edit`), because the short form names `--edit`.
    Implementation: see the bead sourced from this seed.
+
+## History, found 2026-09-30: seeds prime WAS injected at startup, until March
+
+- 2026-03-12: a bead (recorded in commit f1391a0's beads export) closed with "Implemented seeds hooks integration": seeds prime made silent outside a seeds project, `find_seeds_dir()` added, seeds installed globally via uv tool, and "seeds prime hooks [added] to SessionStart and PreCompact in ~/.claude/settings.json". The hooks were HAND-EDITED into the user's settings file.
+- 2026-03-21, nine days later: home-manager commit e5d7772 ("manage settings.json via nix with writable symlink") made ~/.claude/settings.json nix output, regenerated on every switch from modules/claude-code.nix. Neither `seeds prime` nor `bd prime` was carried into the nix config (0 matches in e5d7772), and `seeds prime` has never appeared in home-manager's history since. The seeds hook was silently wiped then.
+- bd prime survived because the beads plugin declares SessionStart and PreCompact hooks in ITS OWN plugin.json, which home-manager does not rewrite. seeds had only the hand-edited copy.
+- So for about six months, seeds guidance has reached agents only when something told them to run `seeds prime`: this repo's CLAUDE.md, a skill, or the user. That is a long-standing baseline, not last week's change, so it does not by itself explain the recent drift seeds-i9y6 describes.
+- Lesson, and why bead seeds-oiy puts the hooks in the plugin manifest: a hook in the PACKAGE survives settings regeneration and reaches every machine; a hand edit to user settings does neither (seeds-gi9k). The seeds plugin is already installed on every host through home-manager (modules/claude-code/plugins.nix: `seeds@seeds-marketplace`, pointing at the nix store copy of the seeds source), so a manifest hook goes live on the next seeds flake bump and switch.
