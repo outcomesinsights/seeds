@@ -3201,6 +3201,22 @@ class TestPrimeCommand:
         assert "-C2" in result.output, "context lines are half of why rg wins"
         assert "do not invent a shell loop" in result.output
 
+    def test_prime_names_the_one_line_commit_gate_recipe(
+        self, cli_runner, initialized_env
+    ):
+        """Bead seeds-l80: the recipe ships in the package (seeds-gi9k), so an
+        agent in any repo learns the one line rather than inventing a wrapper.
+        Asserted verbatim, recipe line and all, because a variant is the drift
+        the flag exists to stop."""
+        result = cli_runner.invoke(main, ["prime"])
+
+        assert result.exit_code == 0
+        assert (
+            "seeds-check:\n"
+            "    @command -v seeds >/dev/null 2>&1 || exit 0; seeds check --gate\n"
+        ) in result.output
+        assert "SEEDS_GATE_CONFIRM=1" in result.output
+
     def test_prime_does_not_send_agents_back_to_the_retired_jsonl(
         self, cli_runner, initialized_env
     ):
