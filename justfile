@@ -40,6 +40,16 @@ changelog-release VERSION:
 changelog-latest:
     @git-cliff --latest
 
+# The next FINAL version the commits since the last final release call for,
+# for example v0.7.0 while the a1..a8 pre-releases lead up to it. Bumping reads
+# only final tags (vX.Y.Z): PEP 440 pre-release tags such as v0.7.0a8 are not
+# semver, and git-cliff refuses them ("unexpected character"). The pattern is
+# scoped to this recipe, so rendering still shows each pre-release section.
+# git-cliff cannot choose a pre-release number: a9, b1 or rc1 stays a
+# deliberate choice at release time (gator-4ws.30).
+changelog-bumped-version:
+    @git-cliff --tag-pattern 'v[0-9]+\.[0-9]+\.[0-9]+$' --bumped-version
+
 # Release GATE: prove every commit in the range either renders in the notes or
 # is deliberately dropped by a rule in cliff.toml. Exits non-zero and names the
 # offenders otherwise. Run this before `changelog-release`.

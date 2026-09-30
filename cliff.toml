@@ -114,3 +114,11 @@ commit_parsers = [
 [remote.github]
 owner = "outcomesinsights"
 repo = "seeds"
+
+# Version bumping for the 0.x line (gator-4ws.30, 2026-09-30). Below 1.0 a feat
+# bumps the patch digit and a breaking change bumps the minor, which is this
+# project's convention. Without these, the BREAKING CHANGE commits since v0.6.0
+# make `--bumped-version` answer v1.0.0.
+[bump]
+features_always_bump_minor = false
+breaking_always_bump_major = false
