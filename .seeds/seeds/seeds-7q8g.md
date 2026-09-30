@@ -4,7 +4,7 @@ title: Should seeds ship its commit-time check to the other repos that keep seed
 status: exploring
 type: exploration
 created_at: 2026-09-30T18:08:42.113398+00:00
-updated_at: 2026-09-30T18:27:55.174946+00:00
+updated_at: 2026-09-30T18:31:01.117896+00:00
 ---
 
 **The question:** Should seeds offer the repos that use it a commit-time `seeds check`, the way the seeds repo itself runs one? If so, how: a documented pre-commit snippet, a `seeds` command that installs it, or `seeds doctor` running `check`?
@@ -108,3 +108,5 @@ Still open on the seeds side:
 - The rename-prefix false alarm is unchanged.
 
 Update 2026-09-30: gator filed the doctor line as gator-38o and implemented it on Ryan's lean (vetoable). For any repo with .seeds/seeds it reports either nothing on the commit path running seeds check (it looks at the justfile pre-commit/ci closure OR a pre-commit config entry), suggesting the guarded --against-git recipe above; or seeds check run without --against-git, naming the in-place-rewrite blind spot and the rename-prefix false alarm. It never suggests --smells. First fleet run: 25 repos run nothing; code_set_catalog and code_collector run it without --against-git; seeds and gator are clean. Because doctor also accepts a config entry, this repo's hook-script wiring already passes, so the open point that this repo would fail the line is moot.
+
+Cross-reference 2026-09-30: Ryan's broader question (repos with the same tools want similar recipes, but just makes per-repo overrides awkward: what are all the options?) was handed to gator and captured as gator-4ws.31. Gator gave Ryan seven options in its session. Its recommendation, relevant here: move the logic into the tool where the tool is ours. seeds would ship the guarded, gated invocation itself (skip cleanly where there is no store or no seeds; --against-git; name the SKIP escape; ideally recognize a rename-prefix commit), so every repo's recipe is one line with nothing to drift. The beads publish script, which cannot live in a tool, stays byte-identical per repo, with a version line and doctor-detected drift. Doctor's property checks (gator-38o) remain the floor. Rejected there: a fetched shared package and a template generator. NOT ruled by Ryan for seeds. If he takes it, it is a new seeds command or flag, and it becomes the answer to this seed's shipping question and to the rename-prefix false alarm.
