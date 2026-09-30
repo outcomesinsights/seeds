@@ -31,21 +31,72 @@ seed-a1b2 → resolved
 
 ## Installation
 
+Installing seeds is three steps. Do all three: the CLI alone gives you the
+commands, but an AI agent only learns how to use seeds if step 2 is done.
+
+**1. Install the CLI.** Pick one:
+
 ```bash
-# From GitHub
+# uv (recommended): installs the `seeds` command on your PATH
+uv tool install git+https://github.com/outcomesinsights/seeds.git
+
+# pip
 pip install git+https://github.com/outcomesinsights/seeds.git
 
-# Or clone and install locally
-git clone https://github.com/outcomesinsights/seeds.git
-cd seeds
-pip install .
+# Nix (bundles its own ripgrep)
+nix profile install github:outcomesinsights/seeds
 ```
 
+These install the latest release, from the `main` branch. To try a
+pre-release branch, append `@<branch>` to the git URL.
+
 Requires Python 3.11+ and [ripgrep](https://github.com/BurntSushi/ripgrep)
-(`rg`) on `PATH` — `seeds search` is a ripgrep pass over the seed files. Every
+(`rg`) on `PATH`. `seeds search` is a ripgrep pass over the seed files. Every
 other command works without it, and `seeds search` says so rather than failing
-obscurely. The Nix package wraps the binary with its own ripgrep, so `nix run`
-needs nothing installed.
+obscurely.
+
+**2. Install the Claude Code integration** (skip if you don't use
+[Claude Code](https://claude.com/claude-code)):
+
+```bash
+seeds skills install
+```
+
+This installs and enables the `seeds` Claude Code plugin at user scope, which
+provides the `seeds:*` skills (see [Claude Code Skills](#claude-code-skills)).
+It uses Claude Code's own `claude plugin` commands and changes nothing else in
+your Claude Code settings. It is idempotent, so re-running it is safe.
+
+**After every upgrade of the CLI**, refresh the plugin. Claude Code keeps a
+cached copy, and it does not change until you do:
+
+```bash
+seeds skills install --reinstall
+```
+
+**3. In each project that should hold seeds**, once:
+
+```bash
+seeds init
+```
+
+Safe to re-run: on a project that already has a `.seeds/` store, `init` leaves
+it untouched and says so.
+
+**Check it worked:**
+
+```bash
+seeds --version                     # the CLI is on PATH
+claude plugin list | grep seeds     # seeds@seeds-marketplace, enabled
+seeds doctor                        # store and installation health
+```
+
+> **If you are an AI agent asked to install seeds:** do steps 1 and 2 above,
+> in order, then run the three checks and report their output. Do not
+> hand-edit `~/.claude/settings.json` to add seeds hooks or skills; step 2 is
+> the supported route, and a hand edit is lost when the settings file is
+> regenerated. Run step 3 only if the user asked for seeds in a specific
+> project.
 
 ## Usage
 
@@ -345,13 +396,7 @@ Under the hood this appends a provenance-stamped bullet under a managed `## Prin
 
 ## Claude Code Skills
 
-Seeds ships a small set of skills for use with [Claude Code](https://claude.com/claude-code), distributed as a local plugin. After installing the seeds CLI, run:
-
-```bash
-seeds skills install
-```
-
-This registers the bundled marketplace and installs the `seeds` plugin under the `seeds:*` namespace.
+Seeds ships a small set of skills for use with [Claude Code](https://claude.com/claude-code), distributed as a local plugin. Installing them is step 2 of [Installation](#installation): `seeds skills install`, and `seeds skills install --reinstall` after each CLI upgrade. It registers the bundled marketplace and installs the `seeds` plugin under the `seeds:*` namespace.
 
 ### Available skills
 
