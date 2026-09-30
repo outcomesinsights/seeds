@@ -5,7 +5,7 @@ status: exploring
 type: question
 parent: seeds-i9y6
 created_at: 2026-09-30T19:56:30.176056+00:00
-updated_at: 2026-09-30T20:05:47.017585+00:00
+updated_at: 2026-09-30T20:07:39.238051+00:00
 tags:
   - cutting
 ---
@@ -95,3 +95,22 @@ tags:
 - bd prime survived because the beads plugin declares SessionStart and PreCompact hooks in ITS OWN plugin.json, which home-manager does not rewrite. seeds had only the hand-edited copy.
 - So for about six months, seeds guidance has reached agents only when something told them to run `seeds prime`: this repo's CLAUDE.md, a skill, or the user. That is a long-standing baseline, not last week's change, so it does not by itself explain the recent drift seeds-i9y6 describes.
 - Lesson, and why bead seeds-oiy puts the hooks in the plugin manifest: a hook in the PACKAGE survives settings regeneration and reaches every machine; a hand edit to user settings does neither (seeds-gi9k). The seeds plugin is already installed on every host through home-manager (modules/claude-code/plugins.nix: `seeds@seeds-marketplace`, pointing at the nix store copy of the seeds source), so a manifest hook goes live on the next seeds flake bump and switch.
+
+## RULED 2026-09-30 (Ryan): seeds sets this up itself
+
+"We can't rely on home-manager to do this for us. This has to be something seeds sets up for itself for users who don't use home-manager."
+
+**What already satisfies it:** seeds ships its own installer. `seeds skills install` (cli.py ~3041) runs Claude Code's `claude plugin marketplace add <bundled plugin dir>`, then install or update, then enable, at user scope; it is idempotent, and `--reinstall` refreshes a stale cached copy. The README tells non-nix users to run it. So hooks declared in the plugin's own plugin.json (bead seeds-oiy) reach every user who ran `seeds skills install`, with no home-manager involved. home-manager's `seeds@seeds-marketplace` entry is just the nix user's route to the same plugin.
+
+**Gaps that remain (not ruled):**
+
+1. Discoverability: a user who installs the CLI and never runs `seeds skills install` gets no plugin, so no hooks. Nothing tells them.
+2. Upgrades: an installed plugin is a cached copy. After upgrading the CLI to a version whose manifest has the hooks, nothing changes until `seeds skills install --reinstall`, and nothing says so.
+3. `seeds doctor` checks neither: it never looks at the plugin (verified: no plugin or skills references in its output).
+
+**Options for the gaps:**
+
+- (a) `seeds doctor` reports the plugin as missing, disabled, or STALE (the installed plugin's version differs from the CLI's `__version__`) and prints the exact `seeds skills install [--reinstall]` to run. Cheap, fits the doctor's job, and needs no new behaviour elsewhere.
+- (b) `seeds init` also runs `seeds skills install`, or offers to, so a new store comes with the hooks. It touches the user's Claude Code config from a store-init command, which may surprise.
+- (c) An alias with an honest name, since the command now installs session hooks as well as skills: `seeds setup claude`, mirroring `bd setup claude`, with `skills install` kept as an alias.
+  Lean: (a) now, (c) as a rename when convenient. (b) only if (a) proves insufficient.
