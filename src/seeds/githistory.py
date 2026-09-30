@@ -1,9 +1,8 @@
 """Reading the seed-file store's git history.
 
-``seeds check`` has two tiers that cannot be answered from the files alone.
-``--smells`` wants to know how many commits a seed's body has survived, and
-``--against-git`` wants every field's value at the previous commit. Both are
-history questions, and git is the only store that holds the answer — the point
+``seeds check --against-git`` cannot be answered from the files alone: it
+wants every field's value at the previous commit. That is a history question,
+and git is the only store that holds the answer — the point
 of ``seeds-wurl`` is that when both live stores agreed and both were wrong,
 git was the only thing that still held the truth (``docs/storage-format.md``
 §11).
@@ -25,7 +24,6 @@ same reason and are re-exported here, where their callers already look for them.
 
 from __future__ import annotations
 
-from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,7 +32,6 @@ from seeds.gitstage import GitUnavailable, git_bytes, git_text, repo_root
 __all__ = [
     "Commit",
     "GitUnavailable",
-    "commit_counts",
     "path_commits",
     "read_blobs",
     "repo_root",
@@ -53,22 +50,6 @@ def rev_exists(root: Path, rev: str) -> bool:
     """Whether ``rev`` names a commit — ``False`` for an unborn HEAD."""
     proc = git_text(root, "rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")
     return proc.returncode == 0
-
-
-def commit_counts(root: Path, reldir: str) -> dict[str, int]:
-    """How many commits in ``HEAD``'s history touched each path under ``reldir``.
-
-    Keyed by repo-relative POSIX path. A path with no entry has never been
-    committed — a seed jotted since the last commit, which is not a seed with a
-    long history, so the absence is the right answer rather than a gap.
-    """
-    proc = git_text(root, "log", "--pretty=format:", "--name-only", "--", reldir)
-    if proc.returncode != 0:
-        return {}
-    counts: Counter[str] = Counter(
-        line.strip() for line in proc.stdout.splitlines() if line.strip()
-    )
-    return dict(counts)
 
 
 def tree_files(root: Path, rev: str, reldir: str) -> dict[str, str]:

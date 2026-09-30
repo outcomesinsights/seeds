@@ -23,18 +23,26 @@ Three tiers live here now.
   either a file the reader would refuse, or a value that parses fine and is not
   plausible.
 * **Smells** (``seeds check --smells``) report and never fail: an empty body, a
-  long unsuperseded body, a duplicated body, a resolution on a seed that never
-  reached a terminal status, a file whose bytes are not the canonical ones, and
-  a repo-wide tool configured without excluding the store. The tier exists
-  because some
-  things worth noticing cannot support being a gate — a long body with no
-  ``[!SUPERSEDED]`` marker is a *candidate for attention*, never an error, and
-  naming the tier keeps discipline-shaped checks from being promoted into gates
-  they cannot carry. It is also all that survives of the designed-but-never-
-  built ``tend`` verb (@aguynamedryan, 2026-08-31: *"let's remove suggest/tend
-  for now … tend never really got used"*): with supersession marked at write
-  time by the agent that learned it, nothing editorial is left, only noticing.
-  **There is no ``tend`` verb and there is not to be one.**
+  duplicated body, a resolution on a seed that never reached a terminal status,
+  a file whose bytes are not the canonical ones, and a repo-wide tool
+  configured without excluding the store. The tier exists because some things
+  worth noticing cannot support being a gate, and naming the tier keeps
+  discipline-shaped checks from being promoted into gates they cannot carry.
+  It is also all that survives of the designed-but-never-built ``tend`` verb
+  (@aguynamedryan, 2026-08-31: *"let's remove suggest/tend for now … tend never
+  really got used"*): a correction is recorded at write time by the agent that
+  learned it, so nothing editorial is left, only noticing. **There is no
+  ``tend`` verb and there is not to be one.**
+
+  The tier once carried ``unsuperseded-long-body``: a long, much-edited body
+  with no ``[!SUPERSEDED]`` marker. It was retired by bead seeds-oq2 under the
+  option-C ruling on seed seeds-zxq8 (2026-09-30): a position moved past is now
+  recorded as an appended, dated note, and the marker is optional, so a long
+  body without one is the norm, not a candidate. Across ~2,000 seeds the marker
+  appeared in 2 and appended notes in ~290; the smell fired 44 times in one
+  store, nagging against the rule. Retuning it to look for dated notes instead
+  was rejected: the labels are prose convention, not format grammar, and a long
+  body that only accumulated is fine either way.
 * **Against git** (``seeds check --against-git``) compares every field of every
   seed with its value at the previous commit and flags one field rewritten
   across a large fraction of the corpus. That is the ``seeds-wurl`` shape
@@ -94,7 +102,6 @@ from pathlib import Path
 
 from seeds.githistory import (
     GitUnavailable,
-    commit_counts,
     read_blobs,
     repo_root,
     rev_exists,
@@ -115,7 +122,6 @@ from seeds.seedfile import (
     read_seed_file,
     render_seed_file,
     seed_files_dir,
-    superseded_scopes,
 )
 
 __all__ = [
@@ -642,19 +648,6 @@ def _read_one(path: Path, findings: list[Finding]) -> SeedRecord | None:
 
 # --- The smells tier ---------------------------------------------------------
 
-# A body this many bytes or more counts as long. Measured, not guessed: over
-# this repo's 308 converted seeds the median body is 1197 bytes and the 75th
-# percentile is 2621, so 2000 selects roughly the top third (104 of 308). It is
-# deliberately permissive because it is only ever half of an AND — on its own a
-# long body is a well-deliberated seed, which is the point of the tool.
-LONG_BODY_BYTES = 2000
-
-# …and this many commits or more counts as a long history. A body that has
-# survived five commits has been edited across several sessions, which is when
-# a position gets moved past without anyone marking it. Below that, "nobody has
-# superseded anything yet" is simply true.
-MANY_COMMITS = 5
-
 # The two statuses §3 calls terminal, and the only two a `resolution` is
 # meaningful alongside.
 _TERMINAL_STATUSES = (SeedStatus.RESOLVED, SeedStatus.ABANDONED)
@@ -688,7 +681,6 @@ def check_smells(seeds_dir: Path, *, now: datetime | None = None) -> list[Findin
 
     findings: list[Finding] = []
     findings.extend(_empty_bodies(entries))
-    findings.extend(_unsuperseded_long_bodies(seeds_dir, files_dir, entries))
     findings.extend(_duplicate_bodies(entries))
     findings.extend(_resolutions_without_a_terminal_status(entries))
     findings.extend(_non_canonical_files(entries))
@@ -719,66 +711,6 @@ def _empty_bodies(entries: Sequence[tuple[Path, SeedRecord]]) -> list[Finding]:
                     "design, and for a question-type seed the title IS the "
                     "question. Worth a look only if the thinking happened "
                     "somewhere else and never landed here"
-                ),
-                seed_id=record.id,
-            )
-        )
-    return findings
-
-
-def _unsuperseded_long_bodies(
-    seeds_dir: Path, files_dir: Path, entries: Sequence[tuple[Path, SeedRecord]]
-) -> list[Finding]:
-    """A long body, edited across many commits, carrying no supersede marker.
-
-    The clearest thing that could not survive being a gate. A seed can be long
-    and much-edited and still hold no retired position — plenty of deliberation
-    only ever accumulates — so this is a candidate for attention and nothing
-    more.
-
-    The commit count is the half that makes it worth reading. Length alone
-    selects a third of this corpus; length *plus* a history of separate edits
-    is the shape where a claim was replaced and the replacement was written as
-    if the old one had never been made.
-
-    Silent when git cannot answer: with no history there is no second half of
-    the AND, and inventing one from length alone would report the third of the
-    corpus this deliberately refuses to report.
-    """
-    try:
-        root = repo_root(seeds_dir)
-        counts = commit_counts(root, _relpath(root, files_dir))
-    except (GitUnavailable, ValueError):
-        return []
-    if not counts:
-        return []
-
-    findings = []
-    for path, record in entries:
-        size = len(record.body.encode("utf-8"))
-        if size < LONG_BODY_BYTES:
-            continue
-        try:
-            commits = counts.get(_relpath(root, path), 0)
-        except ValueError:  # pragma: no cover - path is under files_dir
-            continue
-        if commits < MANY_COMMITS:
-            continue
-        if superseded_scopes(record.body, path):
-            continue
-        findings.append(
-            Finding(
-                path=path,
-                code="unsuperseded-long-body",
-                message=(
-                    f"{size} bytes of body across {commits} commits, with no "
-                    f"[!SUPERSEDED] marker anywhere in it"
-                ),
-                remediation=(
-                    "read it for a position that was moved past and never "
-                    "marked; if you find one, mark it in place under its "
-                    "heading with '> [!SUPERSEDED] YYYY-MM-DD — reason' (§6.1). "
-                    "A seed that genuinely only accumulated is fine as it is"
                 ),
                 seed_id=record.id,
             )

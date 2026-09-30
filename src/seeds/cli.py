@@ -1739,13 +1739,15 @@ def update(
     the store -- which is how the malformed records in seed seeds-1x6b got in.
 
     Correcting vs. superseding -- was the old text FALSE, or a position we
-    MOVED PAST? A fact that turned out false is replaced in place; do not mark
-    it, the old value lives in git. A position that was moved past is kept and
-    marked, as the first non-blank line after the heading it retires, with a
-    mandatory reason (no mid-section marker; `seeds check` enforces both):
+    MOVED PAST? A fact that turned out false is corrected in place with --edit
+    OLD NEW, and no note; the old value lives in git. A position that was
+    moved past is kept, and a labelled, dated note is appended with --append:
 
     \b
-        > [!SUPERSEDED] YYYY-MM-DD — <reason>
+        UPDATE YYYY-MM-DD: <what changed, and why>
+
+    RULED and CORRECTION are labels too. A [!SUPERSEDED] marker under the
+    retired heading is still valid, but optional.
     """
     store = ctx.get_store()
     record = get_seed_or_exit(store, seed_id)
@@ -2438,11 +2440,10 @@ def doctor(ctx: Context) -> None:
     "--smells",
     is_flag=True,
     help=(
-        "Also report smells: an empty body, a long body with many commits and "
-        "no supersede marker, a body byte-identical to another seed's, a "
-        "resolution on a non-terminal seed, a file whose bytes are not the "
-        "canonical form, and a repo-wide tool configured without excluding "
-        ".seeds/. Never affects the exit code."
+        "Also report smells: an empty body, a body byte-identical to another "
+        "seed's, a resolution on a non-terminal seed, a file whose bytes are "
+        "not the canonical form, and a repo-wide tool configured without "
+        "excluding .seeds/. Never affects the exit code."
     ),
 )
 @click.option(

@@ -506,7 +506,8 @@ def _contradictions(
                 ),
                 action=(
                     "read both and decide whether they genuinely conflict; if "
-                    "they do, which one stands, and mark the other superseded"
+                    "they do, which one stands, and append a dated note to the "
+                    "other saying so"
                 ),
                 evidence=(
                     f"{edge.a}: {_clip(clash[0])}",

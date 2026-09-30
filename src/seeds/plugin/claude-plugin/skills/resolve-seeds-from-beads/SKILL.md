@@ -138,9 +138,12 @@ Thirty seconds of verification settled it: open `.pre-commit-config.yaml` and lo
 
 For the candidates that survived step 2, compare the seeds' conclusions with what was actually built — the real diff, and any tweaks or last-minute changes made mid-implementation. Surface each meaningful divergence to the user.
 
-For divergences worth keeping, **append** them to the relevant seed with `seeds update <id> --append` — never `-c/--content`, which *replaces* and would destroy the original deliberation. Both the original reasoning and "what we actually did in the end" should stay legible. Propose the reconciliation; let the user confirm it. Capture only what's genuinely new — don't restate what the seed already says.
+For divergences worth keeping, classify each first (`seeds prime`, *Correcting vs. Superseding*): was the seed's text FALSE, or a position that shipping MOVED PAST?
 
-If the reconciliation edits the seed's existing text instead, classify it first (`seeds prime`, *Correcting vs. Superseding*): a fact that was false is fixed in place; a position moved past is kept and marked `> [!SUPERSEDED] YYYY-MM-DD — <reason>` under its heading.
+- **A position moved past** — the usual case: the plan said one thing and the build did another. Keep the original and **append** a labelled, dated note with `seeds update <id> --append "UPDATE YYYY-MM-DD: shipped as …, because …"` (RULED and CORRECTION are labels too) — never `-c/--content`, which *replaces* and would destroy the original deliberation. Both the original reasoning and "what we actually did in the end" should stay legible.
+- **A fact that was false** — a wrong file name, number or behaviour the seed states as true. Correct it in place with `seeds update <id> --edit OLD NEW`, copying OLD from `seeds show`; the old value lives in git, so it needs no note.
+
+The `> [!SUPERSEDED]` marker is still valid but optional; do not add one unless the user asks. Propose the reconciliation; let the user confirm it. Capture only what's genuinely new — don't restate what the seed already says.
 
 A seed from the **not shipped** pile is also worth an append: recording that the work is still outstanding, and which bead was mistaken for it, is more valuable than silence.
 
