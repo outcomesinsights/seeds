@@ -1,11 +1,13 @@
 ---
 id: seeds-h5rq.1
 title: 'Ruled: a cutting carries a conversation excerpt, not a pointer to a forked session'
-status: captured
+status: resolved
 type: decision
 parent: seeds-h5rq
 created_at: 2026-09-01T16:29:26.119544+00:00
-updated_at: 2026-09-01T16:29:26.119544+00:00
+updated_at: 2026-09-30T17:22:51.507359+00:00
+resolved_at: 2026-09-30T17:22:51.507348+00:00
+resolution: "Shipped: skills/cutting/SKILL.md, section 'Carry an excerpt, not a session pointer'. Divergence: the excerpt comes from the agent's own context, not the session JSONL the seed leaned toward. Efficacy: none. resolve-seeds-from-beads sweep 2026-09-30"
 tags:
   - cutting
   - decision

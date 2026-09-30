@@ -4,7 +4,7 @@ title: "Capture gap: questions must be persisted to disk when they arise, not af
 status: captured
 type: concern
 created_at: 2026-02-27T15:59:14.444703+00:00
-updated_at: 2026-08-31T20:02:40.445328+00:00
+updated_at: 2026-09-30T17:23:00.480974+00:00
 tags:
   - capture-gap
   - ai-ux
@@ -96,3 +96,5 @@ What follows is an item-by-item accounting of what the agent captured into seeds
 **Pattern observed:** The agent captured WHAT was decided (as answered questions) but almost never captured HOW the decision was reached, what alternatives were considered, or the specific implementation details. This is exactly backwards for a deliberation tool — the journey matters more than the conclusion. 17 questions were created and answered, but each answer was 1-2 sentences. The rich discussion, rationale, examples, and specifics were all lost.
 
 **Scale of the gap:** Roughly 15 distinct decisions/plans were NOT captured at all. The ones that WERE captured lost 80%+ of their context and rationale. The session JSONL was ~517KB of conversation; the seeds captured maybe 5KB of that into structured, durable storage.
+
+Sweep 2026-09-30: still outstanding. `seeds candidates` surfaced this from bead seeds-34c, but that bead (6dceddd, a rename-prefix fix) only contains this ID as a test-fixture string. What shipped is after-the-fact recovery (`seeds glean`), not capture when the question arises; prime.py still has only generic guidance; the four children are open.

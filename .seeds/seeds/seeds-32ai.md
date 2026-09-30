@@ -4,7 +4,7 @@ title: Should seed IDs be topic slugs rather than base36 hashes? Seeds outlive b
 status: captured
 type: idea
 created_at: 2026-08-12T13:29:08.424479+00:00
-updated_at: 2026-08-31T20:02:46.668263+00:00
+updated_at: 2026-09-30T17:23:02.270095+00:00
 tags:
   - ids
   - architecture
@@ -84,3 +84,5 @@ That reframes the question from "change the ID" to "change what an ID reference 
 @aguynamedryan is sitting with this; nothing decided. The live question: is rendering the gloss everywhere sufficient — in which case this collapses into seeds-vo56 and no ID change is needed — or does only a self-describing identifier survive agent inattention, in which case the drift, cross-reference, and prose-ambiguity costs all have to be paid and priced.
 
 Related: seeds-vo56 (the symptom), seeds-199 (base36 decision), seeds-135 (original readability motivation), seeds-140 (prefix configurability + rename machinery), seeds-171 (cross-database provenance), seeds-6hj5 (prose-versus-reference ambiguity).
+
+Sweep 2026-09-30: still undecided. Surfaced from bead seeds-4co.23, which cites this only as the reason the tilde separator was deferred (570c708). seeds-1a0j parked the separator change, not slugs. IDs are still base36 hashes (idgen.py). The gloss-rendering middle path is open under seeds-vo56.

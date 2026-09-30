@@ -1,11 +1,13 @@
 ---
 id: seeds-sdhc.5
 title: seeds history structures and never summarises, and it reads across the conversion — so the JSONL's history must outlive the JSONL
-status: captured
+status: resolved
 type: decision
 parent: seeds-sdhc
 created_at: 2026-08-31T20:09:39.157465+00:00
-updated_at: 2026-08-31T20:09:48.024295+00:00
+updated_at: 2026-09-30T17:22:53.793571+00:00
+resolved_at: 2026-09-30T17:22:53.793558+00:00
+resolution: "Shipped: `seeds history` (history.py, merge 0ead424, bead seeds-4co.11) prints changed field names per commit, never prose, and walks across converted_at into the JSONL's git history; spec section 11 keeps that history. Per-section blame deferred, as planned. Divergence: none. Efficacy: none. resolve-seeds-from-beads sweep 2026-09-30"
 tags:
   - storage
   - history

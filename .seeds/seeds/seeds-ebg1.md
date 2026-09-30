@@ -1,10 +1,12 @@
 ---
 id: seeds-ebg1
 title: 'Adversarial review of the append-only storage proposal: git is already the append-only store, and materializing it in the working tree bills every future reader'
-status: captured
+status: abandoned
 type: concern
 created_at: 2026-08-28T17:09:27.758353+00:00
-updated_at: 2026-09-16T14:39:44.259246+00:00
+updated_at: 2026-09-30T17:22:58.748125+00:00
+resolved_at: 2026-09-30T17:22:58.748110+00:00
+resolution: "Superseded: its headline recommendation (a mutable head plus an append-only archive) was reversed in deliberation by sdhc's accumulate-with-in-place-markers design (spec sections 6-7). Its concrete findings were fixed (55bf114, strict reads, symmetry and future-timestamp checks). Not shipped: the named delete and redaction verbs; a single-seed rm is still ungated (bead seeds-w9h). resolve-seeds-from-beads sweep 2026-09-30"
 tags:
   - storage
   - append-only

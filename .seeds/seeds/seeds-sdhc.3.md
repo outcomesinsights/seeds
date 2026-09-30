@@ -5,7 +5,7 @@ status: captured
 type: decision
 parent: seeds-sdhc
 created_at: 2026-08-31T20:09:38.931133+00:00
-updated_at: 2026-09-01T02:33:50.192347+00:00
+updated_at: 2026-09-30T17:22:59.389411+00:00
 tags:
   - storage
   - supersede
@@ -78,3 +78,5 @@ The diagnosis is this seed's OWN distinction, misapplied by me: what was marked 
 @aguynamedryan ruled 2026-08-31: fix the seed, keep the rule strict. 313 of 314 records already complied, so section-scope is 99.7% compatible with real usage, and a second scope rule would have to be implemented in the reader, the checker and the converter alike. seeds-sdhc.1's block is now an in-place correction with the prior version in git; the corpus has zero floating markers.
 
 What this is evidence FOR: the corrections-replace / reasoning-accumulates line is real but subtle, and it needs to be stated in the agent-facing guidance, not just in the format spec — because the failure mode is not ignorance of the rule, it is misclassifying which side of it you are on.
+
+Sweep 2026-09-30: the core shipped (marker grammar seedfile.py ~1454; render_body(full=) and show --full; supersede-position and supersede-no-reason violations; unsuperseded-long-body smell; no tend verb). NOT shipped: this seed's own lived-test conclusion, that the corrections-replace-in-place / superseded-positions-get-marked rule must be stated in the guidance agents actually see. prime, --help and the plugin skills do not state it; only README.md mentions the marker. Held open until that ships (bead seeds-2ya).

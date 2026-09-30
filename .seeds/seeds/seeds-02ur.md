@@ -1,10 +1,12 @@
 ---
 id: seeds-02ur
 title: 'Cleanup: 36 orphaned legacy rows in the questions table, unreferenced since the v2 question-seeds migration'
-status: captured
+status: resolved
 type: idea
 created_at: 2026-08-26T04:02:54.250253+00:00
-updated_at: 2026-08-31T21:41:37.323343+00:00
+updated_at: 2026-09-30T17:22:56.634241+00:00
+resolved_at: 2026-09-30T17:22:56.634231+00:00
+resolution: 'Shipped: convert.py LEGACY_TABLES reads the questions table, translates rows whose target exists and reports then drops orphans (convert.py ~642-660); the v1 import path is gone; no q- ids remain. Divergence: none. Efficacy: none. resolve-seeds-from-beads sweep 2026-09-30'
 tags:
   - cleanup
   - schema

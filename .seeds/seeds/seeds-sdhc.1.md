@@ -1,11 +1,13 @@
 ---
 id: seeds-sdhc.1
 title: Conversion to the new format must be robust to diverged stores — union input, forks as conflict files, round-trip verified
-status: captured
+status: resolved
 type: decision
 parent: seeds-sdhc
 created_at: 2026-08-31T20:05:23.116169+00:00
-updated_at: 2026-09-01T02:33:12.092294+00:00
+updated_at: 2026-09-30T17:22:53.022155+00:00
+resolved_at: 2026-09-30T17:22:53.022145+00:00
+resolution: 'Shipped as `seeds convert`: convert.py four-way classification (~238/275), fork_body conflict files (~298), union_records (~1094), verify (~1532), and a _gate that runs check on its own output (~2077); byte-idempotent on the real corpus (test_convert.py). Divergence: the converter does not mine git history as a repair oracle; that role went to history.py and check --against-git. Efficacy: minor, inherent unknown (sdhc.5 overtook it). resolve-seeds-from-beads sweep 2026-09-30'
 tags:
   - storage
   - migration

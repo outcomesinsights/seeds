@@ -4,7 +4,7 @@ title: 'Beads integration: handoff from seeds to beads for implementation'
 status: exploring
 type: idea
 created_at: 2026-01-28T05:54:12.048719+00:00
-updated_at: 2026-08-31T20:02:40.695305+00:00
+updated_at: 2026-09-30T17:23:01.095936+00:00
 tags:
   - integration
   - future
@@ -60,3 +60,5 @@ Formalizing this as a rigid script/command (e.g., `seeds export --to-beads` or `
 @aguynamedryan's insight: 'If I can take a process that LLMs do ad hoc and turn it into an actual rigid script, my results are more reliable and the burden on the agent is reduced.'
 
 This becomes more important as the project goes public — contributors will need a clear workflow.
+
+Sweep 2026-09-30: still outstanding. Surfaced from bead seeds-34c, which only contains this ID as a test-fixture string. Partly covered: the seeds-to-beads skill with Source: lineage (4328ca4) and `seeds candidates` (a7cb076). Not covered: children 12.1-12.4 (existential questions, GitHub sync, a rigid conversion command). Note docs/intent-debt-investigation/capturing-the-why-seeds-evaluation.md:144 wrongly calls seeds-12.x resolved (bead seeds-odi).

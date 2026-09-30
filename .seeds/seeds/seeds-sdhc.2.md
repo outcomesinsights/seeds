@@ -5,7 +5,7 @@ status: captured
 type: decision
 parent: seeds-sdhc
 created_at: 2026-08-31T20:05:23.254050+00:00
-updated_at: 2026-08-31T20:05:32.248583+00:00
+updated_at: 2026-09-30T17:22:59.908007+00:00
 tags:
   - storage
   - detection
@@ -79,3 +79,5 @@ This answers seeds-sdhc's open item #1 (parse policy for invalid values on read)
 `seeds check` by hand, the git pre-commit hook, and — the one seeds-sdhc did not list — **inside the converter, run against its own output before the source store is left alone.**
 
 Relates to seeds-sdhc, seeds-ebg1, seeds-fkb8, seeds-dgyw.
+
+Sweep 2026-09-30: the checks shipped (check.py title/timestamp/parent/edge/conflict-marker/duplicate-body rules, mass-field-rewrite; violation and smell tiers; CLI, hook and converter entry points; doctor's two-store checks removed). DIVERGENCE: this seed claimed the mass rule subsumes gating D/R in git diff. It does not: --against-git catches deletion only above the mass threshold, and tests/test_check_tiers.py (~775) pins that a single deleted seed is not flagged. Held open until that is decided (bead seeds-w9h).

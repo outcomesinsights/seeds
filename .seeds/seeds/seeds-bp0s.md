@@ -1,10 +1,12 @@
 ---
 id: seeds-bp0s
 title: seeds should RENDER a seed's history from git rather than expose git log -p — the archive is faithful, the reader is what's missing
-status: captured
+status: resolved
 type: idea
 created_at: 2026-08-28T17:57:27.110472+00:00
-updated_at: 2026-08-31T20:02:47.887387+00:00
+updated_at: 2026-09-30T17:22:57.630933+00:00
+resolved_at: 2026-09-30T17:22:57.630922+00:00
+resolution: "Shipped: `seeds history` (history.py) renders a seed's git history across the conversion. Divergence: it labels changed fields per commit rather than prose like 'added 340 words', deliberately, under sdhc.5's structure-only ruling. Efficacy: none. resolve-seeds-from-beads sweep 2026-09-30"
 tags:
   - history
   - git

@@ -1,10 +1,12 @@
 ---
 id: seeds-tz66
 title: Is jot a stupid idea? The empty-body count says no — six of the eight bare ideas are test fixtures polluting the design DB
-status: captured
+status: resolved
 type: question
 created_at: 2026-08-31T22:20:54.749473+00:00
-updated_at: 2026-09-01T00:46:53.981237+00:00
+updated_at: 2026-09-30T17:22:56.270232+00:00
+resolved_at: 2026-09-30T17:22:56.270222+00:00
+resolution: 'Shipped: jot unchanged; the six test fixtures dropped by the converter (convert.py FIXTURE_IDS); empty-body is a smell (check.py ~700). Divergence: docs/storage-format.md section 6.4 still calls an empty body a violation (bead seeds-odi). Efficacy: none. resolve-seeds-from-beads sweep 2026-09-30'
 tags:
   - jot
   - capture

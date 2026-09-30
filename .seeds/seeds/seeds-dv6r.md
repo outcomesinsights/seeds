@@ -1,10 +1,12 @@
 ---
 id: seeds-dv6r
 title: Files-as-truth puts the seed store inside every repo tool's default scope, and ruff reached into it within minutes
-status: captured
+status: resolved
 type: concern
 created_at: 2026-09-01T05:23:43.302048+00:00
-updated_at: 2026-09-02T16:23:33.693220+00:00
+updated_at: 2026-09-30T17:22:54.583482+00:00
+resolved_at: 2026-09-30T17:22:54.583471+00:00
+resolution: 'Shipped: ruff extend-exclude of the store (pyproject.toml), tool-config-includes-store (check.py ~1101), non-canonical-bytes (~926), and body-rewritten-in-place (~1491, 86c99e5, bead seeds-4co.21); children already resolved. Divergence: none (bodies are now also formatted on write, seeds-bob). Efficacy: minor, inherent unknown (a third rule was found needed). resolve-seeds-from-beads sweep 2026-09-30'
 tags:
   - storage
   - files-as-truth

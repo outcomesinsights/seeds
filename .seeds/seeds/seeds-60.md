@@ -4,7 +4,7 @@ title: 'Feedback: seeds great for ad-hoc but lacks completeness checking'
 status: captured
 type: concern
 created_at: 2026-02-05T21:43:03.052122+00:00
-updated_at: 2026-02-05T21:43:19.678420+00:00
+updated_at: 2026-09-30T17:23:01.639886+00:00
 tags:
   - workflow
   - feedback
@@ -23,3 +23,5 @@ From ETL pilot project: seeds is 'wildly successful' for ad-hoc exploration, but
 The issue: seeds lets you explore freely but doesn't tell you what you HAVEN'T explored yet. No way to say 'here are 20 source tables, have I made a decision about each one?'
 
 This suggests a need for some kind of checklist/coverage mechanism - not replacing the ad-hoc nature, but complementing it.
+
+Sweep 2026-09-30: still outstanding. Surfaced from bead seeds-34c, which only contains this ID as a test-fixture string. Nothing checks coverage of the form '20 source tables, have I decided on each'; winnow audits neglect, contradiction and staleness, not coverage.

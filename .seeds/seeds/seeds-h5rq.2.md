@@ -1,11 +1,13 @@
 ---
 id: seeds-h5rq.2
 title: Claude Code has four conversation-splitting primitives; none of them close the loop
-status: captured
+status: resolved
 type: exploration
 parent: seeds-h5rq
 created_at: 2026-09-01T16:29:42.501797+00:00
-updated_at: 2026-09-01T16:29:42.501797+00:00
+updated_at: 2026-09-30T17:22:51.852286+00:00
+resolved_at: 2026-09-30T17:22:51.852277+00:00
+resolution: 'Discharged by design: skills/cutting/SKILL.md says /fork is not a substitute and must not be offered in its place, so seeds is the inbox. The side idea of a Stop hook printing seeds ready was not built; it was never the conclusion. Efficacy: none. resolve-seeds-from-beads sweep 2026-09-30'
 tags:
   - claude-code
   - harness

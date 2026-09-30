@@ -1,10 +1,12 @@
 ---
 id: seeds-wurl
 title: An agent's bulk sweep clobbered 83 of 306 titles with a scratchpad path, and every divergence check stayed green
-status: captured
+status: resolved
 type: concern
 created_at: 2026-08-31T20:05:22.988769+00:00
-updated_at: 2026-08-31T20:05:32.007353+00:00
+updated_at: 2026-09-30T17:22:54.190003+00:00
+resolved_at: 2026-09-30T17:22:54.189994+00:00
+resolution: 'Shipped: title-is-path check (check.py ~194-212), mass-field-rewrite with thresholds set from this incident (check.py ~1200-1336) plus the HEAD~1 audit fallback, the commit hook (cc1ee22), git as oracle via history.py; incident repaired in 1afc51c. Divergence: none. Efficacy: none. resolve-seeds-from-beads sweep 2026-09-30'
 tags:
   - incident
   - data-loss

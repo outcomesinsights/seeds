@@ -1,11 +1,13 @@
 ---
 id: seeds-sdhc.4
 title: 'Filenames carry identity only: relationships live at both ends and hierarchy in a parent field, with check enforcing both'
-status: captured
+status: resolved
 type: decision
 parent: seeds-sdhc
 created_at: 2026-08-31T20:09:39.044459+00:00
-updated_at: 2026-08-31T20:09:47.899537+00:00
+updated_at: 2026-09-30T17:22:53.422197+00:00
+resolved_at: 2026-09-30T17:22:53.422187+00:00
+resolution: 'Shipped: get_children reads the parent field (store.py ~374); link writes both ends and re-reads them (store.py ~489); check enforces parent mismatch, missing parent, cycles, one-sided edges and edge timestamps (check.py ~287-476); spec sections 1.1 and 5. Divergence: none. Efficacy: none. resolve-seeds-from-beads sweep 2026-09-30'
 tags:
   - storage
   - relationships

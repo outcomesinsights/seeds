@@ -1,10 +1,12 @@
 ---
 id: seeds-h5rq
 title: 'seeds cutting: context-carrying capture, the vegetative sibling of jot'
-status: captured
+status: resolved
 type: decision
 created_at: 2026-09-01T16:29:11.606858+00:00
-updated_at: 2026-09-01T16:47:54.896776+00:00
+updated_at: 2026-09-30T17:22:52.576480+00:00
+resolved_at: 2026-09-30T17:22:52.576471+00:00
+resolution: "Shipped as the cutting skill (skills/cutting/SKILL.md, bead seeds-zcq); all three children verified and resolved. Divergence: 'the command seeds cutting' became a skill, per h5rq.3's ruling. Efficacy: none. resolve-seeds-from-beads sweep 2026-09-30"
 tags:
   - cutting
   - capture

@@ -1,11 +1,13 @@
 ---
 id: seeds-h5rq.3
 title: cutting is a pure skill with zero new CLI surface; sweep is a hybrid
-status: captured
+status: resolved
 type: decision
 parent: seeds-h5rq
 created_at: 2026-09-01T16:39:22.768890+00:00
-updated_at: 2026-09-01T16:39:27.364181+00:00
+updated_at: 2026-09-30T17:22:52.215987+00:00
+resolved_at: 2026-09-30T17:22:52.215977+00:00
+resolution: "Shipped both halves: cutting is one SKILL.md with no CLI verb (d1558ae, merged e32c3ff, bead seeds-zcq); the sweep is a hybrid, the `seeds glean` verb (53d6a3f, src/seeds/glean.py) plus the glean skill (4c12668, bead seeds-3zy). Divergence: `create --content-file` was added (c63d487), a general flag rather than a cutting verb. Efficacy: minor, planning-miss (the create/update flag asymmetry was not noticed when 'zero CLI surface' was ruled). resolve-seeds-from-beads sweep 2026-09-30"
 tags:
   - cutting
   - sweep

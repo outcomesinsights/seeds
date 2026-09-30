@@ -1,11 +1,13 @@
 ---
 id: seeds-lcfa.4
 title: 'Python-friendly alternatives to Dolt: cr-sqlite, the SQLite session extension, and git-as-merge-engine'
-status: captured
+status: resolved
 type: exploration
 parent: seeds-lcfa
 created_at: 2026-08-26T03:51:50.041008+00:00
-updated_at: 2026-08-26T20:23:54.885659+00:00
+updated_at: 2026-09-30T17:22:55.017145+00:00
+resolved_at: 2026-09-30T17:22:55.017135+00:00
+resolution: 'Shipped option C: git as the merge engine with one file per seed (spec section 1). Divergence: SQLite was deleted outright rather than kept as a derived index. Efficacy: none. resolve-seeds-from-beads sweep 2026-09-30'
 tags:
   - alternatives
   - crsqlite

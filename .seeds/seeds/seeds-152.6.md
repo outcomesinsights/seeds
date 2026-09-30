@@ -1,11 +1,13 @@
 ---
 id: seeds-152.6
 title: resolve-seeds-from-beads assumes the session that shipped the work; the real use is a cold sweep of recently-closed beads
-status: captured
+status: resolved
 type: concern
 parent: seeds-152
 created_at: 2026-09-14T03:43:33.629403+00:00
-updated_at: 2026-09-14T03:43:38.956190+00:00
+updated_at: 2026-09-30T17:22:51.138361+00:00
+resolved_at: 2026-09-30T17:22:51.138351+00:00
+resolution: 'Shipped: resolve-seeds-from-beads SKILL.md steps 0/1b/1c (a620361, bead seeds-9hf) add session/sweep/backlog modes, and `seeds candidates` (src/seeds/candidates.py, a7cb076, bead seeds-m66) finds candidates from closed beads. Divergence: the open window question was ruled a stateless 30-day default with the window printed, not an end-of-run marker; misplaced/malformed lineage reporting was added later (seeds-nnp). Efficacy: minor tweaking, inherent unknown (malformed Source lines found in use). resolve-seeds-from-beads sweep 2026-09-30'
 tags:
   - skills
   - resolve-seeds-from-beads

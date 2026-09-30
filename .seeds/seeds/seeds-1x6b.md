@@ -1,10 +1,12 @@
 ---
 id: seeds-1x6b
 title: 'First external bug report (@markdanese): one bad JSONL record silently froze sync for a month, and doctor said it was fine'
-status: captured
+status: resolved
 type: concern
 created_at: 2026-08-28T13:05:57.565844+00:00
-updated_at: 2026-08-31T20:02:46.548093+00:00
+updated_at: 2026-09-30T17:22:57.113677+00:00
+resolved_at: 2026-09-30T17:22:57.113664+00:00
+resolution: 'Shipped: doctor made to agree with sync and name the failing record (55bf114); under 0.7 strict reads name file, line and field, and check lists every bad file; sync/import no longer exist and type is an open vocabulary. Divergence: none. Efficacy: none. resolve-seeds-from-beads sweep 2026-09-30'
 tags:
   - bug
   - sync

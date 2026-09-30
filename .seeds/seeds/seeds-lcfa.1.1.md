@@ -1,11 +1,13 @@
 ---
 id: seeds-lcfa.1.1
 title: 'Immediate cheap win: wire seeds sync into git hooks so the DB stops needing to be refreshed by hand'
-status: captured
+status: abandoned
 type: idea
 parent: seeds-lcfa.1
 created_at: 2026-08-26T04:03:14.571300+00:00
-updated_at: 2026-08-26T04:03:14.571300+00:00
+updated_at: 2026-09-30T17:22:58.154895+00:00
+resolved_at: 2026-09-30T17:22:58.154883+00:00
+resolution: 'Superseded, not shipped: no sync hook was ever built. The files-as-truth store (seeds-4co; 9ff40ed deleted seeds sync/import and the live DB) removed the database the hook would have refreshed, so the problem no longer exists. Efficacy: significant, planning-miss (it called itself independent of every storage decision, and the storage decision made it moot). This was also the documented 2026-08-31 false positive. resolve-seeds-from-beads sweep 2026-09-30'
 tags:
   - hooks
   - sync

@@ -1,11 +1,13 @@
 ---
 id: seeds-lcfa.6
 title: 'Per-seed files + DuckDB: the split is right, but DuckDB is a cross-project READER, not a replacement store'
-status: captured
+status: resolved
 type: exploration
 parent: seeds-lcfa
 created_at: 2026-08-26T03:58:49.667056+00:00
-updated_at: 2026-09-01T15:56:08.830877+00:00
+updated_at: 2026-09-30T17:22:55.396681+00:00
+resolved_at: 2026-09-30T17:22:55.396673+00:00
+resolution: 'Shipped: the persistence layer is gone; full-text search is ripgrep (store.py search, lcfa.6.1); DuckDB is caller-side only via `seeds export --json` (bead seeds-4co.12) plus the cross-repo rg recipe (seeds-4co.20); no duckdb dependency. Divergence: the cross-project reader became rg plus the export pipe, not a DuckDB glob. Efficacy: none. resolve-seeds-from-beads sweep 2026-09-30'
 tags:
   - duckdb
   - per-seed-files

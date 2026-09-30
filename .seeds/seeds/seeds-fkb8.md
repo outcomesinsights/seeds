@@ -1,10 +1,12 @@
 ---
 id: seeds-fkb8
 title: 'The storage smell named precisely: the derived store is authorized to destroy the durable one, and JSONL is the wrong format for a file agents edit'
-status: captured
+status: resolved
 type: exploration
 created_at: 2026-08-28T16:32:53.991031+00:00
-updated_at: 2026-09-01T15:56:08.689364+00:00
+updated_at: 2026-09-30T17:22:55.823800+00:00
+resolved_at: 2026-09-30T17:22:55.823787+00:00
+resolution: 'Shipped: markdown with frontmatter at .seeds/seeds/<id>.md (spec sections 1-2); no derived store on the write path (no DB, no tracked JSONL); DuckDB is a recipe, not a dependency. Divergence: none. Efficacy: none. resolve-seeds-from-beads sweep 2026-09-30'
 tags:
   - storage
   - sqlite
