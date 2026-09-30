@@ -518,6 +518,79 @@ def _reject_append_with_replacement(
     sys.exit(1)
 
 
+def _reject_edit_with_body_route(
+    edit: tuple[str, str] | None,
+    append_text: str | None,
+    content: str | None,
+    content_file: str | None,
+) -> None:
+    """Refuse ``--edit`` alongside any other route that writes the body.
+
+    ``--edit`` changes one span of the body; ``-c``/``--content-file``/
+    ``--content -`` replace all of it and ``--append`` adds to it. A command
+    carrying ``--edit`` and one of those cannot mean both, so it is refused
+    rather than ranked -- the same shape as
+    :func:`_reject_append_with_replacement` (seeds-4s8).
+    """
+    if edit is None:
+        return
+    others = []
+    if content == STDIN_SENTINEL:
+        others.append("--content -")
+    elif content is not None:
+        others.append("--content")
+    if content_file is not None:
+        others.append("--content-file")
+    if append_text is not None:
+        others.append("--append")
+    if not others:
+        return
+    click.echo(
+        f"Error: --edit changes one span of the body and {' / '.join(others)} "
+        "also writes it, so passing both is contradictory. Nothing was changed.",
+        err=True,
+    )
+    click.echo("  Run them as separate commands.", err=True)
+    sys.exit(1)
+
+
+def _apply_edit(record: SeedRecord, old: str, new: str) -> None:
+    """Replace the one occurrence of ``old`` in the body with ``new``.
+
+    ``old`` is matched against the body as stored, which is also what
+    ``seeds show`` prints (show drops superseded scopes, but never rewrites a
+    line), so text copied from ``show`` matches. It must occur exactly once:
+    zero means the text is not there, two or more means the edit cannot say
+    which one it means. Both exit non-zero, name the count, and write nothing.
+    """
+    if not old:
+        click.echo(
+            "Error: --edit OLD is empty, so it names no span of the body. "
+            "Nothing was changed.",
+            err=True,
+        )
+        sys.exit(1)
+    count = record.body.count(old)
+    if count != 1:
+        click.echo(
+            f"Error: --edit OLD occurs {count} times in {record.id}'s body; it "
+            "must occur exactly once. Nothing was changed.",
+            err=True,
+        )
+        if count == 0:
+            click.echo(
+                f"  Copy OLD from the body as `seeds show {record.id}` prints it.",
+                err=True,
+            )
+        else:
+            click.echo(
+                "  Widen OLD with surrounding text until it names one span.",
+                err=True,
+            )
+        sys.exit(1)
+    record.body = record.body.replace(old, new, 1)
+
+
 def _seeds_flag_names() -> frozenset[str]:
     """Every long option name any seeds command accepts, read off the Click tree.
 
@@ -557,6 +630,10 @@ class SwallowCopy(NamedTuple):
     outcome: str = "Nothing was changed."
     stdin_purpose: str | None = None
     file_route: str | None = None
+    placeholder: str = '"..."'
+    """What stands in for the option's text in the corrected command: one
+    ``"..."`` per value, so a two-value option (``--edit OLD NEW``) prints a
+    command that can actually be run."""
 
 
 def _reject_swallowed_flag(value: str | None, copy: SwallowCopy) -> None:
@@ -595,7 +672,7 @@ def _reject_swallowed_flag(value: str | None, copy: SwallowCopy) -> None:
     )
     click.echo(
         f"  If it is a flag, give {copy.option} its text first:  {copy.command} "
-        f'{copy.option} "..." {quoted}',
+        f"{copy.option} {copy.placeholder} {quoted}",
         err=True,
     )
     if copy.stdin_purpose is None:
@@ -1580,6 +1657,16 @@ def trellis(
     ),
 )
 @click.option(
+    "--edit",
+    nargs=2,
+    metavar="OLD NEW",
+    help=(
+        "Replace one exact span of the body: OLD must occur exactly once, or "
+        "nothing is written. Needs no --replace; cannot be combined with "
+        "-c/--content-file/--append."
+    ),
+)
+@click.option(
     "--replace",
     is_flag=True,
     help=(
@@ -1606,6 +1693,7 @@ def update(
     add_tags: tuple[str, ...],
     remove_tags: tuple[str, ...],
     append_text: str | None,
+    edit: tuple[str, str] | None,
     replace: bool,
     allow_unknown_refs: bool,
 ) -> None:
@@ -1638,6 +1726,14 @@ def update(
     --title that is exactly a seeds flag name is refused as swallowed too;
     other titles starting with "--" are taken as written.
 
+    --edit OLD NEW corrects one span in place -- the route for a fact that
+    turned out false. OLD is matched against the body as `seeds show` prints
+    it and must occur exactly once; zero or several matches are refused and
+    nothing is written. It is an edit, not a discard, so it needs no
+    --replace, and it cannot be combined with -c/--content-file/--append. Both
+    values come from argv; an OLD or NEW exactly equal to a seeds flag name is
+    refused as swallowed.
+
     --type accepts any string, matching `seeds create`. Before this existed a
     seed's type was write-once and the only way to change it was hand-editing
     the store -- which is how the malformed records in seed seeds-1x6b got in.
@@ -1659,6 +1755,7 @@ def update(
     _reject_append_with_replacement(
         record.id, append_text, content, content_file, allow_unknown_refs
     )
+    _reject_edit_with_body_route(edit, append_text, content, content_file)
     command = f"seeds update {record.id}"
     _reject_swallowed_flag(
         append_text,
@@ -1673,6 +1770,21 @@ def update(
     _reject_swallowed_flag(
         title, SwallowCopy(option="--title", takes="the title", command=command)
     )
+    edit_new = None
+    if edit is not None:
+        for value, takes in zip(
+            edit, ("the text to replace", "the new text"), strict=True
+        ):
+            _reject_swallowed_flag(
+                value,
+                SwallowCopy(
+                    option="--edit",
+                    takes=takes,
+                    command=command,
+                    placeholder='"..." "..."',
+                ),
+            )
+        edit_new = edit[1]
 
     content = _resolve_content(content, content_file)
     if append_text == STDIN_SENTINEL:
@@ -1684,7 +1796,9 @@ def update(
         # files wanting a reformat were the four written that way that day.
         append_text = sys.stdin.read().rstrip("\n")
 
-    _validate_id_refs(store, [title, content, append_text], allow_unknown_refs)
+    _validate_id_refs(
+        store, [title, content, append_text, edit_new], allow_unknown_refs
+    )
     _reject_ambiguous_tag_flags(tags, add_tags, remove_tags)
 
     if content is not None and not replace:
@@ -1713,6 +1827,10 @@ def update(
         # newline, and concatenating onto it would separate the append with
         # three newlines instead of the one blank line an append means.
         record.body = f"{record.body.rstrip()}\n\n{append_text}".strip()
+        changed = True
+
+    if edit is not None:
+        _apply_edit(record, *edit)
         changed = True
 
     if tags is not None:
