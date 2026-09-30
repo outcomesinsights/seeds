@@ -535,10 +535,13 @@ function lives in `check --smells`.
 ### 6.4 Body emptiness
 
 The format permits an empty body — structurally, the body region simply has no
-bytes. Whether that is acceptable is a `check` question, not a parse question:
-`plans/storage-overhaul.md` phase 3 lists an empty body as a violation, and 31
-of this repo's 312 seeds currently have one, so the converter and the checker
-have to rule on those together rather than each assuming the other handled it.
+bytes. Whether that is acceptable is a `check` question, not a parse question,
+and it is ruled: an empty body is a **smell, not a violation** (@aguynamedryan,
+2026-08-31; `plans/storage-overhaul.md` phase 3). `seeds jot` creates a
+title-only seed by design, and 31 of this repo's 312 seeds had no body at the
+time of the ruling, so as a violation it would fail on the output of the primary
+capture verb. `seeds check --smells` reports it as `empty-body`; it never fails
+`check`.
 
 ## 7. Locked decisions
 
