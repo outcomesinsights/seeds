@@ -10,6 +10,17 @@ from seeds.models import SeedStatus, SeedType
 from seeds.store import Store, new_record
 
 
+@pytest.fixture(autouse=True)
+def _no_real_claude(monkeypatch):
+    """No test reaches the real `claude` CLI, and so never the real ~/.claude.
+
+    `seeds doctor` asks Claude Code about the seeds plugin. Without this every
+    doctor test would read the developer's own plugin state, and pass or fail
+    on it. A test that wants `claude` present stubs this seam back itself.
+    """
+    monkeypatch.setattr("seeds.claude_plugin.claude_path", lambda: None)
+
+
 @pytest.fixture
 def temp_dir():
     """Create a temporary directory for test databases."""

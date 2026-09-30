@@ -384,8 +384,9 @@ A few small habits keep the seed store healthy.
   of got there first.
 - **`seeds doctor` answers "is my install and store healthy?"** The store is
   there, the prefix is recorded, every seed reads, no edge names a missing
-  seed, the type vocabulary has not drifted. Worth running when seeds seem to
-  have gone missing.
+  seed, the type vocabulary has not drifted, and the Claude Code plugin is
+  installed, enabled and current, with the fix command for each that is not.
+  Worth running when seeds, or the `seeds:*` skills, seem to have gone missing.
 - **A merge conflict is an ordinary merge conflict.** One seed per file means
   two people editing different seeds never collide at all, and two people
   editing the same one collide in git, in the file, with the usual markers and

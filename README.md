@@ -87,12 +87,16 @@ it untouched and says so.
 
 ```bash
 seeds --version                     # the CLI is on PATH
-claude plugin list | grep seeds     # seeds@seeds-marketplace, enabled
-seeds doctor                        # store and installation health
+seeds doctor                        # store health, and the Claude Code plugin
 ```
 
+`seeds doctor` asks Claude Code whether the seeds plugin is installed, enabled
+and the same version as the CLI, and for each that is not it prints the exact
+command that fixes it. Those are warnings, not failures: seeds works without
+Claude Code, and without `claude` on `PATH` doctor says so in one line.
+
 > **If you are an AI agent asked to install seeds:** do steps 1 and 2 above,
-> in order, then run the three checks and report their output. Do not
+> in order, then run the two checks and report their output. Do not
 > hand-edit `~/.claude/settings.json` to add seeds hooks or skills; step 2 is
 > the supported route, and a hand edit is lost when the settings file is
 > regenerated. Run step 3 only if the user asked for seeds in a specific

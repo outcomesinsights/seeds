@@ -4018,6 +4018,19 @@ class TestDoctorCommand:
                 os.chdir(original_cwd)
 
 
+# What `claude plugin list --json` prints with the seeds plugin at user scope.
+INSTALLED_AT_USER_SCOPE = json.dumps(
+    [
+        {
+            "id": "seeds@seeds-marketplace",
+            "version": "0.0.1",
+            "scope": "user",
+            "enabled": True,
+        }
+    ]
+)
+
+
 class TestSkillsInstall:
     """Tests for 'seeds skills install' (Claude Code plugin installer)."""
 
@@ -4037,9 +4050,9 @@ class TestSkillsInstall:
         which silently drops every seeds:* skill from new sessions.
         """
         with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("seeds.claude_plugin.claude_path", return_value="/usr/bin/claude"),
             patch(
-                "subprocess.run", return_value=self._completed(stdout="")
+                "subprocess.run", return_value=self._completed(stdout="[]")
             ) as mock_run,
         ):
             result = cli_runner.invoke(main, ["skills", "install"])
@@ -4067,10 +4080,10 @@ class TestSkillsInstall:
     def test_already_installed_updates_then_enables(self, cli_runner):
         """When already present, the command updates (not re-installs) and enables."""
         with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("seeds.claude_plugin.claude_path", return_value="/usr/bin/claude"),
             patch(
                 "subprocess.run",
-                return_value=self._completed(stdout="seeds@seeds-marketplace\n"),
+                return_value=self._completed(stdout=INSTALLED_AT_USER_SCOPE),
             ) as mock_run,
         ):
             result = cli_runner.invoke(main, ["skills", "install"])
@@ -4101,10 +4114,10 @@ class TestSkillsInstall:
     ):
         """--reinstall refreshes the source and replaces the stale copy."""
         with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("seeds.claude_plugin.claude_path", return_value="/usr/bin/claude"),
             patch(
                 "subprocess.run",
-                return_value=self._completed(stdout="seeds@seeds-marketplace\n"),
+                return_value=self._completed(stdout=INSTALLED_AT_USER_SCOPE),
             ) as mock_run,
         ):
             result = cli_runner.invoke(main, ["skills", "install", "--reinstall"])
@@ -4129,7 +4142,7 @@ class TestSkillsInstall:
 
     def test_aborts_without_claude_cli(self, cli_runner):
         """The command fails cleanly when the `claude` CLI is not installed."""
-        with patch("shutil.which", return_value=None):
+        with patch("seeds.claude_plugin.claude_path", return_value=None):
             result = cli_runner.invoke(main, ["skills", "install"])
 
         assert result.exit_code != 0
@@ -4138,10 +4151,10 @@ class TestSkillsInstall:
     def test_upgrade_is_an_alias_for_reinstall(self, cli_runner):
         """--upgrade behaves identically to --reinstall."""
         with (
-            patch("shutil.which", return_value="/usr/bin/claude"),
+            patch("seeds.claude_plugin.claude_path", return_value="/usr/bin/claude"),
             patch(
                 "subprocess.run",
-                return_value=self._completed(stdout="seeds@seeds-marketplace\n"),
+                return_value=self._completed(stdout=INSTALLED_AT_USER_SCOPE),
             ) as mock_run,
         ):
             result = cli_runner.invoke(main, ["skills", "install", "--upgrade"])

@@ -6,6 +6,7 @@ import functools
 import json
 import os
 import shlex
+import subprocess
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -13,7 +14,7 @@ from typing import IO, Any, NamedTuple
 
 import click
 
-from seeds import __version__
+from seeds import __version__, claude_plugin
 from seeds.beads import (
     beads_in_use,
     query_bead_ids,
@@ -2298,6 +2299,10 @@ def doctor(ctx: Context) -> None:
     recorded, the seeds read, no edge names a missing seed, the type
     vocabulary has not drifted. It does NOT verify the files themselves --
     that is `seeds check`, which reads the same tree and gates on it.
+
+    It also asks Claude Code whether the seeds plugin is installed, enabled
+    and the same version as this CLI, and prints the command that fixes each
+    one that is not. Those are warnings: seeds works without Claude Code.
     """
     passed = 0
     warnings = 0
@@ -2420,6 +2425,26 @@ def doctor(ctx: Context) -> None:
         # -- it may be this project's own vocabulary -- so naming one as the
         # "right" type would presume a typo doctor cannot actually detect.
         click.echo("      Remap one with: seeds retype --from <type> --to <type>")
+
+    # The Claude Code plugin (bead seeds-p7ns). seeds works without Claude
+    # Code, so every finding here is a warning and `claude` being absent is
+    # only a note: none of it may fail a gate that is about the store.
+    click.echo()
+    click.echo("Claude Code:")
+    plugin_check = claude_plugin.check_plugin(__version__)
+    if not plugin_check.claude_found:
+        click.echo(
+            "  → `claude` is not on PATH, so the Claude Code integration cannot "
+            "be checked. seeds works without it."
+        )
+    elif plugin_check.error:
+        check_warn("Claude Code plugin", f"cannot be checked: {plugin_check.error}")
+    elif plugin_check.problems:
+        for problem in plugin_check.problems:
+            check_warn("Claude Code plugin", problem.message)
+            click.echo(f"      Fix: {problem.fix}")
+    else:
+        check_pass(f"seeds plugin {__version__} installed and enabled")
 
     # There is no second store to disagree with, so there is nothing here to
     # check. `seeds doctor` used to end with a JSONL/DB comparison, and every
@@ -3185,24 +3210,16 @@ def install(reinstall: bool) -> None:
     --upgrade) after upgrading the seeds CLI to replace a stale cached copy.
     """
     import importlib.resources
-    import shutil
-    import subprocess
 
-    plugin = "seeds@seeds-marketplace"
-    marketplace = "seeds-marketplace"
-
-    if not shutil.which("claude"):
+    if claude_plugin.claude_path() is None:
         click.echo("`claude` CLI not found. Install Claude Code first.", err=True)
         raise click.Abort()
 
+    plugin = claude_plugin.PLUGIN
+
     def claude(*args: str, fatal: bool = False) -> subprocess.CompletedProcess[str]:
         """Run a `claude` subcommand; abort the install only when fatal."""
-        proc = subprocess.run(
-            ["claude", *args],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        proc = claude_plugin.run_claude(*args)
         if proc.returncode != 0 and fatal:
             click.echo(
                 f"`claude {' '.join(args)}` failed: {proc.stderr.strip()}", err=True
@@ -3217,9 +3234,17 @@ def install(reinstall: bool) -> None:
     if reinstall:
         # Re-read marketplace.json + plugin files from the on-disk source so an
         # upgraded seeds CLI's newer skill content is picked up.
-        claude("plugin", "marketplace", "update", marketplace)
+        claude("plugin", "marketplace", "update", claude_plugin.MARKETPLACE)
 
-    installed = plugin in claude("plugin", "list").stdout
+    # The same detector `seeds doctor` reads, so the two cannot disagree about
+    # what "installed" means. Only the user-scope copy counts: that is the one
+    # every command below names with `--scope user`.
+    try:
+        installs = claude_plugin.plugin_installs()
+    except claude_plugin.ClaudeListError as exc:
+        click.echo(str(exc), err=True)
+        raise click.Abort() from exc
+    installed = claude_plugin.user_install(installs) is not None
 
     if reinstall and installed:
         # Drop the cached copy so we re-copy fresh content. The plugin manifest
