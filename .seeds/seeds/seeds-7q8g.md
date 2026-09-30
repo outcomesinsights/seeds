@@ -4,7 +4,7 @@ title: Should seeds ship its commit-time check to the other repos that keep seed
 status: exploring
 type: exploration
 created_at: 2026-09-30T18:08:42.113398+00:00
-updated_at: 2026-09-30T18:48:56.363824+00:00
+updated_at: 2026-09-30T18:58:35.157781+00:00
 ---
 
 **The question:** Should seeds offer the repos that use it a commit-time `seeds check`, the way the seeds repo itself runs one? If so, how: a documented pre-commit snippet, a `seeds` command that installs it, or `seeds doctor` running `check`?
@@ -123,3 +123,5 @@ seeds-check:
 ```
 
 The `command -v seeds` guard stays in the recipe, because it is about seeds itself being absent. The subcommand handles everything else. Implementation: see the bead sourced from this seed. The subcommand's name is not yet chosen (see the bead).
+
+Name ruled 2026-09-30 (Ryan): the subcommand is a flag, `seeds check --gate`, not a new verb. Standard recipe: @command -v seeds >/dev/null 2>&1 || exit 0; seeds check --gate. Implementation: bead seeds-l80.
