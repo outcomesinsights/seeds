@@ -1,3 +1,8 @@
+# A hook with no `stages:` runs in EVERY installed stage, so without this the
+# commit-stage hooks ran a second time at push, measured on the first real push
+# on 2026-09-30. Hooks that belong at push say `stages: [pre-push]` explicitly.
+default_stages: [pre-commit]
+
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.13
