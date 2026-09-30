@@ -138,7 +138,7 @@ Thirty seconds of verification settled it: open `.pre-commit-config.yaml` and lo
 
 For the candidates that survived step 2, compare the seeds' conclusions with what was actually built — the real diff, and any tweaks or last-minute changes made mid-implementation. Surface each meaningful divergence to the user.
 
-For divergences worth keeping, classify each first (`seeds prime`, *Correcting vs. Superseding*): was the seed's text FALSE, or a position that shipping MOVED PAST?
+For divergences worth keeping, classify each first (`seeds prime --full`, *Correcting vs. Superseding*): was the seed's text FALSE, or a position that shipping MOVED PAST?
 
 - **A position moved past** — the usual case: the plan said one thing and the build did another. Keep the original and **append** a labelled, dated note with `seeds update <id> --append "UPDATE YYYY-MM-DD: shipped as …, because …"` (RULED and CORRECTION are labels too) — never `-c/--content`, which *replaces* and would destroy the original deliberation. Both the original reasoning and "what we actually did in the end" should stay legible.
 - **A fact that was false** — a wrong file name, number or behaviour the seed states as true. Correct it in place with `seeds update <id> --edit OLD NEW`, copying OLD from `seeds show`; the old value lives in git, so it needs no note.

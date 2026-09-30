@@ -3280,16 +3280,127 @@ class TestTreeCommand:
 class TestPrimeCommand:
     """Tests for 'seeds prime' command."""
 
-    def test_prime_outputs_context_in_seeds_project(self, cli_runner, initialized_env):
+    @pytest.mark.parametrize("argv", [["prime"], ["prime", "--full"]])
+    def test_prime_outputs_context_in_seeds_project(
+        self, argv, cli_runner, initialized_env
+    ):
         """Verify prime outputs workflow context when in a seeds project."""
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, argv)
         assert result.exit_code == 0
         assert "seeds Workflow Context" in result.output
         assert "seeds jot" in result.output
 
+    # --- The short form: the default, and what the plugin hooks inject ------
+    # Bead seeds-oiy, ruled on seed seeds-i9y6.1.
+
+    SHORT_BUDGET = 3500  # characters; bd prime is ~3,326
+
+    SHORT_SECTIONS = (
+        "## Seed or bead?",
+        "## Capture the journey",
+        "## Essential Commands",
+        "## Correcting what a seed says",
+        "## Session end",
+        "**Store:**",
+    )
+
+    def test_short_form_is_the_default_and_leads_with_seed_or_bead(
+        self, cli_runner, env_with_seeds
+    ):
+        """Seed-or-bead comes FIRST: deliberation filed as beads is the failure
+        this form exists to stop (seed seeds-i9y6)."""
+        out = cli_runner.invoke(main, ["prime"]).output
+
+        positions = [out.find(heading) for heading in self.SHORT_SECTIONS]
+        assert all(p >= 0 for p in positions), dict(
+            zip(self.SHORT_SECTIONS, positions, strict=True)
+        )
+        assert positions == sorted(positions)
+        first_section = out[out.index("\n## ") + 1 :].split("\n", 1)[0]
+        assert first_section.startswith("## Seed or bead?")
+
+    def test_short_form_points_at_full_for_recovery(self, cli_runner, initialized_env):
+        head = cli_runner.invoke(main, ["prime"]).output.splitlines()[:5]
+        assert any("seeds prime --full" in line for line in head), head
+
+    def test_short_form_carries_no_full_only_material(self, cli_runner, env_with_seeds):
+        out = cli_runner.invoke(main, ["prime"]).output
+
+        assert "## Current Seeds" not in out
+        assert "Recently Updated" not in out
+        assert "seed-test1" not in out
+        assert "### Gating Commits" not in out
+        assert "seeds check --gate" not in out
+
+    def test_short_form_names_both_correction_routes(self, cli_runner, initialized_env):
+        """Option C (seed seeds-zxq8): --edit for a false fact, an appended dated
+        note for a moved-past position."""
+        out = cli_runner.invoke(main, ["prime"]).output
+        _, _, section = out.partition("## Correcting what a seed says")
+        section = section.split("\n## ")[0]
+
+        assert "`seeds update <id> --edit OLD NEW`" in section
+        assert "append a dated note" in section
+        assert "Do not delete the old position" in section
+
+    def test_short_form_count_line_is_computed(self, cli_runner, env_with_seeds):
+        """Fixture: four seeds, none a question, seed-test2 exploring."""
+        out = cli_runner.invoke(main, ["prime"]).output
+
+        assert (
+            "**Store:** 4 seeds · 0 open questions · 1 exploring. "
+            "`seeds ready` shows what needs attention."
+        ) in out
+
+    def test_short_form_no_digest_drops_the_count_line(
+        self, cli_runner, env_with_seeds
+    ):
+        out = cli_runner.invoke(main, ["prime", "--no-digest"]).output
+
+        assert "**Store:**" not in out
+        assert "## Session end" in out
+
+    def test_short_form_ignores_digest_limit(self, cli_runner, env_with_seeds):
+        """--digest-limit caps --full's list; the short form has none to cap."""
+        plain = cli_runner.invoke(main, ["prime"]).output
+        limited = cli_runner.invoke(main, ["prime", "--digest-limit", "1"]).output
+
+        assert limited == plain
+
+    def test_short_form_stays_within_its_budget(self, cli_runner, env_with_seeds):
+        """It is injected at every session start and compaction, so it must not
+        quietly grow back into the ~25,000-character full reference."""
+        out = cli_runner.invoke(main, ["prime"]).output
+
+        assert len(out) <= self.SHORT_BUDGET, len(out)
+
+    def test_short_form_stays_within_its_budget_on_this_repos_store(self):
+        """The same budget, measured on the real corpus (read-only)."""
+        from seeds.prime import get_prime_output
+
+        store_dir = Path(__file__).resolve().parent.parent / ".seeds"
+        if not (store_dir / "seeds").is_dir():
+            pytest.skip("no seed store in this source tree")
+
+        out = get_prime_output(store=Store(store_dir))
+
+        assert "**Store:**" in out
+        assert len(out) <= self.SHORT_BUDGET, len(out)
+
+    def test_full_updating_list_names_edit(self, cli_runner, initialized_env):
+        out = cli_runner.invoke(main, ["prime", "--full"]).output
+        _, _, section = out.partition("### Updating")
+        section = section.split("\n### ")[0]
+
+        assert "`seeds update <id> --edit OLD NEW`" in section
+
+    def test_full_form_says_it_is_the_full_reference(self, cli_runner, initialized_env):
+        head = cli_runner.invoke(main, ["prime", "--full"]).output.splitlines()[:5]
+        assert any("seeds prime --full" in line for line in head), head
+
     def test_prime_documents_prefix_commands(self, cli_runner, initialized_env):
         """Verify prime mentions the new prefix-related commands."""
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, ["prime", "--full"])
         assert result.exit_code == 0
         assert "seeds rename-prefix" in result.output
         assert "seeds prefix" in result.output
@@ -3300,7 +3411,7 @@ class TestPrimeCommand:
     ):
         """Agents write nearly every body, and the writer formats what they
         hand it: unfenced literal text is silently reshaped."""
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, ["prime", "--full"])
         assert result.exit_code == 0
         assert "FENCE anything that must stay verbatim" in result.output
         assert "mdformat" in result.output
@@ -3315,7 +3426,7 @@ class TestPrimeCommand:
         through --edit in place; a position MOVED PAST gets an appended, dated
         note. The marker is still named, as optional, never as asked for.
         """
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, ["prime", "--full"])
 
         assert result.exit_code == 0
         out = result.output
@@ -3339,7 +3450,7 @@ class TestPrimeCommand:
         the §6.1 grammar it summarises."""
         from seeds.seedfile import superseded_scopes
 
-        out = cli_runner.invoke(main, ["prime"]).output
+        out = cli_runner.invoke(main, ["prime", "--full"]).output
         _, _, section = out.partition("### Correcting vs. Superseding")
         section = section.split("\n### ")[0]
         (marker,) = [
@@ -3378,7 +3489,7 @@ class TestPrimeCommand:
         The recipe has to be in the document an agent is handed, not left to
         instinct -- and it has to name the glob rather than a loop.
         """
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, ["prime", "--full"])
 
         assert result.exit_code == 0
         assert "rg -l" in result.output
@@ -3393,7 +3504,7 @@ class TestPrimeCommand:
         agent in any repo learns the one line rather than inventing a wrapper.
         Asserted verbatim, recipe line and all, because a variant is the drift
         the flag exists to stop."""
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, ["prime", "--full"])
 
         assert result.exit_code == 0
         assert (
@@ -3405,7 +3516,7 @@ class TestPrimeCommand:
     def test_prime_does_not_send_agents_back_to_the_retired_jsonl(
         self, cli_runner, initialized_env
     ):
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, ["prime", "--full"])
 
         _, _, recipe = result.output.partition("Searching Across Repos")
         assert "retired" in recipe
@@ -3414,18 +3525,19 @@ class TestPrimeCommand:
     def test_prime_frames_export_as_structured_extraction_not_search(
         self, cli_runner, initialized_env
     ):
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, ["prime", "--full"])
 
         assert "STRUCTURED extraction" in result.output
         assert "DuckDB" in result.output
 
-    def test_prime_silent_exit_outside_seeds_project(self, cli_runner):
+    @pytest.mark.parametrize("argv", [["prime"], ["prime", "--full"]])
+    def test_prime_silent_exit_outside_seeds_project(self, argv, cli_runner):
         """Verify prime silently exits when not in a seeds project."""
         with tempfile.TemporaryDirectory() as tmpdir:
             original_cwd = os.getcwd()
             os.chdir(tmpdir)
             try:
-                result = cli_runner.invoke(main, ["prime"])
+                result = cli_runner.invoke(main, argv)
                 assert result.exit_code == 0
                 assert result.output == ""  # Silent exit - no output
             finally:
@@ -3433,7 +3545,7 @@ class TestPrimeCommand:
 
     def test_prime_includes_digest_with_seeds(self, cli_runner, env_with_seeds):
         """Prime should append a digest of project state when seeds exist."""
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, ["prime", "--full"])
         assert result.exit_code == 0
         assert "## Current Seeds" in result.output
         assert "Counts:" in result.output
@@ -3443,7 +3555,7 @@ class TestPrimeCommand:
 
     def test_prime_no_digest_flag_omits_digest(self, cli_runner, env_with_seeds):
         """--no-digest should produce only the workflow text."""
-        result = cli_runner.invoke(main, ["prime", "--no-digest"])
+        result = cli_runner.invoke(main, ["prime", "--full", "--no-digest"])
         assert result.exit_code == 0
         assert "seeds Workflow Context" in result.output
         assert "## Current Seeds" not in result.output
@@ -3451,20 +3563,20 @@ class TestPrimeCommand:
 
     def test_prime_digest_with_empty_project(self, cli_runner, initialized_env):
         """Empty project should produce a friendly empty-digest hint."""
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, ["prime", "--full"])
         assert result.exit_code == 0
         assert "## Current Seeds" in result.output
         assert "Project is empty" in result.output
 
     def test_prime_digest_limit_respected(self, cli_runner, env_with_seeds):
         """--digest-limit should cap the Recently Updated section."""
-        result = cli_runner.invoke(main, ["prime", "--digest-limit", "1"])
+        result = cli_runner.invoke(main, ["prime", "--full", "--digest-limit", "1"])
         assert result.exit_code == 0
         assert "Recently Updated (top 1)" in result.output
 
     def test_prime_digest_shows_active_exploration(self, cli_runner, env_with_seeds):
         """Exploring seeds should appear in their own section."""
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, ["prime", "--full"])
         assert result.exit_code == 0
         # Fixture sets seed-test2 to EXPLORING
         assert "Active Exploration" in result.output

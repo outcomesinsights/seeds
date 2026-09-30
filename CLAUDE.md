@@ -35,7 +35,7 @@ These are safe to run regardless of context:
 - `seeds search` / `seeds export --json` / `seeds history` - Search, dump, and read the git history of the corpus
 - `seeds check` / `seeds doctor` - Verify the store
 - `seeds --help` / `seeds --version` - Help and version
-- `seeds prime` - Context for agents
+- `seeds prime` / `seeds prime --full` - Context for agents (short / full reference)
 
 ### How to Test seeds Commands
 
@@ -85,7 +85,7 @@ Captures thoughts, ideas, and questions with minimal friction ("jot") and tracks
 - `src/seeds/convert.py` + `src/seeds/legacy.py` - `seeds convert`, and the read-only pre-0.7 reader it needs
 - `src/seeds/jsonexport.py` - `seeds export --json`
 - `src/seeds/githistory.py` + `src/seeds/history.py` - git as a store: `seeds check --against-git`, and `seeds history`
-- `src/seeds/prime.py` - AI context output
+- `src/seeds/prime.py` - AI context output: the short default the plugin hooks inject, and `--full`
 
 ## Commands
 
@@ -114,7 +114,8 @@ uv run seeds doctor                  # Store and installation health
 uv run seeds export --json           # The whole corpus as JSONL on stdout
 uv run seeds convert                 # One-time: pre-0.7 SQLite + JSONL -> .seeds/seeds/
 uv run seeds rename-prefix <new>     # Rename the project prefix across every ID, edge and body reference
-uv run seeds prime                   # AI context output
+uv run seeds prime                   # Short AI context (what the plugin's SessionStart/PreCompact hooks inject)
+uv run seeds prime --full            # Full reference: every command, recipes, project-state digest
 uv run pytest                        # Run tests
 ```
 

@@ -32,7 +32,7 @@ from pathlib import Path
 import pytest
 
 from seeds.cli import main
-from seeds.prime import PRIME_OUTPUT
+from seeds.prime import PRIME_OUTPUT, PRIME_SHORT_OUTPUT
 from seeds.store import needs_conversion
 
 T0 = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
@@ -133,31 +133,40 @@ class TestEveryDataTouchingCommand:
 
 
 class TestPrime:
-    """The one command that must inform WITHOUT aborting."""
+    """The one command that must inform WITHOUT aborting -- in either form.
+
+    The short form is what the plugin hooks inject at every session start, so
+    it is the form an agent meets first; it carries both notices too (bead
+    seeds-oiy).
+    """
+
+    @pytest.fixture(params=[["prime"], ["prime", "--full"]], ids=["short", "full"])
+    def argv(self, request):
+        return request.param
 
     def test_it_still_exits_zero_and_still_teaches_the_verbs(
-        self, unconverted, cli_runner
+        self, argv, unconverted, cli_runner
     ):
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, argv)
 
         assert result.exit_code == 0
         assert "seeds jot" in result.output
         assert "## Essential Commands" in result.output
 
     def test_the_notice_is_at_the_top_where_a_truncated_read_still_sees_it(
-        self, unconverted, cli_runner
+        self, argv, unconverted, cli_runner
     ):
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, argv)
 
         head = result.output.splitlines()[:6]
         assert any("seeds convert" in line for line in head), head
         assert any("OUT OF DATE" in line for line in head), head
 
     def test_the_notice_is_also_where_the_state_block_would_have_been(
-        self, unconverted, cli_runner
+        self, argv, unconverted, cli_runner
     ):
         """Placement, not merely presence: absence explained at the absence."""
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, argv)
 
         assert "## Current Seeds" in result.output
         _, _, after = result.output.partition("## Current Seeds")
@@ -165,8 +174,10 @@ class TestPrime:
         assert "seeds convert" in after
         assert "NOT been converted" in after or "not been converted" in after
 
-    def test_it_says_the_existing_seeds_are_not_lost(self, unconverted, cli_runner):
-        result = cli_runner.invoke(main, ["prime"])
+    def test_it_says_the_existing_seeds_are_not_lost(
+        self, argv, unconverted, cli_runner
+    ):
+        result = cli_runner.invoke(main, argv)
 
         assert "NOT lost" in result.output
         assert 'Do not read that absence as "this project has no seeds."' in (
@@ -174,10 +185,10 @@ class TestPrime:
         )
 
     def test_it_reports_no_count_because_it_never_opens_the_legacy_store(
-        self, unconverted, cli_runner
+        self, argv, unconverted, cli_runner
     ):
         """Reading the pre-0.7 store to count seeds was asked for and declined."""
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, argv)
 
         assert "**Counts:**" not in result.output
         assert "1 total" not in result.output
@@ -190,14 +201,17 @@ class TestPrime:
         assert "import sqlite3" not in source
         assert "from seeds.legacy import" not in source
 
-    def test_a_converted_store_gets_no_notice_at_all(self, unconverted, cli_runner):
+    def test_a_converted_store_gets_no_notice_at_all(
+        self, argv, unconverted, cli_runner
+    ):
         (unconverted / "seeds").mkdir()
 
-        result = cli_runner.invoke(main, ["prime"])
+        result = cli_runner.invoke(main, argv)
 
         assert result.exit_code == 0
         assert "OUT OF DATE" not in result.output
-        assert result.output.strip().startswith(PRIME_OUTPUT.strip()[:40])
+        expected = PRIME_OUTPUT if "--full" in argv else PRIME_SHORT_OUTPUT
+        assert result.output.strip().startswith(expected.strip())
 
 
 class TestJotDoesNotEatTheThought:

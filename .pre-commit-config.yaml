@@ -36,7 +36,7 @@ repos:
       #
       # `seeds check --gate` is the whole commit-path check, shipped in the
       # package so every repo wires it the same one-line way (seeds-l80; the
-      # standard recipe is in `seeds check --help` and `seeds prime`). It runs
+      # standard recipe is in `seeds check --help` and `seeds prime --full`). It runs
       # violations (blocks) and --against-git (blocks on one field rewritten
       # across >=20% of the corpus AND >=10 seeds, which catches a MASS
       # deletion; a single deleted seed is allowed, because git keeps every seed
