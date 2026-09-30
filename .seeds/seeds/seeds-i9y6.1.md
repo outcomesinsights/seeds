@@ -1,11 +1,11 @@
 ---
 id: seeds-i9y6.1
 title: Why is seeds prime not injected at session start the way bd prime is, and should the seeds plugin add the hook?
-status: captured
+status: exploring
 type: question
 parent: seeds-i9y6
 created_at: 2026-09-30T19:56:30.176056+00:00
-updated_at: 2026-09-30T19:56:30.176056+00:00
+updated_at: 2026-09-30T19:59:14.433800+00:00
 tags:
   - cutting
 ---
@@ -27,3 +27,54 @@ tags:
 2. The size: inject the full ~6k-token prime, or a short startup form (a `seeds prime --brief` or `--hook` mode: the seed-vs-bead boundary, the few commands, the correction rule, and a pointer to full `seeds prime`) with the full text on demand? bd prime's ~830 tokens is the working comparison.
 3. What the injected text must contain to fix the parent seed's drift: at minimum the boundary between a seed (anything unruled) and a bead (ruled work), stated where bd prime's "`--design` Record design decisions" line otherwise wins by default.
 4. Does the hook need a guard for machines where `seeds` isn't installed, as the commit recipe has (`command -v seeds || exit 0`)? The plugin is installed from the seeds package, so seeds is probably always present, but that needs checking.
+
+## Exploration 2026-09-30: mimic bd prime's size (Ryan: "let's mimic bd prime's output so we're not context hogs")
+
+**Measured:** bd prime is 3,326 characters (~830 tokens): a title, a recovery note, command bullets grouped by task, and a few workflow blocks. seeds prime is 24,759 characters: about 14,200 of workflow reference (largest parts: Creating 2,400, What to Capture 1,550, Recovering 1,250, Finding Work 1,230) and about 10,300 of digest (20 recently updated, 10 in exploration, 35 open questions). `seeds prime --help` already says it is "for Claude Code hooks", so it was built for startup and never wired.
+
+**Proposed shape (not ruled):**
+
+1. The plugin manifest gains SessionStart and PreCompact hooks running `seeds prime`, exactly as beads does. PreCompact matters most: compaction is when guidance is lost. No guard is needed outside a store, since seeds prime exits 0 silently there.
+2. `seeds prime` itself becomes the SHORT form, mirroring bd prime (one command, hook-sized). Today's full text moves to `seeds prime --full`. The short form's recovery line points there. (The alternative, keeping prime full and adding `--brief` for the hook, leaves the default as the context hog anything else would call.)
+3. The digest shrinks to one computed count line plus a pointer to `seeds ready`; the lists live in `--full`.
+4. The first section is the seed-vs-bead boundary, the fix seeds-i9y6 is about: unruled goes in a seed, ruled work in a bead, and a bead's --design holds only decisions already made.
+5. The correction rule follows seeds-zxq8's option C. It references `seeds update --edit`, which bead seeds-5i1 adds, so this ships after 5i1, or the line waits for it.
+
+**Draft short form (2,487 characters, ~620 tokens):**
+
+```markdown
+# seeds Workflow Context
+
+> **Context Recovery**: this is the short form, injected at session start and after compaction.
+> Run `seeds prime --full` for the full reference: capture examples, every command, current seeds.
+
+## Seed or bead? (decide BEFORE you file anything)
+- **Unruled → seed.** A question, an option list, a "Not ruled. Directions: (a)… (b)…", a design fork inside a bug report. The person rules; the seed holds the argument.
+- **Ruled → bead.** Work with a decision behind it. A bead's `--design` field holds only decisions already made.
+- A report that is part defect, part design question is BOTH: a bead for the defect, a seed (or `seeds ask` on an existing seed) for the fork.
+- Confirming a decision records it in the seed; it does not authorize building it.
+
+## Capture the journey, not just the conclusion
+- Capture DURING the work: what you checked and why, what you found (with counts), what the user said (verbatim).
+- Eliminated options and invalidated assumptions are worth a line each.
+- **Fence** anything that must stay verbatim (logs, output, SQL, tracebacks). Bodies are formatted on write; unfenced literals get mangled.
+
+## Essential Commands
+- `seeds jot "thought"`: capture in one line, title only
+- `seeds create -t "Title" --type idea|question|decision|exploration --content-file F`: a seed with a body; keep multi-paragraph bodies out of argv
+- `seeds ask "question?" --seed <id>` / `seeds answer <id> "answer"`: questions attached to a seed
+- `seeds ready` · `seeds list` · `seeds show <id>` · `seeds search "<regex>"`: find and read
+- `seeds update <id> --append -` (body on stdin): add to a seed's deliberation, the normal way to write to an existing seed
+- `seeds explore` / `defer` / `resolve -r "outcome"` / `abandon -r "why"` `<id>`: lifecycle
+- **WARNING**: `-c/--content` REPLACES a body and is refused on any non-empty one. Never use it to add.
+
+## Correcting what a seed says
+- A fact that turned out **false**: fix it in place with `seeds update <id> --edit OLD NEW`.
+- A position we **moved past**: append a dated note (`RULED 2026-09-30: …`, `UPDATE …`). Do not delete the old position.
+
+## Session end
+- `seeds check`, then commit `.seeds/seeds/*.md` like any source file. There is no export step.
+- Commit new seed files BEFORE starting implementation, so they don't get swept into the implementation's commits.
+
+**Store:** <N> seeds · <Q> open questions · <E> exploring (computed). `seeds ready` shows what needs attention.
+```
