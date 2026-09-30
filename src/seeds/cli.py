@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import json
+import os
 import shlex
 import sys
 from collections.abc import Callable, Sequence
@@ -26,6 +27,8 @@ from seeds.candidates import (
 from seeds.candidates import format_report as format_candidates_report
 from seeds.candidates import report_as_dict as candidates_as_dict
 from seeds.check import (
+    Finding,
+    GitComparison,
     GitUnavailable,
     check_against_git,
     check_smells,
@@ -2334,7 +2337,17 @@ def doctor(ctx: Context) -> None:
         "on any seed body that moved while its updated_at did not."
     ),
 )
-def check_cmd(smells: bool, against_git: bool) -> None:
+@click.option(
+    "--gate",
+    is_flag=True,
+    help=(
+        "The commit-path check, for a hook or a justfile recipe: violations "
+        "plus --against-git, never --smells. Exits 0 where there is no "
+        "seed-file store, and names the escape when it refuses "
+        "(SEEDS_GATE_CONFIRM=1). Implies --against-git; refuses --smells."
+    ),
+)
+def check_cmd(smells: bool, against_git: bool, gate: bool) -> None:
     """Verify the seed files are plausible, not merely parseable.
 
     The violations tier runs always: every finding there is either a file the
@@ -2358,7 +2371,32 @@ def check_cmd(smells: bool, against_git: bool) -> None:
     --smells is the tier that does not gate. Nothing it prints is an error, and
     nothing it prints reaches the exit code -- it reports the things worth
     noticing that cannot carry being a gate.
+
+    --gate is the whole commit-path check, so every repo's recipe is one line:
+
+    \b
+        seeds-check:
+            @command -v seeds >/dev/null 2>&1 || exit 0; seeds check --gate
+
+    It runs violations plus --against-git, never --smells (which never gates
+    and was ~94% of the cost; seeds-7q8g). A repo with no .seeds/seeds/ store
+    passes silently, so the recipe is harmless anywhere. A refusal names the
+    escape for an intended mass rewrite, SEEDS_GATE_CONFIRM=1 on the commit,
+    which works however the gate is wired. A `seeds rename-prefix` commit is
+    read as a rename, not as a mass deletion (seeds-l80).
     """
+    if gate:
+        if smells:
+            # "Never smells" is the ruling --gate exists to carry. Silently
+            # dropping a tier someone asked for by name would be the quiet
+            # shape of wrong, so the contradiction is a usage error.
+            raise click.UsageError(
+                "--gate never runs --smells (it never gates, and was ~94% of "
+                "the gate's cost). Run `seeds check --smells` on its own."
+            )
+        _check_gate()
+        return
+
     seeds_dir = find_seeds_dir()
     if seeds_dir is None:
         click.echo("Error: seeds not initialized. Run 'seeds init' first.", err=True)
@@ -2370,13 +2408,7 @@ def check_cmd(smells: bool, against_git: bool) -> None:
         sys.exit(1)
 
     findings = check_violations(seeds_dir)
-    if findings:
-        click.echo(format_findings(findings), nl=False)
-        click.echo()
-        click.echo(f"seeds check: {len(findings)} violation(s).")
-    else:
-        count = len(list(seed_files_dir(seeds_dir).glob("*.md")))
-        click.echo(f"seeds check: {count} files, no violations.")
+    _echo_violations(seeds_dir, findings)
     failed = bool(findings)
 
     if against_git:
@@ -2389,17 +2421,8 @@ def check_cmd(smells: bool, against_git: bool) -> None:
         except GitUnavailable as exc:
             click.echo(f"Error: seeds check --against-git: {exc}", err=True)
             sys.exit(1)
-        click.echo()
-        click.echo(
-            f"seeds check --against-git: {comparison.corpus} seed(s) at "
-            f"{comparison.before}, compared with {comparison.after}."
-        )
-        if comparison.findings:
-            click.echo(format_findings(comparison.findings), nl=False)
-            click.echo(
-                f"seeds check: {len(comparison.findings)} finding(s) against git."
-            )
-            failed = True
+        _echo_git_comparison(comparison)
+        failed = failed or bool(comparison.findings)
 
     if smells:
         smell_findings = check_smells(seeds_dir)
@@ -2413,6 +2436,102 @@ def check_cmd(smells: bool, against_git: bool) -> None:
 
     if failed:
         sys.exit(1)
+
+
+def _echo_violations(seeds_dir: Path, findings: list[Finding]) -> None:
+    """The violations tier's report: every finding, then a one-line total."""
+    if findings:
+        click.echo(format_findings(findings), nl=False)
+        click.echo()
+        click.echo(f"seeds check: {len(findings)} violation(s).")
+    else:
+        count = len(list(seed_files_dir(seeds_dir).glob("*.md")))
+        click.echo(f"seeds check: {count} files, no violations.")
+
+
+def _echo_git_comparison(comparison: GitComparison) -> None:
+    """What --against-git compared, any rename it read, and what it found."""
+    click.echo()
+    click.echo(
+        f"seeds check --against-git: {comparison.corpus} seed(s) at "
+        f"{comparison.before}, compared with {comparison.after}."
+    )
+    if comparison.rename is not None:
+        old, new, moved = comparison.rename
+        click.echo(
+            f"seeds check --against-git: read as `seeds rename-prefix` "
+            f"({old} → {new}, {moved} id(s) moved); judged only what the "
+            f"rename does not explain."
+        )
+    if comparison.findings:
+        click.echo(format_findings(comparison.findings), nl=False)
+        click.echo(f"seeds check: {len(comparison.findings)} finding(s) against git.")
+
+
+# The escape for an intended mass rewrite, owned by seeds rather than by a hook
+# framework (seeds-l80). prek's and pre-commit's `SKIP=<hook id>` exists only
+# when the gate is one of their hooks; a plain justfile recipe called from a
+# git hook has no skip of its own, which would leave `git commit --no-verify`
+# -- and that skips every other hook in the repo too.
+GATE_CONFIRM_ENV = "SEEDS_GATE_CONFIRM"
+
+GATE_REFUSAL = f"""
+────────────────────────────────────────────────────────────────────────────
+`seeds check --gate` refused this commit. If this is a mass rewrite you
+intended, confirm it explicitly -- that confirmation is the whole point of
+the gate:
+
+    {GATE_CONFIRM_ENV}=1 git commit …
+
+That works however the gate is wired: a justfile recipe, prek, pre-commit.
+Do not use `git commit --no-verify`: it skips every other hook as well.
+Expect to confirm twice for one rewrite: with nothing left uncommitted, the
+next commit audits the one that just landed.
+────────────────────────────────────────────────────────────────────────────"""
+
+
+def _check_gate() -> None:
+    """``seeds check --gate``: violations plus --against-git, on a commit path.
+
+    What it adds over running those two tiers by hand is what the per-repo
+    wrappers existed for (scripts/seeds_check_hook.py, retired by seeds-l80):
+    no store is a silent pass, a refusal names its escape, and the escape is
+    honoured. Which tiers run, and what each one finds, stays with the tiers.
+    """
+    seeds_dir = find_seeds_dir()
+    if seeds_dir is None:
+        return
+    findings = check_violations(seeds_dir)
+    # The store-missing cue is asked of check_violations rather than tested
+    # with `is_dir()` here, so "there is no store" keeps one definition. It is
+    # exactly one finding with that code: one violation of any other kind is
+    # still a violation.
+    if len(findings) == 1 and findings[0].code == "store-missing":
+        click.echo("seeds check --gate: no seed-file store here — nothing to gate.")
+        return
+
+    _echo_violations(seeds_dir, findings)
+    failed = bool(findings)
+    try:
+        comparison = check_against_git(seeds_dir)
+    except GitUnavailable as exc:
+        click.echo(f"Error: seeds check --against-git: {exc}", err=True)
+        failed = True
+    else:
+        _echo_git_comparison(comparison)
+        failed = failed or bool(comparison.findings)
+
+    if not failed:
+        return
+    if os.environ.get(GATE_CONFIRM_ENV) == "1":
+        click.echo(
+            f"\nseeds check --gate: {GATE_CONFIRM_ENV}=1, so this is confirmed "
+            f"rather than refused. The findings above are what was confirmed.",
+            err=True,
+        )
+        return
+    click.echo(GATE_REFUSAL, err=True)
+    sys.exit(1)
 
 
 @main.command("glean")

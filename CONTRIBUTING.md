@@ -147,8 +147,10 @@ Cutting a release (manual steps; intentionally no automation yet):
    That is cleanup, not a step in a reinstall. `CLAUDE.md`'s "Deploy to Global
    CLI" section says the same thing — keep the two in sync.
 
-The pre-commit hook runs `seeds check` over the seed-file store: the violations
-tier and `--against-git`, either of which blocks the commit. `--against-git` is
+The pre-commit hook runs `seeds check --gate` over the seed-file store: the
+violations tier and `--against-git`, either of which blocks the commit. It is
+the same one-line check every repo using seeds is meant to run (`seeds prime`
+prints the recipe). `--against-git` is
 the gate on the *shape* that corrupted this repo's own corpus — one field
 rewritten across a large slice of the store in a single sweep — and it is also
 what gates a mass deletion, since the format has no delete verb and `rm` is
@@ -157,9 +159,11 @@ seed file. The hook does not run `--smells`, which never blocks and was most of
 its runtime; run `seeds check --smells` yourself when you want that report.
 
 If it refuses a change you meant to make, confirm it explicitly with
-`SKIP=seeds-check git commit`. Use `SKIP`, not `git commit --no-verify`:
-`--no-verify` also skips the beads export and the git config sanity check, which
-have nothing to do with the store. Expect to need it **twice** for one intended
+`SEEDS_GATE_CONFIRM=1 git commit` (`SKIP=seeds-check` works too, under prek).
+Never `git commit --no-verify`: it also skips the beads export and the git
+config sanity check, which have nothing to do with the store. A
+`seeds rename-prefix` needs no confirmation; the gate reads it as a rename. Expect
+to need confirmation **twice** for one intended
 mass rewrite — when the store is unchanged relative to `HEAD`, `--against-git`
 falls back to comparing `HEAD~1` with `HEAD` and audits the commit that just
 landed, which is the reading that would have caught the original sweep on any of

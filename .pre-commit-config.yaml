@@ -32,31 +32,28 @@ repos:
       # a file through `bash -c 'cat > …'`, `sed -i` or a Python one-liner --
       # most agent file access in practice -- never fires them. Everything
       # reaches a commit eventually, so this is where detection has to live.
-      # See bead seeds-4co.13 and the script's own docstring.
+      # See bead seeds-4co.13.
       #
-      # Runs violations (blocks) and --against-git (blocks on one field
-      # rewritten across >=20% of the corpus AND >=10 seeds, which catches a
-      # MASS deletion; a single deleted seed is allowed, because git keeps every
-      # seed file -- seeds-w9h). --smells is NOT run: it never blocks and was
-      # ~94% of the hook's time (seeds-7q8g). Run `seeds check --smells` on
-      # demand.
+      # `seeds check --gate` is the whole commit-path check, shipped in the
+      # package so every repo wires it the same one-line way (seeds-l80; the
+      # standard recipe is in `seeds check --help` and `seeds prime`). It runs
+      # violations (blocks) and --against-git (blocks on one field rewritten
+      # across >=20% of the corpus AND >=10 seeds, which catches a MASS
+      # deletion; a single deleted seed is allowed, because git keeps every seed
+      # file -- seeds-w9h). --smells is NOT run: it never blocks and was ~94% of
+      # the check's time (seeds-7q8g). Run `seeds check --smells` on demand.
       #
-      # The script wraps the command for two reasons only -- a missing
-      # .seeds/seeds/ must not block commits before the conversion lands, and a
-      # blocked commit has to name its escape hatch. Confirm an intended mass
-      # rewrite with `SKIP=seeds-check git commit`, never --no-verify.
+      # Confirm an intended mass rewrite with `SEEDS_GATE_CONFIRM=1 git commit`
+      # (`SKIP=seeds-check` also works here, under prek), never --no-verify.
+      # Expect to confirm TWICE: when the store is unchanged relative to HEAD,
+      # --against-git audits HEAD~1 against HEAD -- the reading seeds-wurl
+      # needed, since that rewrite survived three days and three commits.
       #
-      # Expect to need SKIP TWICE for one intended mass rewrite. When the store
-      # is unchanged relative to HEAD, --against-git falls back to comparing
-      # HEAD~1 with HEAD and audits the commit that just landed -- which is the
-      # reading seeds-wurl needed, since that rewrite survived three days and
-      # three further commits. The next commit after that clears it.
-      #
-      # pre-commit hides a passing hook's output, so the smells tier is silent
-      # in normal use; see it with `pre-commit run --verbose seeds-check`.
+      # `uv run`, not the standard recipe's bare `seeds`: this repo's commits
+      # are gated by the seeds they are building, not by whatever is installed.
       - id: seeds-check
-        name: seeds check (violations + mass-rewrite gate)
-        entry: uv run python scripts/seeds_check_hook.py
+        name: seeds check --gate (violations + mass-rewrite gate)
+        entry: uv run seeds check --gate
         language: system
         pass_filenames: false
         always_run: true

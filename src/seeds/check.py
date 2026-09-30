@@ -88,7 +88,7 @@ import re
 import tomllib
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -1241,6 +1241,10 @@ class GitComparison:
     after: str
     corpus: int
     findings: list[Finding] = field(default_factory=list)
+    # ``(old prefix, new prefix, ids moved)`` when the diff reads as a
+    # ``seeds rename-prefix``, else ``None``. Reported, because a rename that
+    # was judged after being undone is a reading the operator should see.
+    rename: tuple[str, str, int] | None = None
 
 
 def check_against_git(seeds_dir: Path) -> GitComparison:
@@ -1347,6 +1351,18 @@ def _compare(
     if not before:
         return comparison
 
+    # A `seeds rename-prefix` moves every id, so keyed by id it reads as the
+    # whole corpus deleted and re-added -- a 95% mass change on every field
+    # (marketscan_mdcd 596555b, seeds-7q8g). When the diff is recognisably a
+    # rename, apply that rename to the before-state and judge what is left.
+    # A rename and nothing else leaves nothing; a sweep riding along with a
+    # rename is still scored in full (bead seeds-l80).
+    rename = _prefix_rename(before, after)
+    if rename is not None:
+        moved = len(set(before) - set(after))
+        before = _as_renamed(before, after, rename)
+        comparison.rename = (rename[0], rename[1], moved)
+
     deleted = sorted(seed_id for seed_id in before if seed_id not in after)
     changed: dict[str, list[str]] = defaultdict(list)
     for seed_id, record in before.items():
@@ -1447,7 +1463,9 @@ def _prefix_rename(
     deliberately writes ``updated_at`` verbatim (``store.py``: a rename is not
     an edit to the deliberation, and bumping it corpus-wide would destroy the
     ``updated_at == created_at`` "never edited" test). So a sanctioned rename
-    wears this rule's signature, and needs an exemption.
+    wears the body rule's signature, and needs an exemption. It wears the mass
+    rule's too: keyed by id, every moved seed reads as deleted, so a rename of
+    the whole corpus is a 100% change on every field (bead seeds-l80).
 
     The exemption is **computed, never assumed**. A commit that touched many
     files is not evidence of a rename; trusting that it was would be a hole
@@ -1459,8 +1477,9 @@ def _prefix_rename(
     Extra arrivals are tolerated, because a rename and a ``seeds jot`` can land
     in one commit and a seed that did not exist before cannot have been
     rewritten. The looseness costs nothing: the pair only ever *silences* a
-    body difference that prefix substitution reproduces exactly, and a
-    formatter's reflow is not that.
+    difference that prefix substitution reproduces exactly (see
+    :func:`_as_renamed`), and a formatter's reflow or a sweep of titles is not
+    that.
     """
     gone = set(before) - set(after)
     arrived = set(after) - set(before)
@@ -1473,6 +1492,60 @@ def _prefix_rename(
     if not {f"{new}{seed_id[len(old) :]}" for seed_id in gone} <= arrived:
         return None
     return old, new, frozenset(seed_id.split(".", 1)[0] for seed_id in gone)
+
+
+def _as_renamed(
+    before: dict[str, SeedRecord],
+    after: dict[str, SeedRecord],
+    rename: tuple[str, str, frozenset[str]],
+) -> dict[str, SeedRecord]:
+    """``before`` as ``seeds rename-prefix`` would have left it.
+
+    Replays exactly what ``Store.rename_prefix`` does to a record: the id and
+    its parent move, every edge's ``target_id`` moves, and id references in
+    ``title``, ``body`` and ``resolution`` are rewritten by the same
+    :func:`rewrite_id_refs` with the same ``known_ids``. The moved ids are the
+    ones that left the diff, which :func:`_prefix_rename` has already proved
+    all land under the new prefix.
+
+    A text field keeps its verbatim value when the after-state still holds
+    that value, because ``rename-prefix --no-rewrite-bodies`` leaves the text
+    alone. Either reading is one the rename could have produced; anything else
+    is a change the rename does not explain, and is scored as one.
+    """
+    old, new, _known = rename
+    moved = {
+        seed_id: f"{new}{seed_id[len(old) :]}" for seed_id in set(before) - set(after)
+    }
+    out: dict[str, SeedRecord] = {}
+    for seed_id, record in before.items():
+        new_id = moved.get(seed_id, seed_id)
+        target = after.get(new_id)
+        out[new_id] = replace(
+            record,
+            id=new_id,
+            parent=moved.get(record.parent, record.parent) if record.parent else None,
+            relationships=[
+                replace(edge, target_id=moved.get(edge.target_id, edge.target_id))
+                for edge in record.relationships
+            ],
+            title=_renamed_text(record.title, target.title if target else None, rename),
+            body=_renamed_text(record.body, target.body if target else None, rename),
+            resolution=_renamed_text(
+                record.resolution, target.resolution if target else None, rename
+            ),
+        )
+    return out
+
+
+def _renamed_text(
+    verbatim: str, current: str | None, rename: tuple[str, str, frozenset[str]]
+) -> str:
+    """One text field after the rename: verbatim if the after-state kept it."""
+    if current == verbatim:
+        return verbatim
+    old, new, known = rename
+    return rewrite_id_refs(verbatim, old, new, known)[0]
 
 
 def _sole_prefix(ids: set[str]) -> str | None:
@@ -1501,22 +1574,19 @@ def _rewritten_bodies(
     reformatted is the whole incident, and waiting for a fraction of the corpus
     would mean waiting for the tool to be run repo-wide a second time.
     """
-    rename = _prefix_rename(before, after)
     findings: list[Finding] = []
     for seed_id in sorted(before):
         record = before[seed_id]
         current = after.get(seed_id)
+        # A prefix rename in the diff has already been applied to ``before``
+        # by :func:`_as_renamed` -- the same substitution engine
+        # `rename_prefix` itself uses, given the same ``known_ids`` -- so a
+        # body the rename explains compares equal here, and "explained" means
+        # reproduced exactly rather than merely resembling one.
         if current is None or current.body == record.body:
             continue
         if current.updated_at != record.updated_at:
             continue
-        if rename is not None:
-            old, new, renamed = rename
-            # The same substitution engine `rename_prefix` itself used, given
-            # the same `known_ids`, so "explained by the rename" means
-            # reproduced exactly rather than merely resembling one.
-            if rewrite_id_refs(record.body, old, new, renamed)[0] == current.body:
-                continue
         relpath = f"{reldir}/{seed_id}{FILE_SUFFIX}"
         findings.append(
             Finding(

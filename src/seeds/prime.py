@@ -281,6 +281,22 @@ half, and then the whole report stops being read.
 ### Session End
 - `seeds check` - Verify the seed files; exits non-zero on a violation
 
+### Gating Commits (one line, the same in every repo)
+The commit-path check is `seeds check --gate`. Wire it as exactly this
+justfile recipe, reached from the repo's pre-commit hook — do not write a
+wrapper script or a variant:
+
+```
+seeds-check:
+    @command -v seeds >/dev/null 2>&1 || exit 0; seeds check --gate
+```
+
+`--gate` runs the violations tier plus `--against-git` (never `--smells`), and
+passes silently in a repo with no seed store. When it refuses an intended mass
+rewrite, confirm with `SEEDS_GATE_CONFIRM=1 git commit …` — never
+`--no-verify`, which skips every other hook too. A `seeds rename-prefix` needs
+no confirmation: the gate reads it as a rename.
+
 ### Project Prefix
 Every seed ID carries a project prefix (e.g., `myproj-7`), recorded in
 `.seeds/config.yaml`. `seeds init` defaults the prefix to the project
