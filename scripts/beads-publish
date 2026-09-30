@@ -1,0 +1,52 @@
+#!/usr/bin/env sh
+# scripts/beads-publish — publish this repo's beads to the Dolt remote, and mean it.
+#
+# Runs as the first pre-push hook (.pre-commit-config.yaml), ahead of `just pre-push`,
+# so beads leave the host even when the code gate refuses the push. refs/dolt/data is a
+# non-branch ref that `git push` does not carry, so this is the only thing that gets
+# beads off the host (seeds-tkk). A wedged database reports a clean branch to
+# `bd vc status`, so refusing the push is the only signal there is.
+#
+# THE EXIT CODE OF `bd dolt push` MEANS NOTHING. Measured on bd 1.3.0: it exits 0 with
+# no remote configured, exits 0 under dolt.local-only or no-push, and exits 0 after
+# "Error: push to origin/main: ... could not be accessed". Only the path that published
+# prints "Push complete.", so that is what is checked, in bd's captured output.
+#
+# Graded, not binary:
+#   bd not installed              allow, silently   (this repo is public; most clones have no bd)
+#   no .beads / no sync.remote    allow, silently   (nothing configured to publish)
+#   transient failure             retry once, then refuse
+#   anything else                 refuse, with bd's output
+set -u
+
+command -v bd >/dev/null 2>&1 || exit 0
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[ -d "$root/.beads" ] || exit 0
+grep -qE '^sync\.remote:[[:space:]]*[^[:space:]]' "$root/.beads/config.yaml" 2>/dev/null || exit 0
+
+# Git exports these to hooks; bd runs git itself and must see the real repo.
+unset GIT_INDEX_FILE GIT_DIR GIT_WORK_TREE GIT_PREFIX GIT_QUARANTINE_PATH
+cd "$root" || exit 1
+
+attempt() { bd dolt push --no-adopt 2>&1; }
+
+out="$(attempt)"
+if ! printf '%s\n' "$out" | grep -qF 'Push complete.'; then
+  case "$out" in
+    *"timed out"* | *"could not resolve"* | *"Could not resolve"* | *"connection reset"* | *"Connection refused"* | *"TLS handshake"*)
+      out="$(attempt)"
+      ;;
+  esac
+fi
+
+if printf '%s\n' "$out" | grep -qF 'Push complete.'; then
+  echo "beads: published (bd dolt push: Push complete.)"
+  exit 0
+fi
+
+printf '\n  BEADS DID NOT PUBLISH — refusing the git push.\n' >&2
+printf '  bd dolt push said:\n' >&2
+printf '%s\n' "$out" | sed 's/^/    /' >&2
+printf '\n  Fix the publish, or push with SKIP=beads-publish only if you accept that\n' >&2
+printf '  these beads stay on this host.\n' >&2
+exit 1

@@ -60,18 +60,42 @@ repos:
         # BD_GIT_HOOK=1 mirrors the .beads/hooks/pre-commit shim so bd knows it
         # runs inside a commit and suppresses its racing auto-export `git add`
         # (which otherwise fails on .git/index.lock and trips pre-commit).
-        entry: env BD_GIT_HOOK=1 bd hooks run pre-commit
+        # Guarded: this repo is public and most clones have no bd. Unguarded,
+        # every commit on such a clone fails this hook.
+        entry: sh -c 'command -v bd >/dev/null 2>&1 || exit 0; BD_GIT_HOOK=1 exec bd hooks run pre-commit'
         language: system
         pass_filenames: false
         always_run: true
 
-      # No pre-push hooks here, on purpose (seeds-29i, ruled 2026-09-28). The push
-      # gate is the justfile's `pre-push` recipe, the one place that mirrors
-      # ci.yml. A pre-push section here would duplicate it, and whenever the
-      # framework's pre-push hook is not installed it reads as armed while
-      # running nothing. That is how this repo went from January to September
-      # with 16 declared hooks and none of them running.
+      # --- pre-push. prek owns .git/hooks and core.hooksPath stays unset
+      # (seeds-29i). Install BOTH hook types, or this stage never fires and the
+      # push just succeeds:
+      #   prek install --hook-type pre-commit --hook-type pre-push
       #
-      # pytest is not a commit-stage hook either: at ~2 min it is far over the
-      # sub-minute budget a commit gate has to fit (see `pre-commit` in the
-      # justfile). The suite runs at push.
+      # Publish first, so beads leave this host even when the code gate below
+      # refuses the push. refs/dolt/data is a non-branch ref that `git push`
+      # does not carry, so this is the only thing that publishes them
+      # (seeds-tkk). The script decides on bd's output, not its exit code, and
+      # allows silently when bd or a sync.remote is absent; see its header.
+      - id: beads-publish
+        name: bd dolt push (publish this host's beads)
+        entry: scripts/beads-publish
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      # The code gate: every ci.yml job, with the four test runs concurrent
+      # (seeds-0o5). It lives in the justfile so it can also be run by hand;
+      # this entry only wires it to the push. always_run, or it reports
+      # Skipped whenever no staged file matches.
+      #
+      # pytest is not a commit-stage hook: at ~1 min it is over the sub-minute
+      # budget a commit gate has to fit (see `pre-commit` in the justfile).
+      - id: just-pre-push
+        name: just pre-push (every ci.yml job)
+        entry: just pre-push
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

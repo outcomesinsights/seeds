@@ -165,9 +165,14 @@ the three days it went unread. The commit after that clears it. Smells are
 silent in normal use because pre-commit hides a passing hook's output; see them
 with `pre-commit run --verbose seeds-check`.
 
-Before pushing, run `just pre-push`, the full local CI equivalent. It lives in
-the `justfile`, not in `.pre-commit-config.yaml`, which holds commit-stage hooks
-only. It runs `uv lock --check` first, because `uv sync` and `uv run` both
+Install the hooks for both stages, or the pre-push stage never fires:
+`prek install --hook-type pre-commit --hook-type pre-push` (`pre-commit` works
+too). On push they run `just pre-push`, the full local CI equivalent, which you
+can also run by hand. It lives in the `justfile`; `.pre-commit-config.yaml`
+only wires it to the push, behind a step that publishes this host's beads when
+`bd` is installed and does nothing otherwise.
+
+`just pre-push` runs `uv lock --check` first, because `uv sync` and `uv run` both
 re-lock and would otherwise make it pass unconditionally. Then mypy (strict),
 `ruff check`, `ruff format --check` and `just flake-deps`. Then, concurrently,
 the full pytest suite on the local interpreter, on 3.11 and on 3.12, and
