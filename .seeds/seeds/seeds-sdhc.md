@@ -1,10 +1,12 @@
 ---
 id: seeds-sdhc
 title: 'Storage direction after the Maildir turn: per-seed directories, a MUTABLE body holding current understanding, history from git log -p, and metadata as a collapse-log'
-status: captured
+status: resolved
 type: decision
 created_at: 2026-08-28T17:36:24.994445+00:00
-updated_at: 2026-09-02T16:23:33.840413+00:00
+updated_at: 2026-09-30T19:26:18.349275+00:00
+resolved_at: 2026-09-30T19:26:18.349266+00:00
+resolution: 'Shipped as the 0.7 storage format: one file per seed with atomic writes (seedfile.py), strict reads, ripgrep search, export --json, seeds history across the conversion, no SQLite; all five children (.1-.5) verified and resolved. Divergence: single-seed deletion is not gated (ruled acceptable 2026-09-30, git keeps every file); the commit-time check is being standardised as seeds check --gate (bead seeds-l80, seed seeds-7q8g). Efficacy: minor, planning-miss (distributing the commit hook to other repos was never planned). resolve-seeds-from-beads sweep 2026-09-30.'
 tags:
   - storage
   - maildir

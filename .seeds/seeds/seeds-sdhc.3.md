@@ -1,11 +1,13 @@
 ---
 id: seeds-sdhc.3
 title: Supersession is marked in place by the agent that learned it, not by a later review pass — and that collapses tend into check --smells
-status: captured
+status: resolved
 type: decision
 parent: seeds-sdhc
 created_at: 2026-08-31T20:09:38.931133+00:00
-updated_at: 2026-09-30T17:22:59.389411+00:00
+updated_at: 2026-09-30T19:26:17.843443+00:00
+resolved_at: 2026-09-30T19:26:17.843433+00:00
+resolution: "Shipped in full: the marker grammar (seedfile.py), show --full, the supersede-position and supersede-no-reason violations and the unsuperseded-long-body smell; and, since bead seeds-2ya (cb2b001, 2026-09-30), this seed's own lived-test conclusion: the correct-vs-supersede rule, with its deciding question, is stated in seeds prime ('Correcting vs. Superseding') and update --help, with tests pinning the text and the example's grammar. Divergence: agents still lack a light CLI route for an in-place fact correction, and two skills still say to append corrections; that is open as seed seeds-zxq8. Efficacy: minor, planning-miss (the guidance half was concluded here but not carried into a bead). resolve-seeds-from-beads sweep 2026-09-30."
 tags:
   - storage
   - supersede
