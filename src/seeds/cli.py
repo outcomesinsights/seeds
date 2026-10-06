@@ -3538,5 +3538,50 @@ def candidates_cmd(
     click.echo(format_candidates_report(report), nl=False)
 
 
+# Commands 0.7 removed. Each name stays registered, hidden, so an agent
+# following a pre-0.7 instruction (`seeds sync` at session start, say) is told
+# what replaced it instead of getting Click's bare "No such command". Guidance
+# an agent needs ships in the package, error text included (seeds-gi9k,
+# seeds-nera).
+_NO_STORE_TO_SYNC = (
+    "the seed files under .seeds/seeds/ are the store and are written "
+    "directly; commit them -- there is nothing to sync or import. In an "
+    "unconverted project, run 'seeds convert'."
+)
+_REMOVED_COMMANDS = {
+    "sync": _NO_STORE_TO_SYNC,
+    "import": _NO_STORE_TO_SYNC,
+    "serve": (
+        "the web view was removed and nothing replaces it; read seeds with "
+        "'seeds list', 'seeds show <id>' and 'seeds tree <id>'."
+    ),
+    "suggest": (
+        "use 'seeds search <regex> --all' to find existing seeds about a "
+        "topic (ripgrep over the seed files; no ranking or stemming)."
+    ),
+}
+
+
+def _tombstone(name: str, replacement: str) -> click.Command:
+    """A hidden command that refuses, whatever it is passed, and says why."""
+
+    def callback(args: tuple[str, ...]) -> None:
+        del args
+        raise click.ClickException(f"'seeds {name}' was removed in 0.7: {replacement}")
+
+    return click.Command(
+        name,
+        callback=callback,
+        params=[click.Argument(["args"], nargs=-1, type=click.UNPROCESSED)],
+        hidden=True,
+        add_help_option=False,
+        context_settings={"ignore_unknown_options": True},
+    )
+
+
+for _name, _replacement in _REMOVED_COMMANDS.items():
+    main.add_command(_tombstone(_name, _replacement))
+
+
 if __name__ == "__main__":
     main()
