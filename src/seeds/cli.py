@@ -2919,8 +2919,17 @@ def convert_cmd(keep_fixtures: bool) -> None:
     carrying both, with git conflict markers, for ordinary merge tooling.
 
     The tree is written alongside the pre-0.7 seeds.db and seeds.jsonl, and
-    neither is rewritten. Re-running against an unchanged store rewrites
-    nothing.
+    neither is rewritten.
+
+    Re-running is ADDITIVE ONLY. Once a seed has a file, the tree is the
+    durable store and the legacy files are stale, so a re-run writes only the
+    ids the tree lacks -- which is how a seed a pre-0.7 client created after
+    conversion is recovered. A file that already holds exactly what this would
+    write is counted as already current. A file that differs -- a seed edited
+    since conversion -- is NEVER overwritten: it is reported as diverged, by
+    id, for you to merge by hand, and the report says so outright when a
+    pre-0.7 client edited the legacy record after the file's converted_at.
+    Re-running against an unchanged store rewrites nothing.
 
     seeds.jsonl is then RETIRED: where git can restore it -- inside a work
     tree, tracked, and with no uncommitted changes -- its deletion is staged,
@@ -2933,8 +2942,9 @@ def convert_cmd(keep_fixtures: bool) -> None:
 
     Every run prints the exact command that reverts the state it created.
 
-    Exits non-zero while a fork is unresolved or `seeds check` reports a
-    violation on the output: the data landed, but the store is not finished.
+    Exits non-zero while a fork is unresolved, a seed has diverged, or `seeds
+    check` reports a violation on the output: the data landed, but the store is
+    not finished.
     """
     seeds_dir = find_seeds_dir()
     if seeds_dir is None:

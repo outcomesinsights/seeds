@@ -1322,6 +1322,204 @@ class TestNonDestructive:
         assert second.converted_at == _stamp(10)
 
 
+# --- A re-run is additive only (seeds-z46j) ----------------------------------
+
+
+def _pre_07_repo(temp_dir: Path, seeds: list[Seed]) -> tuple[Path, Path]:
+    """A git repo in the state any 0.6 checkout is in: seeds.db + seeds.jsonl.
+
+    The database is gitignored, as ``.seeds/.gitignore`` makes it in a real
+    repo, so git holds no copy of it -- which is why a stale one survives on
+    every converted host indefinitely.
+    """
+    repo = temp_dir / "repo"
+    seeds_dir = repo / ".seeds"
+    build_db(seeds_dir, seeds).close()
+    write_jsonl(
+        seeds_dir,
+        [
+            record(
+                s.id,
+                title=s.title,
+                content=s.content,
+                created=(s.created_at - T0).days,
+                updated=(s.updated_at - T0).days,
+            )
+            for s in seeds
+        ],
+    )
+    (seeds_dir / ".gitignore").write_text("*.db\n", encoding="utf-8")
+    git_init(repo)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-qm", "0.6 store")
+    return repo, seeds_dir
+
+
+class TestReRunIsAdditiveOnly:
+    """After conversion the tree is the durable store; legacy is stale.
+
+    Reproduces the 2026-10-06 observatory finding: re-running convert
+    silently reverted every seed edited with 0.7 since the conversion.
+    """
+
+    def test_a_07_edit_survives_a_second_convert_and_is_reported(
+        self, temp_dir, cli_runner, monkeypatch
+    ):
+        repo, seeds_dir = _pre_07_repo(
+            temp_dir,
+            [
+                seed("seeds-a1", title="Edited later", content="original\n"),
+                seed("seeds-b2", title="Left alone", content="untouched\n"),
+            ],
+        )
+        monkeypatch.chdir(repo)
+        # 2. 0.7 convert, commit.
+        assert cli_runner.invoke(main, ["convert"]).exit_code == 0
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "converted")
+        # 3. 0.7 edits, commit.
+        result = cli_runner.invoke(
+            main, ["update", "seeds-a1", "--append", "added with 0.7"]
+        )
+        assert result.exit_code == 0, result.output
+        result = cli_runner.invoke(main, ["resolve", "seeds-a1"])
+        assert result.exit_code == 0, result.output
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "0.7 edit")
+        path = seed_files_dir(seeds_dir) / "seeds-a1.md"
+        before = path.read_bytes()
+
+        # 4. convert again.
+        result = cli_runner.invoke(main, ["convert"])
+
+        assert result.exit_code == 1, result.output
+        assert path.read_bytes() == before
+        edited = read_seed_file(path)
+        assert "added with 0.7" in edited.body
+        assert edited.status is SeedStatus.RESOLVED
+        assert "1 seed(s) already in the tree differ" in result.output
+        assert str(path) in result.output
+        assert "0 written, 1 already current, 1 diverged and kept" in result.output
+        assert git(repo, "status", "--porcelain", "--", ".seeds/seeds").stdout == ""
+
+    def test_the_report_names_the_diverged_id(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        build_db(seeds_dir, [seed("seeds-a1", content="original\n")]).close()
+        convert(seeds_dir)
+        path = seed_files_dir(seeds_dir) / "seeds-a1.md"
+        path.write_text(
+            path.read_text(encoding="utf-8").replace("original", "edited in the tree"),
+            encoding="utf-8",
+        )
+
+        report = convert(seeds_dir)
+
+        assert [d.seed_id for d in report.diverged] == ["seeds-a1"]
+        assert not report.diverged[0].legacy_edited_after_conversion
+        assert report.written == []
+        assert not report.clean
+        assert read_seed_file(path).body == "edited in the tree\n"
+
+    def test_a_pre_07_edit_after_conversion_is_named_as_one(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        build_db(seeds_dir, [seed("seeds-a1", content="original\n")]).close()
+        convert(seeds_dir, now=_stamp(10))
+        path = seed_files_dir(seeds_dir) / "seeds-a1.md"
+        before = path.read_bytes()
+        conn = sqlite3.connect(seeds_dir / "seeds.db")
+        conn.execute(
+            "UPDATE seeds SET content = ?, updated_at = ? WHERE id = ?",
+            ("original\nadded by 0.6\n", _iso(20), "seeds-a1"),
+        )
+        conn.commit()
+        conn.close()
+
+        report = convert(seeds_dir, now=_stamp(30))
+
+        assert path.read_bytes() == before
+        (divergence,) = report.diverged
+        assert divergence.legacy_edited_after_conversion
+        assert divergence.converted_at == _stamp(10)
+        text = format_report(report)
+        assert "a pre-0.7 client edited this seed after conversion" in text
+        assert _stamp(20).isoformat() in text
+
+    def test_a_legacy_only_id_after_conversion_is_written_and_nothing_else_moves(
+        self, temp_dir
+    ):
+        repo, seeds_dir = _pre_07_repo(
+            temp_dir,
+            [
+                seed("seeds-a1", content="one\n"),
+                seed("seeds-b2", content="two\n"),
+            ],
+        )
+        convert(seeds_dir)
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "converted")
+        # A 0.6 client, still running in the converted checkout, adds a seed.
+        writer = LegacyWriter(seeds_dir / "seeds.db")
+        writer.create_seed(seed("seeds-c3", title="Straggler", content="late\n"))
+        writer.close()
+
+        report = convert(seeds_dir)
+
+        assert report.written == ["seeds-c3"]
+        assert sorted(report.unchanged) == ["seeds-a1", "seeds-b2"]
+        assert report.diverged == []
+        assert report.clean
+        assert git(repo, "status", "--porcelain", "--", ".seeds/seeds").stdout == (
+            "?? .seeds/seeds/seeds-c3.md\n"
+        )
+        assert git(repo, "diff", "--", ".seeds/seeds").stdout == ""
+        assert read_seed_file(seed_files_dir(seeds_dir) / "seeds-c3.md").body == (
+            "late\n"
+        )
+
+    def test_a_second_run_over_a_normalized_tree_writes_nothing(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        # `*` bullets are what the formatter rewrites, so the first run's
+        # normalize pass really changes this file -- the case that used to be
+        # rewritten verbatim and re-normalized on every run.
+        write_jsonl(
+            seeds_dir,
+            [
+                record("seeds-a1", content="* one\n* two\n"),
+                record("seeds-b2", content="plain\n"),
+            ],
+        )
+        first = convert(seeds_dir)
+        assert first.normalized >= 1
+        files = {p.name: p.read_bytes() for p in seed_files_dir(seeds_dir).glob("*.md")}
+
+        second = convert(seeds_dir)
+
+        assert second.written == []
+        assert sorted(second.unchanged) == ["seeds-a1", "seeds-b2"]
+        assert second.diverged == []
+        assert second.normalized == 0
+        assert second.clean
+        assert {
+            p.name: p.read_bytes() for p in seed_files_dir(seeds_dir).glob("*.md")
+        } == files
+
+    def test_a_file_that_will_not_parse_is_not_overwritten(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        write_jsonl(seeds_dir, [record("seeds-a1", content="original\n")])
+        convert(seeds_dir)
+        path = seed_files_dir(seeds_dir) / "seeds-a1.md"
+        path.write_text("half-finished edit, no frontmatter\n", encoding="utf-8")
+
+        report = convert(seeds_dir)
+
+        (divergence,) = report.diverged
+        assert not divergence.readable
+        assert path.read_text(encoding="utf-8") == (
+            "half-finished edit, no frontmatter\n"
+        )
+        assert "does not parse" in format_report(report)
+
+
 # --- Verification refuses output it cannot vouch for -------------------------
 
 
