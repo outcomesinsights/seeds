@@ -107,15 +107,21 @@ from seeds.seedfile import (
 )
 
 __all__ = [
+    "LEGACY_EDIT_RECOVERY",
+    "LEGACY_RECOVERY",
     "NORMALIZATIONS",
     "Classification",
     "ConversionError",
     "ConversionReport",
+    "LegacyActivity",
     "TreeDivergence",
     "UnionRecord",
     "classify",
     "convert",
     "fork_body",
+    "legacy_activity",
+    "legacy_findings",
+    "preview_ids",
     "split_legacy_title",
     "union_records",
     "verify",
@@ -2085,17 +2091,26 @@ def _fixture_drops(
     """
     if keep_fixtures:
         return frozenset()
-    drops: set[str] = set()
+    drops = _ruled_fixture_drops(db_sides, jsonl_sides)
+    report.dropped_fixtures.extend(drops)
+    report.kept_fixtures.extend(
+        seed_id
+        for seed_id in sorted(FIXTURE_IDS)
+        if (seed_id in db_sides or seed_id in jsonl_sides) and seed_id not in drops
+    )
+    return frozenset(drops)
+
+
+def _ruled_fixture_drops(
+    db_sides: dict[str, _Side], jsonl_sides: dict[str, _Side]
+) -> list[str]:
+    """The ruled fixture ids present here that still match the ruled profile."""
+    drops: list[str] = []
     for seed_id in sorted(FIXTURE_IDS):
         sides = [s for s in (db_sides.get(seed_id), jsonl_sides.get(seed_id)) if s]
-        if not sides:
-            continue
-        if all(not side.seed.content.strip() for side in sides):
-            drops.add(seed_id)
-            report.dropped_fixtures.append(seed_id)
-        else:
-            report.kept_fixtures.append(seed_id)
-    return frozenset(drops)
+        if sides and all(not side.seed.content.strip() for side in sides):
+            drops.append(seed_id)
+    return drops
 
 
 def _write_tree(
@@ -2244,3 +2259,201 @@ def _gate(seeds_dir: Path, forks: set[str]) -> list[Finding]:
             continue
         kept.append(finding)
     return kept
+
+
+# --- A legacy store still being written beside the tree (seeds-mlc7) ---------
+
+#: What to do about legacy-store activity, in the one wording doctor and check
+#: both print. ``seeds convert`` is safe here only because a re-run is additive
+#: (seeds-z46j): it writes the seeds the tree lacks and never overwrites one it
+#: has.
+LEGACY_RECOVERY = (
+    "run 'seeds convert' -- it writes only the seeds the tree lacks and never "
+    "overwrites one it has -- then remove .seeds/seeds.jsonl (git rm; its git "
+    "history stays) and upgrade the pre-0.7 seeds client that wrote to the "
+    "legacy store"
+)
+
+#: The legacy edits convert will not apply, because the tree owns a seed once
+#: it has a file.
+LEGACY_EDIT_RECOVERY = (
+    "'seeds convert' will not apply these -- the tree owns a seed once it has "
+    "a file -- so merge each legacy edit into its seed file by hand ('seeds "
+    "convert' lists every one as diverged), then retire the legacy store: git "
+    "rm .seeds/seeds.jsonl, move .seeds/seeds.db out of .seeds/ (git holds no "
+    "copy of it, so keep it), and upgrade the pre-0.7 seeds client that wrote "
+    "them"
+)
+
+
+@dataclass
+class LegacyActivity:
+    """What the legacy store beside a converted tree holds that the tree does not.
+
+    A pre-0.7 client working in a converted checkout keeps writing to
+    ``seeds.db`` and, through ``seeds sync``, recreates ``seeds.jsonl`` --
+    and nothing 0.7 reads shows it. Measured 2026-10-06 on a scratch clone of
+    observatory: a seed created that way was absent from ``list`` while both
+    ``check`` and ``doctor`` passed.
+    """
+
+    seeds_dir: Path
+    db_present: bool
+    jsonl_present: bool
+    #: Ids a legacy store holds that have no file in the tree, by store file.
+    #: The ruled fixtures convert drops are not counted: their absence is the
+    #: conversion's, not a pre-0.7 client's.
+    missing: dict[str, list[str]] = field(default_factory=dict)
+    #: Ids whose legacy record was updated after its file's ``converted_at``,
+    #: by store file: a pre-0.7 client edited them after conversion.
+    edited: dict[str, list[str]] = field(default_factory=dict)
+    #: Why the legacy store could not be read, when it could not.
+    unreadable: str | None = None
+
+    @property
+    def missing_ids(self) -> list[str]:
+        return sorted({i for ids in self.missing.values() for i in ids})
+
+    @property
+    def edited_ids(self) -> list[str]:
+        return sorted({i for ids in self.edited.values() for i in ids})
+
+    @property
+    def split(self) -> bool:
+        """Whether the legacy store holds deliberation the tree lacks."""
+        return bool(self.missing or self.edited)
+
+
+def legacy_activity(seeds_dir: Path) -> LegacyActivity | None:
+    """Read the legacy store beside a converted tree and say what it holds.
+
+    ``None`` when there is no tree, or no legacy file beside it. Reads through
+    convert's own loaders, so "what the tree lacks" means exactly what a
+    conversion would add.
+    """
+    seeds_dir = Path(seeds_dir)
+    files_dir = seed_files_dir(seeds_dir)
+    db_path = seeds_dir / DB_FILE
+    jsonl_path = seeds_dir / JSONL_FILE
+    if not files_dir.is_dir() or not (db_path.exists() or jsonl_path.exists()):
+        return None
+    activity = LegacyActivity(
+        seeds_dir=seeds_dir,
+        db_present=db_path.exists(),
+        jsonl_present=jsonl_path.exists(),
+    )
+    try:
+        db_sides = _load_db(db_path).sides
+        jsonl_sides, _, _ = _load_jsonl(jsonl_path)
+    except (ConversionError, sqlite3.DatabaseError) as exc:
+        activity.unreadable = str(exc)
+        return activity
+
+    drops = set(_ruled_fixture_drops(db_sides, jsonl_sides))
+    converted: dict[str, datetime | None] = {}
+    for path in files_dir.glob(f"*{FILE_SUFFIX}"):
+        try:
+            converted[path.name[: -len(FILE_SUFFIX)]] = read_seed_file(
+                path
+            ).converted_at
+        except SeedFileError:
+            # Present, and the violations tier's to report. Its stamp is
+            # unknown, so it can be neither missing nor edited-after.
+            converted[path.name[: -len(FILE_SUFFIX)]] = None
+    for name, sides in ((DB_FILE, db_sides), (JSONL_FILE, jsonl_sides)):
+        missing = sorted(i for i in sides if i not in converted and i not in drops)
+        edited = sorted(
+            i
+            for i, side in sides.items()
+            if (stamp := converted.get(i)) is not None and side.seed.updated_at > stamp
+        )
+        if missing:
+            activity.missing[name] = missing
+        if edited:
+            activity.edited[name] = edited
+    return activity
+
+
+def preview_ids(ids: Sequence[str], limit: int = 5) -> str:
+    """A few ids, then a count, so one line stays one line."""
+    shown = ", ".join(ids[:limit])
+    if len(ids) > limit:
+        shown += f", ... (+{len(ids) - limit} more)"
+    return shown
+
+
+def legacy_findings(
+    activity: LegacyActivity | None,
+) -> tuple[list[Finding], list[Finding]]:
+    """``seeds check``'s view of :func:`legacy_activity`: (violations, smells).
+
+    Legacy seeds the tree lacks, or legacy edits made after conversion, are
+    violations: deliberation exists that every 0.7 command is blind to, and
+    the commit gate is what stops it from being committed unnoticed. A
+    ``seeds.jsonl`` that holds nothing the tree lacks is a smell -- stale, and
+    worth removing, but harmless.
+    """
+    if activity is None:
+        return [], []
+    seeds_dir = activity.seeds_dir
+    violations: list[Finding] = []
+    smells: list[Finding] = []
+    if activity.unreadable is not None:
+        smells.append(
+            Finding(
+                path=seeds_dir / (JSONL_FILE if activity.jsonl_present else DB_FILE),
+                code="legacy-store-unreadable",
+                message=(
+                    "the pre-0.7 store beside the tree could not be read, so "
+                    f"whether it holds seeds the tree lacks is unknown: "
+                    f"{activity.unreadable}"
+                ),
+                remediation=(
+                    "fix or remove the legacy file; if it may hold seeds the "
+                    "tree lacks, recover them by hand"
+                ),
+            )
+        )
+        return violations, smells
+    for name, ids in activity.missing.items():
+        violations.append(
+            Finding(
+                path=seeds_dir / name,
+                code="legacy-seed-not-in-tree",
+                message=(
+                    f"{len(ids)} seed(s) in this pre-0.7 store have no file in "
+                    f"the tree, so no 0.7 command sees them: {preview_ids(ids)}"
+                ),
+                remediation=LEGACY_RECOVERY,
+            )
+        )
+    for name, ids in activity.edited.items():
+        violations.append(
+            Finding(
+                path=seeds_dir / name,
+                code="legacy-edited-after-conversion",
+                message=(
+                    f"{len(ids)} seed(s) were edited in this pre-0.7 store "
+                    f"after their file's converted_at: {preview_ids(ids)}"
+                ),
+                remediation=LEGACY_EDIT_RECOVERY,
+            )
+        )
+    if activity.jsonl_present and not activity.split:
+        smells.append(
+            Finding(
+                path=seeds_dir / JSONL_FILE,
+                code="legacy-jsonl-beside-tree",
+                message=(
+                    "the retired pre-0.7 export is still here beside the "
+                    "converted tree; it holds nothing the tree lacks, and "
+                    "nothing reads it"
+                ),
+                remediation=(
+                    "remove it with git rm (its git history stays, and 'seeds "
+                    "history' still reads it); if a pre-0.7 client recreated "
+                    "it, upgrade that client"
+                ),
+            )
+        )
+    return violations, smells
