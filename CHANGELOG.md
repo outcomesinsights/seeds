@@ -6,6 +6,80 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0a9] - 2026-10-06
+
+**Not a public release** — an internal alpha on the `0.7.0` branch, as every
+0.7.0aN is. `main` is still the 0.6.x line and nothing is on PyPI.
+
+0.7.0a8 was meant to be the soak build, with 0.7.0 final following it unchanged.
+That stopped being true: 37 commits landed after the fleet's pin, including three
+breaking changes, and a dry run of the conversion against the first store we do
+not control (outcomesinsights/observatory, 411 seeds) found two upgrade hazards.
+This alpha fixes both, and replaces a8 as the soak build.
+
+- **Re-running `seeds convert` silently reverted every seed edited since the
+  conversion.** `seeds.db` is never deleted, so the stale legacy store survives
+  on every converted host, and convert treated it as authoritative. A re-run is
+  now additive-only: it writes a seed only when the tree has no file for it,
+  never overwrites one, reports any that differ, and exits non-zero. It reads
+  legacy ids through a later `rename-prefix`, and its revert command undoes
+  only what that run wrote.
+- **A 0.6 client in a converted checkout split the store, and nothing noticed.**
+  0.6 `seeds sync` recreated `seeds.jsonl` and `seeds create` wrote seeds no 0.7
+  command could see. Every command now warns when `seeds.jsonl` sits beside the
+  tree, and `doctor`, `check` and `check --gate` report legacy seeds the tree
+  lacks or legacy edits made after conversion.
+- **`seeds sync`, `import`, `serve` and `suggest` now say what replaced them**
+  instead of failing with "No such command".
+
+### Breaking changes
+
+- Short hook-sized prime by default, full text under --full, plugin injects it (seeds-oiy) ([d7eabef](https://github.com/outcomesinsights/seeds/commit/d7eabeffd30f730c2f2a43b4ca9991dcf2e28245)): `seeds prime` without flags now prints the short form. Anything that read the full reference or its "## Current Seeds" digest from the default output must pass `--full`.
+- Refuse a flag swallowed by any free-text option (seeds-7ib) ([989e78b](https://github.com/outcomesinsights/seeds/commit/989e78bafb619bfbb8ef97c6ab60689a0f64ee6a)): `-c/--content` on `create` and `update` now refuses a single-line argv body starting with "--"; pass it with `--content -` (stdin) or `--content-file PATH`. `--title`, `--resolution`, `--reason`, `--as` and `--section` now refuse a value exactly equal to a seeds flag name (e.g. "--force"); there is no route for such a value, and any other text starting with "--" is still accepted as written.
+- Guard every non-empty body, including one written at create time (seeds-atw) ([1c7707a](https://github.com/outcomesinsights/seeds/commit/1c7707a7819065262cd4f2db7ac5f244fbe25fb7)): `seeds update --content`, `--content-file` and `--content -` now refuse any seed whose body is non-empty unless --replace is given, including a body written at `seeds create` time, which used to be replaced silently. Re-answering a question without --append or --replace is refused even when the answer was never edited.
+
+### Added
+
+- Tombstone the commands 0.7 removed (seeds-nera) ([86e447a](https://github.com/outcomesinsights/seeds/commit/86e447aa1e33a2c9bff379423e919c55dde9205f))
+- Detect a pre-0.7 client writing beside a converted tree (seeds-mlc7) ([ff64749](https://github.com/outcomesinsights/seeds/commit/ff64749b2652b5f3944eb3140dc4d963ff74b106))
+- Add `seeds setup claude`, with `skills install` kept as its alias (seeds-fuiz) ([5ddb26f](https://github.com/outcomesinsights/seeds/commit/5ddb26f567af0b51c947eb500f685d38f2d9d578))
+- Report a missing, disabled or stale Claude Code plugin with its fix (seeds-p7ns) ([b0afd6c](https://github.com/outcomesinsights/seeds/commit/b0afd6c9203e57cdb32eadf1f2986676dd5bacdd))
+- **Breaking:** Short hook-sized prime by default, full text under --full, plugin injects it (seeds-oiy) ([d7eabef](https://github.com/outcomesinsights/seeds/commit/d7eabeffd30f730c2f2a43b4ca9991dcf2e28245))
+- --edit OLD NEW corrects one exact span of a body in place (seeds-5i1) ([8ab26d3](https://github.com/outcomesinsights/seeds/commit/8ab26d3f1416ff7f2e84213c445748bce2c2c9cf))
+- Add seeds check --gate, the whole commit-path check (seeds-l80) ([d07a66d](https://github.com/outcomesinsights/seeds/commit/d07a66dedf82bee811fd698f5c5d5ed5691a82b8))
+
+### Changed
+
+- Drop the final-tags-only bump recipe; pre-release tags are dotted ([5560bb3](https://github.com/outcomesinsights/seeds/commit/5560bb3acee482b1255429176c44ed4a43c1807c))
+- Make git-cliff's version bump work with PEP 440 pre-release tags ([7be539c](https://github.com/outcomesinsights/seeds/commit/7be539c4757749c81df497c4bd0c857ee745420e))
+- Publish beads with the shared bd-publish command (seeds-iaz) ([9241560](https://github.com/outcomesinsights/seeds/commit/9241560db0aa50814f4ff02347986b4f7d4bbde6))
+- Drop --smells from the seeds-check commit hook (seeds-7q8g) ([dd5d4b1](https://github.com/outcomesinsights/seeds/commit/dd5d4b1ab0de599f8c162af18eb9f59c63ae0c2a))
+- Commit a root .mdformat.toml and pin the formatter through uv (seeds-mwf) ([f607eb5](https://github.com/outcomesinsights/seeds/commit/f607eb5b53d14f980e3a0d2fca42e481f5b7c249))
+- Render breaking changes (seeds-e4q) ([8052f57](https://github.com/outcomesinsights/seeds/commit/8052f57dd637357d2c1938ba99b65866df1e095d))
+- Run commit-stage hooks only at commit, not again at push (seeds-29i) ([f352b21](https://github.com/outcomesinsights/seeds/commit/f352b21aff4e1191ccc6f91007cd03b1fdbe0b60))
+- Declare the pre-push stage: publish beads, then `just pre-push` (seeds-tkk, seeds-29i) ([47d7590](https://github.com/outcomesinsights/seeds/commit/47d7590d71646219d175b00267b228e722008b38))
+- Run pre-push's four test suites concurrently (seeds-0o5) ([e530c18](https://github.com/outcomesinsights/seeds/commit/e530c18a5d25584f97dd51c2603bc922b7ed3eb2))
+- Memoize mdformat and CommonMark renders in format_body (seeds-xoa) ([494d3b4](https://github.com/outcomesinsights/seeds/commit/494d3b41f90f17414d70ab36c36a4a0dbc00159f))
+- Cut the commit stage to fast checks; make `just pre-push` all of ci.yml (seeds-29i) ([a0e7727](https://github.com/outcomesinsights/seeds/commit/a0e7727e9313bd4d1917923b2c79c2a594124d28))
+
+### Documentation
+
+- Correction guidance follows option C; retire unsuperseded-long-body (seeds-oq2) ([bffcd04](https://github.com/outcomesinsights/seeds/commit/bffcd04d0fe02fe3b51af276d2256b8d45b81f5e))
+- An install section an agent can follow; seed seeds-n4m1 ([ab9d9f1](https://github.com/outcomesinsights/seeds/commit/ab9d9f1b801756f8f8ad68a8dc1d1d5f8689b1f5))
+- State the correct-vs-supersede discipline where agents read it (seeds-2ya) ([76beb53](https://github.com/outcomesinsights/seeds/commit/76beb53ddbe1c37a2f69f247e13429dfc16d56be))
+- The push gate is `just pre-push`, not a pre-commit hook ([37b2c1b](https://github.com/outcomesinsights/seeds/commit/37b2c1b5b4f6eea470c547442f55a9ab72a3bcc9))
+
+### Fixed
+
+- Read legacy ids through prefix renames; revert only this run (seeds-z46j, seeds-mlc7) ([20031f2](https://github.com/outcomesinsights/seeds/commit/20031f2d3920f01088c91accd705cb84c074709c))
+- Never overwrite a seed file on re-run; report divergence (seeds-z46j) ([1c89c1a](https://github.com/outcomesinsights/seeds/commit/1c89c1a99202af0436a00e35412a4b4ed3ba03ba))
+- **Breaking:** Refuse a flag swallowed by any free-text option (seeds-7ib) ([989e78b](https://github.com/outcomesinsights/seeds/commit/989e78bafb619bfbb8ef97c6ab60689a0f64ee6a))
+- Give the body-rewritten-in-place remediation a command that runs ([de99038](https://github.com/outcomesinsights/seeds/commit/de9903875b51e5d2418125d24c4bebb514812464))
+- **Breaking:** Guard every non-empty body, including one written at create time (seeds-atw) ([1c7707a](https://github.com/outcomesinsights/seeds/commit/1c7707a7819065262cd4f2db7ac5f244fbe25fb7))
+- Refuse --append with a replacement or a swallowed flag (seeds-4s8) ([d024a03](https://github.com/outcomesinsights/seeds/commit/d024a03015a6d647750251acd7cc8b5a421c63c5))
+- Validate lineage tokens with the one seed-ID grammar (seeds-nnp) ([efb08cb](https://github.com/outcomesinsights/seeds/commit/efb08cbcaa4f1171d653e7b990c974c0931f8641))
+- Report malformed and misplaced lineage instead of going silent (seeds-nnp) ([6eb2a75](https://github.com/outcomesinsights/seeds/commit/6eb2a75a5a0bfed4744d79c9738afbfb4a7da98d))
+
 ## [0.7.0a8] - 2026-09-23
 
 **Not a public release** — an internal alpha on the `0.7.0` branch, as every
