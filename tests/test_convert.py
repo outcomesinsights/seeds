@@ -1520,6 +1520,140 @@ class TestReRunIsAdditiveOnly:
         assert "does not parse" in format_report(report)
 
 
+class TestRevertUndoesOnlyThisRun:
+    """A re-run must never print a revert that deletes files it did not write."""
+
+    def test_the_first_run_reverts_by_removing_the_tree(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        write_jsonl(seeds_dir, [record("seeds-a1")])
+
+        report = convert(seeds_dir)
+
+        assert "rm -rf" in report.revert_command
+        assert report.revert_command.split(" && ")[0].endswith(".seeds/seeds")
+
+    def test_a_re_run_that_writes_one_seed_reverts_only_that_file(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        build_db(seeds_dir, [seed("seeds-a1", content="one\n")]).close()
+        convert(seeds_dir)
+        writer = LegacyWriter(seeds_dir / "seeds.db")
+        writer.create_seed(seed("seeds-c3", content="late\n"))
+        writer.close()
+
+        report = convert(seeds_dir)
+
+        assert report.written == ["seeds-c3"]
+        assert report.revert_command == "rm -f .seeds/seeds/seeds-c3.md"
+        assert "rm -rf" not in format_report(report)
+
+    def test_a_re_run_that_writes_nothing_has_nothing_to_revert(self, temp_dir):
+        seeds_dir = temp_dir / ".seeds"
+        build_db(seeds_dir, [seed("seeds-a1", content="one\n")]).close()
+        convert(seeds_dir)
+
+        report = convert(seeds_dir)
+
+        assert report.written == []
+        assert report.revert_command == ""
+        text = format_report(report)
+        assert "Nothing to revert" in text
+        assert "rm -" not in text
+
+
+class TestThroughAPrefixRename:
+    """`seeds rename-prefix` after conversion moves every id; legacy keeps the old.
+
+    Four fleet stores were in this state on 2026-10-06. A re-run must match
+    each legacy id to the file the rename moved it to, and write nothing.
+    """
+
+    def _renamed(self, temp_dir, cli_runner, monkeypatch) -> Path:
+        seeds_dir = temp_dir / ".seeds"
+        writer = build_db(
+            seeds_dir,
+            [
+                seed("seeds-a1b", content="see seeds-c3d\n", created=1, updated=1),
+                seed("seeds-a1b.1", content="child\n", created=2, updated=2),
+                seed("seeds-c3d", content="other\n", created=3, updated=3),
+            ],
+        )
+        writer.create_relationship("seeds-a1b", "seeds-c3d", created_at=_stamp(4))
+        writer.close()
+        assert convert(seeds_dir).clean
+        monkeypatch.chdir(temp_dir)
+        result = cli_runner.invoke(main, ["rename-prefix", "new"])
+        assert result.exit_code == 0, result.output
+        assert sorted(p.stem for p in seed_files_dir(seeds_dir).glob("*.md")) == [
+            "new-a1b",
+            "new-a1b.1",
+            "new-c3d",
+        ]
+        return seeds_dir
+
+    def test_a_re_run_writes_nothing_and_is_clean(
+        self, temp_dir, cli_runner, monkeypatch
+    ):
+        seeds_dir = self._renamed(temp_dir, cli_runner, monkeypatch)
+        files = {p.name: p.read_bytes() for p in seed_files_dir(seeds_dir).glob("*.md")}
+
+        report = convert(seeds_dir)
+
+        assert report.written == []
+        assert report.renamed == {
+            "seeds-a1b": "new-a1b",
+            "seeds-a1b.1": "new-a1b.1",
+            "seeds-c3d": "new-c3d",
+        }
+        assert report.diverged == []
+        assert report.stale_files == []
+        assert report.clean
+        assert report.revert_command == ""
+        assert {
+            p.name: p.read_bytes() for p in seed_files_dir(seeds_dir).glob("*.md")
+        } == files
+
+    def test_a_new_old_prefix_seed_is_written_under_the_new_prefix(
+        self, temp_dir, cli_runner, monkeypatch
+    ):
+        seeds_dir = self._renamed(temp_dir, cli_runner, monkeypatch)
+        # A 0.6 client, still on the old prefix, adds a seed after the rename.
+        writer = LegacyWriter(seeds_dir / "seeds.db")
+        writer.create_seed(
+            seed("seeds-zzz", content="about seeds-a1b\n", created=9, updated=9)
+        )
+        writer.close()
+
+        report = convert(seeds_dir)
+
+        assert report.written == ["new-zzz"]
+        assert report.moved_to_current_prefix == {"seeds-zzz": "new-zzz"}
+        assert not (seed_files_dir(seeds_dir) / "seeds-zzz.md").exists()
+        written = read_seed_file(seed_files_dir(seeds_dir) / "new-zzz.md")
+        assert written.body == "about new-a1b\n"
+        assert report.clean
+        assert report.revert_command == "rm -f .seeds/seeds/new-zzz.md"
+
+    def test_a_legacy_edit_after_conversion_still_diverges_through_the_rename(
+        self, temp_dir, cli_runner, monkeypatch
+    ):
+        seeds_dir = self._renamed(temp_dir, cli_runner, monkeypatch)
+        before = (seed_files_dir(seeds_dir) / "new-c3d.md").read_bytes()
+        conn = sqlite3.connect(seeds_dir / "seeds.db")
+        conn.execute(
+            "UPDATE seeds SET content = ?, updated_at = ? WHERE id = ?",
+            ("other\nmore from 0.6\n", "2099-01-01T00:00:00+00:00", "seeds-c3d"),
+        )
+        conn.commit()
+        conn.close()
+
+        report = convert(seeds_dir)
+
+        assert [d.seed_id for d in report.diverged] == ["new-c3d"]
+        assert report.diverged[0].legacy_edited_after_conversion
+        assert (seed_files_dir(seeds_dir) / "new-c3d.md").read_bytes() == before
+        assert not report.clean
+
+
 # --- Verification refuses output it cannot vouch for -------------------------
 
 

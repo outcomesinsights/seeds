@@ -3030,6 +3030,11 @@ def convert_cmd(keep_fixtures: bool) -> None:
     pre-0.7 client edited the legacy record after the file's converted_at.
     Re-running against an unchanged store rewrites nothing.
 
+    A legacy id that `seeds rename-prefix` moved is matched to the file it
+    moved to (same suffix, same created_at) and never written back under the
+    old prefix; a legacy seed created under a renamed-away prefix is written
+    under the current one.
+
     seeds.jsonl is then RETIRED: where git can restore it -- inside a work
     tree, tracked, and with no uncommitted changes -- its deletion is staged,
     so the removal lands in the same commit as the seed files. Failing any one
@@ -3039,7 +3044,9 @@ def convert_cmd(keep_fixtures: bool) -> None:
     before a seed's converted_at. seeds.db is never deleted, for the opposite
     reason: .seeds/.gitignore excludes *.db, so git holds no copy of it.
 
-    Every run prints the exact command that reverts the state it created.
+    Every run prints the exact command that reverts the state it created. On
+    a re-run into an existing tree that is only the files this run wrote,
+    never the tree itself.
 
     Exits non-zero while a fork is unresolved, a seed has diverged, or `seeds
     check` reports a violation on the output: the data landed, but the store is

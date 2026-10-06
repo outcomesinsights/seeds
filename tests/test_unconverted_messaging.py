@@ -467,3 +467,78 @@ class TestALegacyStoreBesideTheTree:
 
         assert cli_runner.invoke(main, ["check"]).exit_code == 0
         assert cli_runner.invoke(main, ["doctor"]).exit_code == 0
+
+
+class TestALegacyStoreBesideARenamedTree:
+    """`seeds rename-prefix` after conversion: legacy ids keep the old prefix.
+
+    Four fleet stores were in this state on 2026-10-06, and reading legacy ids
+    verbatim reported every one of them as missing -- a gate that would block
+    every commit, with a remediation that writes the store back as duplicates.
+    """
+
+    @pytest.fixture
+    def renamed_repo(self, temp_dir, monkeypatch, cli_runner):
+        # Hash-shaped and numeric suffixes: the two shapes rename-prefix moves.
+        # (A two-character suffix such as `a1` is neither, and it leaves it.)
+        repo = temp_dir / "repo"
+        seeds_dir = repo / ".seeds"
+        build_legacy_db(
+            seeds_dir,
+            [
+                _legacy_seed("seeds-a1b"),
+                _legacy_seed("seeds-a1b.1"),
+                _legacy_seed("seeds-7"),
+            ],
+        ).close()
+        (seeds_dir / ".gitignore").write_text("*.db\n", encoding="utf-8")
+        assert convert(seeds_dir, now=CONVERTED).clean
+        git_init(repo)
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "converted")
+        monkeypatch.chdir(repo)
+        result = cli_runner.invoke(main, ["rename-prefix", "new"])
+        assert result.exit_code == 0, result.output
+        assert sorted(p.stem for p in (seeds_dir / "seeds").glob("*.md")) == [
+            "new-7",
+            "new-a1b",
+            "new-a1b.1",
+        ]
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "rename prefix")
+        return seeds_dir
+
+    def test_check_doctor_and_the_gate_stay_clean(self, renamed_repo, cli_runner):
+        check = cli_runner.invoke(main, ["check"])
+        doctor = cli_runner.invoke(main, ["doctor"])
+        gate = cli_runner.invoke(
+            main, ["check", "--gate"], env={"SEEDS_GATE_CONFIRM": ""}
+        )
+
+        assert check.exit_code == 0, check.output
+        assert "legacy-" not in check.output
+        assert doctor.exit_code == 0, doctor.output
+        assert "✓ seeds.db holds nothing the tree lacks" in doctor.output
+        assert gate.exit_code == 0, gate.output
+        assert "legacy-" not in gate.output
+
+    def test_a_new_old_prefix_seed_is_reported_under_the_new_prefix(
+        self, renamed_repo, cli_runner
+    ):
+        writer = LegacyWriter(renamed_repo / "seeds.db")
+        writer.create_seed(_legacy_seed("seeds-zzz"))
+        writer.close()
+
+        check = cli_runner.invoke(main, ["check"])
+        doctor = cli_runner.invoke(main, ["doctor"])
+
+        assert check.exit_code == 1, check.output
+        assert "legacy-seed-not-in-tree" in check.output
+        assert "seeds-zzz (as new-zzz)" in check.output
+        assert doctor.exit_code == 1, doctor.output
+        assert "seeds-zzz (as new-zzz)" in doctor.output
+
+        assert cli_runner.invoke(main, ["convert"]).exit_code == 0
+        assert (renamed_repo / "seeds" / "new-zzz.md").exists()
+        assert not (renamed_repo / "seeds" / "seeds-zzz.md").exists()
+        assert cli_runner.invoke(main, ["check"]).exit_code == 0
