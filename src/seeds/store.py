@@ -168,6 +168,20 @@ def needs_conversion(seeds_dir: Path) -> bool:
     return (seeds_dir / JSONL_FILE).exists() and not seed_files_dir(seeds_dir).is_dir()
 
 
+def legacy_jsonl_beside_tree(seeds_dir: Path) -> bool:
+    """Whether the retired ``seeds.jsonl`` sits beside a converted tree.
+
+    :func:`needs_conversion`'s mirror, and a filename check for the same
+    reason: every command asks it. Conversion stages the file's deletion, so
+    finding it here means either convert could not retire it, or a pre-0.7
+    client recreated it -- ``seeds sync`` rewrites it from the old database --
+    and may be writing seeds no 0.7 command will ever show (seeds-mlc7).
+    ``seeds.db`` alone is NOT this state: it always remains after conversion.
+    """
+    seeds_dir = Path(seeds_dir)
+    return (seeds_dir / JSONL_FILE).exists() and seed_files_dir(seeds_dir).is_dir()
+
+
 # --- Repo configuration (§9) -------------------------------------------------
 
 
@@ -875,6 +889,7 @@ __all__ = [
     "has_been_edited",
     "has_prefix_configured",
     "is_terminal",
+    "legacy_jsonl_beside_tree",
     "needs_conversion",
     "new_record",
     "questions_asked_about",

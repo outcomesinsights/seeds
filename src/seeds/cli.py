@@ -36,7 +36,16 @@ from seeds.check import (
     check_violations,
     format_findings,
 )
-from seeds.convert import ConversionError, convert
+from seeds.convert import (
+    LEGACY_EDIT_RECOVERY,
+    LEGACY_RECOVERY,
+    ConversionError,
+    LegacyActivity,
+    convert,
+    legacy_activity,
+    legacy_findings,
+    preview_ids,
+)
 from seeds.convert import format_report as format_conversion_report
 from seeds.gitstage import git_text
 from seeds.glean import (
@@ -54,7 +63,7 @@ from seeds.glean import (
 )
 from seeds.history import format_history, seed_history
 from seeds.jsonexport import ExportError, export_json
-from seeds.legacy import JSONL_FILE
+from seeds.legacy import DB_FILE, JSONL_FILE
 from seeds.models import (
     DEFAULT_PREFIX,
     RelationType,
@@ -84,6 +93,7 @@ from seeds.store import (
     StoreError,
     find_seeds_dir,
     is_terminal,
+    legacy_jsonl_beside_tree,
     needs_conversion,
     new_record,
     questions_asked_about,
@@ -787,6 +797,27 @@ class _SeedsGroup(click.Group):
 def main(ctx: click.Context) -> None:
     """seeds: Git-backed deliberation capture for ideas that need time to grow."""
     ctx.ensure_object(Context)
+    _warn_on_legacy_jsonl()
+
+
+def _warn_on_legacy_jsonl() -> None:
+    """One stderr line, on every command, when seeds.jsonl sits beside the tree.
+
+    A warning and never a refusal: reading commands must keep working, and
+    the exit code is not this check's to change. ``seeds doctor`` and ``seeds
+    check`` read the legacy store and say what it holds (seeds-mlc7).
+    """
+    seeds_dir = find_seeds_dir()
+    if seeds_dir is None or not legacy_jsonl_beside_tree(seeds_dir):
+        return
+    click.echo(
+        f"Warning: {_display_path(seeds_dir / JSONL_FILE)} is the retired "
+        f"pre-0.7 store, beside the converted tree; a pre-0.7 seeds client "
+        f"writing to it splits the store. Run 'seeds doctor' to see what it "
+        f"holds; 'seeds convert' recovers seeds the tree lacks, then git rm "
+        f"the file and upgrade that client.",
+        err=True,
+    )
 
 
 @main.command()
@@ -2426,6 +2457,14 @@ def doctor(ctx: Context) -> None:
         # "right" type would presume a typo doctor cannot actually detect.
         click.echo("      Remap one with: seeds retype --from <type> --to <type>")
 
+    # A pre-0.7 client still writing to the legacy store beside the tree
+    # (seeds-mlc7). Nothing else 0.7 reads would show it.
+    activity = legacy_activity(store.seeds_dir)
+    if activity is not None:
+        click.echo()
+        click.echo("Legacy store:")
+        _echo_legacy_activity(activity, check_pass, check_warn, check_fail)
+
     # The Claude Code plugin (bead seeds-p7ns). seeds works without Claude
     # Code, so every finding here is a warning and `claude` being absent is
     # only a note: none of it may fail a gate that is about the store.
@@ -2467,6 +2506,53 @@ def doctor(ctx: Context) -> None:
         sys.exit(1)
 
 
+def _echo_legacy_activity(
+    activity: LegacyActivity,
+    check_pass: Callable[[str], None],
+    check_warn: Callable[[str, str], None],
+    check_fail: Callable[[str, str], None],
+) -> None:
+    """Doctor's lines for :func:`~seeds.convert.legacy_activity`.
+
+    Legacy seeds the tree lacks, and legacy edits made after conversion, fail:
+    that is deliberation no 0.7 command shows. A seeds.jsonl holding nothing
+    the tree lacks only warns. seeds.db alone with nothing newer passes -- it
+    always remains after conversion.
+    """
+    if activity.unreadable is not None:
+        check_warn("Legacy store", f"could not be read: {activity.unreadable}")
+        return
+    if activity.missing_ids:
+        ids = activity.missing_ids
+        shown = preview_ids(ids)
+        check_fail(
+            "Legacy store",
+            f"{len(ids)} seed(s) in the pre-0.7 store have no file in the "
+            f"tree, so no 0.7 command sees them: {shown}",
+        )
+        click.echo(f"      Fix: {LEGACY_RECOVERY}.")
+    if activity.edited_ids:
+        ids = activity.edited_ids
+        shown = preview_ids(ids)
+        check_fail(
+            "Legacy store",
+            f"{len(ids)} seed(s) were edited in the pre-0.7 store after "
+            f"conversion: {shown}",
+        )
+        click.echo(f"      Fix: {LEGACY_EDIT_RECOVERY}.")
+    if activity.split:
+        return
+    if activity.jsonl_present:
+        check_warn(
+            "Legacy store",
+            f"{JSONL_FILE} is still beside the tree; it holds nothing the tree "
+            f"lacks. Remove it with git rm (its history stays), and upgrade "
+            f"any pre-0.7 client that recreated it",
+        )
+    else:
+        check_pass(f"{DB_FILE} holds nothing the tree lacks")
+
+
 @main.command("check")
 @click.option(
     "--smells",
@@ -2506,6 +2592,12 @@ def check_cmd(smells: bool, against_git: bool, gate: bool) -> None:
     a title that is a filesystem path, an edge written at one end only, a stamp
     ahead of the clock. It exits non-zero, so it can gate a commit or a
     conversion.
+
+    The violations tier also reads the pre-0.7 store, when one sits beside the
+    tree: seeds it holds that the tree has no file for, or records it updated
+    after their file's converted_at, mean a pre-0.7 client is still writing
+    there, and no 0.7 command shows that deliberation. A seeds.jsonl that
+    holds nothing the tree lacks is only a smell.
 
     Content plausibility is the job because format validity had nothing to say
     when a bulk sweep replaced 83 titles with a scratchpad path (seeds-wurl):
@@ -2558,7 +2650,11 @@ def check_cmd(smells: bool, against_git: bool, gate: bool) -> None:
         click.echo(_uninitialized_error(seeds_dir), err=True)
         sys.exit(1)
 
-    findings = check_violations(seeds_dir)
+    # A pre-0.7 client writing to the legacy store beside the tree (seeds-mlc7)
+    # is a violation when it holds deliberation the tree lacks, and a smell
+    # when it is only a stale seeds.jsonl.
+    legacy_violations, legacy_smells = legacy_findings(legacy_activity(seeds_dir))
+    findings = check_violations(seeds_dir) + legacy_violations
     _echo_violations(seeds_dir, findings)
     failed = bool(findings)
 
@@ -2576,7 +2672,7 @@ def check_cmd(smells: bool, against_git: bool, gate: bool) -> None:
         failed = failed or bool(comparison.findings)
 
     if smells:
-        smell_findings = check_smells(seeds_dir)
+        smell_findings = check_smells(seeds_dir) + legacy_smells
         click.echo()
         if smell_findings:
             click.echo(format_findings(smell_findings, marker="⚠"), nl=False)
@@ -2661,6 +2757,9 @@ def _check_gate() -> None:
         click.echo("seeds check --gate: no seed-file store here — nothing to gate.")
         return
 
+    # What the legacy store beside the tree holds that the tree lacks: the
+    # violation that stops a resurrected seeds.jsonl being committed unseen.
+    findings += legacy_findings(legacy_activity(seeds_dir))[0]
     _echo_violations(seeds_dir, findings)
     failed = bool(findings)
     try:
@@ -2919,8 +3018,22 @@ def convert_cmd(keep_fixtures: bool) -> None:
     carrying both, with git conflict markers, for ordinary merge tooling.
 
     The tree is written alongside the pre-0.7 seeds.db and seeds.jsonl, and
-    neither is rewritten. Re-running against an unchanged store rewrites
-    nothing.
+    neither is rewritten.
+
+    Re-running is ADDITIVE ONLY. Once a seed has a file, the tree is the
+    durable store and the legacy files are stale, so a re-run writes only the
+    ids the tree lacks -- which is how a seed a pre-0.7 client created after
+    conversion is recovered. A file that already holds exactly what this would
+    write is counted as already current. A file that differs -- a seed edited
+    since conversion -- is NEVER overwritten: it is reported as diverged, by
+    id, for you to merge by hand, and the report says so outright when a
+    pre-0.7 client edited the legacy record after the file's converted_at.
+    Re-running against an unchanged store rewrites nothing.
+
+    A legacy id that `seeds rename-prefix` moved is matched to the file it
+    moved to (same suffix, same created_at) and never written back under the
+    old prefix; a legacy seed created under a renamed-away prefix is written
+    under the current one.
 
     seeds.jsonl is then RETIRED: where git can restore it -- inside a work
     tree, tracked, and with no uncommitted changes -- its deletion is staged,
@@ -2931,10 +3044,13 @@ def convert_cmd(keep_fixtures: bool) -> None:
     before a seed's converted_at. seeds.db is never deleted, for the opposite
     reason: .seeds/.gitignore excludes *.db, so git holds no copy of it.
 
-    Every run prints the exact command that reverts the state it created.
+    Every run prints the exact command that reverts the state it created. On
+    a re-run into an existing tree that is only the files this run wrote,
+    never the tree itself.
 
-    Exits non-zero while a fork is unresolved or `seeds check` reports a
-    violation on the output: the data landed, but the store is not finished.
+    Exits non-zero while a fork is unresolved, a seed has diverged, or `seeds
+    check` reports a violation on the output: the data landed, but the store is
+    not finished.
     """
     seeds_dir = find_seeds_dir()
     if seeds_dir is None:

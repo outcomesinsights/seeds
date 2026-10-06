@@ -38,6 +38,19 @@ returning pre-conversion data and reporting nothing. What has to survive is its
 everything before a seed's ``converted_at``, so that history must never be
 rewritten or filtered out of the repository.
 
+**Once a seed has a file, the tree owns it.** A re-run is additive only. After
+conversion the tree is the durable store and the legacy files are stale, so a
+legacy id with no file is written -- that is how a straggler a pre-0.7 client
+created after conversion is recovered -- and a legacy id whose file already
+exists is never written again. A file that is exactly what this run would
+produce is counted as already current; a file that differs is reported as
+*diverged*, by id, and the run exits non-zero so the operator merges it by
+hand. Re-converting used to treat the legacy stores as authoritative for every
+id, which silently reverted every seed edited since conversion (seeds-z46j) --
+the ``seeds-fkb8`` shape, the derived store overwriting the durable one, rebuilt
+inside the migration. Timestamps do not arbitrate this: ``seeds-agk`` showed
+they cannot be trusted, and a direct edit of a seed file does not bump one.
+
 Because the state a run leaves behind now depends on which of those conditions
 held, :attr:`ConversionReport.revert_command` is computed rather than quoted,
 and the report prints the command for the state this run actually created.
@@ -64,6 +77,7 @@ from typing import Literal
 
 from seeds.check import Finding, check_violations
 from seeds.gitstage import plan_tracked_deletion, stage_tracked_deletion
+from seeds.idgen import is_hash_suffix
 from seeds.legacy import (
     DB_FILE,
     JSONL_FILE,
@@ -74,7 +88,7 @@ from seeds.legacy import (
     db_extends_disk,
     first_difference,
 )
-from seeds.models import RelationType, Seed, SeedStatus
+from seeds.models import RelationType, Seed, SeedStatus, rewrite_id_refs
 from seeds.seedfile import (
     FILE_SUFFIX,
     MDFORMAT_CONFIG,
@@ -84,6 +98,7 @@ from seeds.seedfile import (
     expected_parent,
     format_body,
     is_valid_id,
+    parse_seed_file,
     path_for_id,
     read_seed_file,
     render_seed_file,
@@ -91,16 +106,26 @@ from seeds.seedfile import (
     write_mdformat_config,
     write_seed_file,
 )
+from seeds.store import read_config
 
 __all__ = [
+    "LEGACY_EDIT_RECOVERY",
+    "LEGACY_RECOVERY",
     "NORMALIZATIONS",
     "Classification",
     "ConversionError",
     "ConversionReport",
+    "LegacyActivity",
+    "RenameMatch",
+    "TreeDivergence",
     "UnionRecord",
     "classify",
     "convert",
     "fork_body",
+    "legacy_activity",
+    "legacy_findings",
+    "match_renames",
+    "preview_ids",
     "split_legacy_title",
     "union_records",
     "verify",
@@ -1242,6 +1267,32 @@ def union_records(
 # --- The report --------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class TreeDivergence:
+    """A legacy id whose file in the tree differs from what this run would write.
+
+    Never written: once a seed has a file, the tree is the durable store, and
+    the legacy side is reported for a human to merge rather than allowed to
+    overwrite it (seeds-z46j).
+    """
+
+    seed_id: str
+    #: The latest ``updated_at`` either legacy store holds for this id.
+    legacy_updated_at: datetime
+    #: The file's ``converted_at``; ``None`` when it has none, or will not parse.
+    converted_at: datetime | None
+    #: Whether the file parses at all. One that does not is still never
+    #: overwritten: it may be someone's half-finished edit.
+    readable: bool = True
+
+    @property
+    def legacy_edited_after_conversion(self) -> bool:
+        """Whether a pre-0.7 client edited this seed after it was converted."""
+        return (
+            self.converted_at is not None and self.legacy_updated_at > self.converted_at
+        )
+
+
 @dataclass
 class ConversionReport:
     """Everything the conversion did, and everything it refused to do."""
@@ -1255,6 +1306,19 @@ class ConversionReport:
     unchanged: list[str] = field(default_factory=list)
     forks: list[str] = field(default_factory=list)
     forks_already_resolved: list[str] = field(default_factory=list)
+    #: Legacy ids whose file in the tree differs from what this run would
+    #: write. Left untouched -- the tree is authoritative once a file exists
+    #: -- and each one keeps the run unclean until a human has looked.
+    diverged: list[TreeDivergence] = field(default_factory=list)
+    #: Legacy ids already in the tree under the id a ``seeds rename-prefix``
+    #: gave them, mapped to that id. Never written: the tree owns them.
+    renamed: dict[str, str] = field(default_factory=dict)
+    #: Legacy ids the tree lacks, written under the current prefix because
+    #: their old prefix was renamed away, mapped to the id they were written as.
+    moved_to_current_prefix: dict[str, str] = field(default_factory=dict)
+    #: Whether ``.seeds/seeds/`` existed before this run. On a re-run, undoing
+    #: the run means removing only what it wrote, never the tree.
+    tree_existed: bool = False
     dropped_fixtures: list[str] = field(default_factory=list)
     kept_fixtures: list[str] = field(default_factory=list)
     dropped_legacy_rows: dict[str, int] = field(default_factory=dict)
@@ -1304,17 +1368,26 @@ class ConversionReport:
 
     @property
     def total(self) -> int:
-        return len(self.written) + len(self.unchanged)
+        """Every converted id that has a file in the tree after this run."""
+        return (
+            len(self.written)
+            + len(self.unchanged)
+            + len(self.forks_already_resolved)
+            + len(self.diverged)
+            + len(self.renamed)
+        )
 
     @property
     def clean(self) -> bool:
-        """Whether the tree is finished: verified, checked, and no open fork.
+        """Whether the tree is finished: verified, checked, nothing left open.
 
         An unresolved fork is not a failure of the conversion — the seed landed
         and nothing was lost — but it *is* an unfinished store, so it keeps the
-        exit status non-zero until a human resolves it.
+        exit status non-zero until a human resolves it. A diverged seed is the
+        same: the tree's copy was kept, and the legacy side still needs a human
+        to say whether it holds anything the tree should.
         """
-        return not self.check_findings and not self.forks
+        return not self.check_findings and not self.forks and not self.diverged
 
 
 def format_report(report: ConversionReport) -> str:
@@ -1326,10 +1399,17 @@ def format_report(report: ConversionReport) -> str:
     if report.jsonl_present:
         sources.append(JSONL_FILE)
     out.append(f"Converted {' + '.join(sources)} -> {report.out_dir}")
+    kept = ""
+    if report.forks_already_resolved:
+        kept += f", {len(report.forks_already_resolved)} resolved fork(s) kept"
+    if report.diverged:
+        kept += f", {len(report.diverged)} diverged and kept"
+    if report.renamed:
+        kept += f", {len(report.renamed)} already in the tree under a renamed id"
     out.append(
         f"  {report.source_ids} seed(s) in the source stores -> "
         f"{report.total} converted: {len(report.written)} written, "
-        f"{len(report.unchanged)} already current"
+        f"{len(report.unchanged)} already current{kept}"
     )
     for classification in Classification:
         count = report.counts.get(classification, 0)
@@ -1337,6 +1417,21 @@ def format_report(report: ConversionReport) -> str:
             out.append(f"  {classification.value}: {count}")
     if report.prefix_written:
         out.append(f"  wrote prefix {report.prefix_written!r} to config.yaml")
+    if report.renamed:
+        out.append(
+            f"  matched {len(report.renamed)} legacy id(s) to the file 'seeds "
+            f"rename-prefix' moved each to (same suffix, same created_at); "
+            f"left as the tree has them"
+        )
+    if report.moved_to_current_prefix:
+        out.append(
+            f"  wrote {len(report.moved_to_current_prefix)} legacy seed(s) under "
+            f"the current prefix, because their old prefix was renamed away:"
+        )
+        out.extend(
+            f"    {old} -> {new}"
+            for old, new in sorted(report.moved_to_current_prefix.items())
+        )
     for table, rows in sorted(report.dropped_legacy_rows.items()):
         out.append(f"  dropped the legacy {table} table ({rows} row(s), untranslated)")
     for rel_type, rows in sorted(report.dropped_legacy_edges.items()):
@@ -1395,13 +1490,45 @@ def format_report(report: ConversionReport) -> str:
             f"with git conflict markers; resolve with ordinary merge tooling:"
         )
         out.extend(f"  {report.out_dir / (i + FILE_SUFFIX)}" for i in report.forks)
+    if report.diverged:
+        out.extend(_divergence_lines(report))
     if report.check_findings:
         out.append("")
         out.append(f"seeds check: {len(report.check_findings)} violation(s).")
     out.append("")
-    out.append("Revert this conversion with:")
-    out.append(f"  {report.revert_command}")
+    if report.revert_command:
+        out.append("Revert this conversion with:")
+        out.append(f"  {report.revert_command}")
+    else:
+        out.append("Nothing to revert: this run wrote no file and staged nothing.")
     return "\n".join(out)
+
+
+def _divergence_lines(report: ConversionReport) -> list[str]:
+    """The diverged ids, each with the one fact that decides how to merge it."""
+    out = [
+        "",
+        f"{len(report.diverged)} seed(s) already in the tree differ from the "
+        f"legacy store and were NOT written. Once a seed has a file the tree "
+        f"is the durable store, so convert only adds seeds the tree lacks. "
+        f"Merge each by hand if the legacy side holds something the tree "
+        f"should keep:",
+    ]
+    for d in report.diverged:
+        path = report.out_dir / (d.seed_id + FILE_SUFFIX)
+        if not d.readable:
+            out.append(f"  {path}  (the file does not parse; it was left as it is)")
+        elif d.legacy_edited_after_conversion:
+            assert d.converted_at is not None
+            out.append(
+                f"  {path}  (legacy record updated "
+                f"{d.legacy_updated_at.isoformat()}, after this file's "
+                f"converted_at {d.converted_at.isoformat()}: a pre-0.7 client "
+                f"edited this seed after conversion)"
+            )
+        else:
+            out.append(f"  {path}")
+    return out
 
 
 def _retirement_lines(report: ConversionReport) -> list[str]:
@@ -1536,8 +1663,17 @@ def verify(
     jsonl_sides: dict[str, _Side],
     *,
     drop_ids: frozenset[str] = frozenset(),
+    written: Iterable[str] | None = None,
 ) -> int:
     """Re-read the tree and prove it holds what the sources held.
+
+    ``written`` scopes the round-trip and source passes to the files this run
+    wrote; ``None`` means every union record. A file this run found already in
+    the tree is the tree's, not the conversion's -- a diverged seed differs
+    from the legacy stores by definition, and a normalized one differs from
+    them in layout -- so it is not this run's output to verify, and failing a
+    re-run because a kept file differs from legacy would turn the additive rule
+    back into an overwrite. Completeness still covers every id.
 
     Three passes, because they catch different failures.
 
@@ -1556,13 +1692,16 @@ def verify(
     against its own intermediate would agree with itself.
 
     Anything outside :data:`NORMALIZATIONS` raises. Returns the number of
-    records verified, which is the whole corpus and not a sample — a gate that
-    scores part of the deliverable reports green on a broken one.
+    records verified, which is everything this run wrote and not a sample — a
+    gate that scores part of the deliverable reports green on a broken one.
     """
     _assert_complete(out_dir, unions, db_sides, jsonl_sides, drop_ids)
     by_id = {u.record.id: u for u in unions}
+    scope = None if written is None else set(written)
     rebuilt: dict[str, SeedRecord] = {}
     for union in unions:
+        if scope is not None and union.record.id not in scope:
+            continue
         path = out_dir / (union.record.id + FILE_SUFFIX)
         try:
             rebuilt[union.record.id] = read_seed_file(path)
@@ -1735,11 +1874,16 @@ def _verify_edges(
             emitted.add((union.record.id, edge.target_id, edge.rel_type.value))
 
     dropped_keys = set(dropped)
+    union_ids = {union.record.id for union in unions}
     source_keys: set[_EdgeKey] = set()
     for half in halves:
         key = _edge_key(half)
         source_keys.add(key)
         if key in dropped_keys:
+            continue
+        if half.source_id not in union_ids:
+            # Its source is a renamed seed the tree already holds under the
+            # id it was moved to, which this run does not write.
             continue
         forward = (half.source_id, half.target_id, half.rel_type.value)
         if forward not in emitted:
@@ -1783,10 +1927,20 @@ def convert(
     :attr:`ConversionReport.revert_command` is the command that undoes the
     state this particular run left behind.
 
+    Additive only once a seed has a file (seeds-z46j). A legacy id with no
+    file in the tree is written; one whose file is exactly what this run would
+    produce — verbatim, or after the normalize pass — is counted as already
+    current; and one whose file differs is **never written**. It is reported as
+    diverged, by id, and keeps :attr:`ConversionReport.clean` false so the
+    operator merges it by hand. After conversion the tree is the durable store
+    and the legacy files are stale, so they are authoritative only for ids the
+    tree lacks.
+
     Byte-idempotent: a second run against an unchanged store rewrites nothing,
     because ``converted_at`` — the one field with no source in the old store —
     is read back from the file it was stamped on rather than re-read from the
-    clock.
+    clock. A second run against an *edited* store rewrites nothing either; it
+    reports the edits as divergences instead.
 
     Raises :class:`ConversionError` when a source record cannot be read or when
     verification fails. It does *not* raise for an unresolved fork or a
@@ -1821,13 +1975,20 @@ def convert(
         split_titles=dict(sorted(splits.items())),
     )
 
+    report.tree_existed = out_dir.is_dir()
+    report.source_ids = len(set(db_sides) | set(jsonl_sides))
     drop_ids = _fixture_drops(db_sides, jsonl_sides, keep_fixtures, report)
-    known = frozenset((set(db_sides) | set(jsonl_sides)) - drop_ids)
-    halves = [*db_halves, *jsonl_halves]
+    renames = match_renames(seeds_dir, [db_sides, jsonl_sides], exclude=drop_ids)
+    _report_renamed(seeds_dir, renames, [db_sides, jsonl_sides], report)
+    halves = _apply_renames(
+        renames, [db_sides, jsonl_sides], [*db_halves, *jsonl_halves]
+    )
+    known = frozenset(
+        (set(db_sides) | set(jsonl_sides) | set(renames.twins.values())) - drop_ids
+    )
     edges, dangling = _resolve_edges(halves, known)
     report.dropped_edges = [f"{a} -{rel}-> {b}" for rel, a, b in dangling]
 
-    report.source_ids = len(set(db_sides) | set(jsonl_sides))
     unions, divergences = union_records(db_sides, jsonl_sides, edges, drop_ids=drop_ids)
     report.field_divergences = divergences
     for union in unions:
@@ -1839,13 +2000,22 @@ def convert(
 
     _write_tree(seeds_dir, unions, stamp, report)
     _verify_edges(unions, halves, dangling)
-    report.verified = verify(out_dir, unions, db_sides, jsonl_sides, drop_ids=drop_ids)
-    report.stale_files = _stale_files(out_dir, {u.record.id for u in unions})
+    report.verified = verify(
+        out_dir,
+        unions,
+        db_sides,
+        jsonl_sides,
+        drop_ids=drop_ids,
+        written=report.written,
+    )
+    report.stale_files = _stale_files(
+        out_dir, {u.record.id for u in unions} | set(renames.twins.values())
+    )
     report.prefix_written = _write_config(seeds_dir, db_path, known)
     report.check_findings = _gate(seeds_dir, set(report.forks))
     # Before `_retire_jsonl`, which computes the revert command and therefore
     # has to know whether this run wrote the formatter config.
-    _normalize_tree(seeds_dir, [u.record.id for u in unions], report)
+    _normalize_tree(seeds_dir, report.written, report)
     _retire_jsonl(jsonl_path, report)
     return report
 
@@ -1867,7 +2037,8 @@ def _normalize_tree(
     assert config.exists()
     # The ids this conversion wrote, never a glob: a stale file the conversion
     # deliberately left alone is not necessarily a seed file at all, and
-    # reading one would fail the whole run.
+    # reading one would fail the whole run. Nor a file it found already in the
+    # tree: that one is the tree's, and this run does not touch it.
     for path in [path_for_id(seeds_dir, seed_id) for seed_id in sorted(seed_ids)]:
         before = path.read_text(encoding="utf-8")
         record = read_seed_file(path)
@@ -1894,10 +2065,10 @@ def _retire_jsonl(jsonl_path: Path, report: ConversionReport) -> None:
     the three :func:`~seeds.gitstage.plan_tracked_deletion` checks. A fork is
     finished by editing the seed file and **re-running the converter**, which
     :func:`_write_tree` explicitly supports — and a re-run reads the union of
-    the two stores. With the JSONL gone from the working tree, the second run
-    would see only the database and quietly overwrite the half the operator was
-    merging. So the second source stays until the merge it is a source for is
-    done.
+    the two stores. The additive rule means a re-run no longer overwrites the
+    fork file, but with the JSONL gone from the working tree the half that
+    lived only there would be gone just as the operator needs it. So the
+    second source stays until the merge it is a source for is done.
     """
     root: Path | None = report.seeds_dir.resolve().parent
     if jsonl_path.exists():
@@ -1921,7 +2092,9 @@ def _revert_command(report: ConversionReport, root: Path | None) -> str:
     """The command that undoes exactly this run, in the order it must run.
 
     Assembled rather than quoted, because a run leaves behind a different state
-    depending on which pieces it did: the tree always, ``config.yaml`` only when
+    depending on which pieces it did: the tree when this run created it -- on a
+    re-run, only the files it wrote, because the tree it found is the durable
+    store and may hold edits nothing else has a copy of -- ``config.yaml`` only when
     this run was the one that wrote it (§9 — a store that already had one keeps
     it), and a staged deletion only where git could hold the JSONL.
     """
@@ -1930,11 +2103,24 @@ def _revert_command(report: ConversionReport, root: Path | None) -> str:
         parts.append(
             f"git checkout HEAD -- {_display(report.seeds_dir / JSONL_FILE, root)}"
         )
-    parts.append(f"rm -rf {_display(report.out_dir, root)}")
+    if not report.tree_existed:
+        parts.append(f"rm -rf {_display(report.out_dir, root)}")
+    elif report.written:
+        # A re-run into a tree that was already there: the tree is the durable
+        # store, so undoing this run removes the files it wrote and nothing
+        # else -- never the directory.
+        parts.append(
+            "rm -f "
+            + " ".join(
+                _display(report.out_dir / (seed_id + FILE_SUFFIX), root)
+                for seed_id in sorted(report.written)
+            )
+        )
     if report.prefix_written:
         parts.append(f"rm -f {_display(report.seeds_dir / 'config.yaml', root)}")
     if report.mdformat_config_written:
         parts.append(f"rm -f {_display(report.seeds_dir / MDFORMAT_CONFIG, root)}")
+    # Empty when this run created nothing: there is nothing to undo.
     return " && ".join(parts)
 
 
@@ -1968,17 +2154,26 @@ def _fixture_drops(
     """
     if keep_fixtures:
         return frozenset()
-    drops: set[str] = set()
+    drops = _ruled_fixture_drops(db_sides, jsonl_sides)
+    report.dropped_fixtures.extend(drops)
+    report.kept_fixtures.extend(
+        seed_id
+        for seed_id in sorted(FIXTURE_IDS)
+        if (seed_id in db_sides or seed_id in jsonl_sides) and seed_id not in drops
+    )
+    return frozenset(drops)
+
+
+def _ruled_fixture_drops(
+    db_sides: dict[str, _Side], jsonl_sides: dict[str, _Side]
+) -> list[str]:
+    """The ruled fixture ids present here that still match the ruled profile."""
+    drops: list[str] = []
     for seed_id in sorted(FIXTURE_IDS):
         sides = [s for s in (db_sides.get(seed_id), jsonl_sides.get(seed_id)) if s]
-        if not sides:
-            continue
-        if all(not side.seed.content.strip() for side in sides):
-            drops.add(seed_id)
-            report.dropped_fixtures.append(seed_id)
-        else:
-            report.kept_fixtures.append(seed_id)
-    return frozenset(drops)
+        if sides and all(not side.seed.content.strip() for side in sides):
+            drops.append(seed_id)
+    return drops
 
 
 def _write_tree(
@@ -1987,10 +2182,32 @@ def _write_tree(
     stamp: datetime,
     report: ConversionReport,
 ) -> None:
-    """Write every record, stamping ``converted_at`` once and only once."""
+    """Write every record the tree lacks; never overwrite one it has.
+
+    Additive only (seeds-z46j). After conversion the tree is the durable store,
+    so a legacy id is written only when it has no file. A file that is exactly
+    what this run would produce -- the verbatim render, or that render after
+    the normalize pass -- is already current. Anything else is the tree's own
+    content: a seed edited with 0.7 since conversion, a fork resolved by hand,
+    or a file that will not parse. It is left exactly as it is, and every case
+    but the resolved fork is reported as diverged.
+
+    ``converted_at`` is stamped once and only once: a new file gets this run's
+    stamp, and an existing one is compared using the stamp already on it.
+    """
     seed_files_dir(seeds_dir).mkdir(parents=True, exist_ok=True)
     for union in unions:
         path = path_for_id(seeds_dir, union.record.id)
+        if not path.exists():
+            union.record.converted_at = stamp
+            # Rendered WITHOUT the store's formatter: the conversion's
+            # guarantee is that a body lands verbatim, and it verifies that
+            # byte for byte. The normalize pass is what brings a converted
+            # store to current canonical form, and it runs after this.
+            write_seed_file(path, union.record, formatted=False)
+            report.written.append(union.record.id)
+            continue
+
         existing = _existing(path)
         union.record.converted_at = (
             existing.converted_at
@@ -1999,33 +2216,45 @@ def _write_tree(
         )
         if union.is_fork and existing is not None and _resolved_fork(existing.body):
             # The operator finished this merge by hand and their resolution
-            # lives only here. Re-emitting the conflict would destroy it, which
-            # is the one way a re-run could lose deliberation.
-            union.record.body = existing.body
+            # lives only here. Re-emitting the conflict would destroy it.
             union.kept_resolution = True
             report.forks_already_resolved.append(union.record.id)
             report.forks.remove(union.record.id)
-        # Rendered WITHOUT the store's formatter: the conversion's guarantee is
-        # that a body lands verbatim, and it verifies that byte for byte. The
-        # normalize pass is what brings a converted store to current canonical
-        # form, and it runs after this, visibly, in its own commit.
-        text = render_seed_file(union.record, formatted=False)
-        if existing is not None and path.read_text(encoding="utf-8") == text:
+            continue
+        if path.read_text(encoding="utf-8") in _would_write(union.record, seeds_dir):
             report.unchanged.append(union.record.id)
             continue
-        write_seed_file(path, union.record, formatted=False)
-        report.written.append(union.record.id)
+        report.diverged.append(
+            TreeDivergence(
+                seed_id=union.record.id,
+                legacy_updated_at=union.record.updated_at,
+                converted_at=existing.converted_at if existing is not None else None,
+                readable=existing is not None,
+            )
+        )
+
+
+def _would_write(record: SeedRecord, seeds_dir: Path) -> tuple[str, str]:
+    """The bytes this run would leave for ``record``: verbatim, then normalized.
+
+    The second is what :func:`_normalize_tree` turns the first into, derived
+    the same way -- read the verbatim render back, write it formatted -- so a
+    tree a previous run converted *and* normalized reads as already current
+    rather than as hundreds of files to rewrite and re-normalize.
+    """
+    verbatim = render_seed_file(record, formatted=False)
+    path = path_for_id(seeds_dir, record.id)
+    normalized = render_seed_file(parse_seed_file(path, verbatim), seeds_dir)
+    return verbatim, normalized
 
 
 def _existing(path: Path) -> SeedRecord | None:
-    """The record already at ``path``, or ``None`` if there is none to read.
+    """The record already at ``path``, or ``None`` if it will not parse.
 
-    A file that will not parse is treated as absent: it is about to be replaced
-    by one that does, and refusing to convert because the *previous* run's
-    output is broken would make the tool unable to repair itself.
+    A file that will not parse is still never overwritten: under the additive
+    rule it is the tree's content -- quite possibly someone's half-finished
+    edit -- and it is reported as diverged rather than replaced.
     """
-    if not path.exists():
-        return None
     try:
         return read_seed_file(path)
     except SeedFileError:
@@ -2093,3 +2322,408 @@ def _gate(seeds_dir: Path, forks: set[str]) -> list[Finding]:
             continue
         kept.append(finding)
     return kept
+
+
+# --- Reading the legacy store through a prefix rename -------------------------
+
+
+@dataclass(frozen=True)
+class RenameMatch:
+    """How legacy ids line up with a tree that ``seeds rename-prefix`` touched.
+
+    ``seeds rename-prefix`` (``Store.rename_prefix``) moves ``<old>-<suffix>``
+    to ``<new>-<suffix>``, children's ``.N`` tails included, and writes
+    ``created_at``, ``updated_at`` and ``converted_at`` verbatim. It records the
+    old prefix nowhere: ``config.yaml`` carries only the new one. So the pairing
+    is recovered from the two things a rename provably keeps -- the suffix and
+    ``created_at`` -- rather than from a remembered prefix. Measured 2026-10-06
+    on the four fleet stores that renamed after (or, in one, before) converting:
+    266 legacy ids absent from their trees, every one with exactly one twin by
+    that rule.
+    """
+
+    #: Legacy id -> the tree id it was renamed to. Already in the tree.
+    twins: dict[str, str] = field(default_factory=dict)
+    #: Legacy id the tree lacks -> the id it belongs under now, because its old
+    #: prefix is one the tree's seeds were renamed away from.
+    moved: dict[str, str] = field(default_factory=dict)
+
+    def tree_id(self, legacy_id: str) -> str:
+        return self.twins.get(legacy_id) or self.moved.get(legacy_id) or legacy_id
+
+
+def _split_id(seed_id: str) -> tuple[str, str]:
+    """``(prefix, tail)``: ``seeds-k3n7.2`` -> ``("seeds", "-k3n7.2")``.
+
+    The suffix is base36 and holds no hyphen (§1.1), so the last hyphen of the
+    top-level segment is the boundary even for a hyphenated prefix.
+    """
+    top, dot, rest = seed_id.partition(".")
+    prefix, hyphen, suffix = top.rpartition("-")
+    return prefix, f"{hyphen}{suffix}{dot}{rest}"
+
+
+def match_renames(
+    seeds_dir: Path,
+    side_maps: Sequence[dict[str, _Side]],
+    *,
+    exclude: Iterable[str] = (),
+) -> RenameMatch:
+    """Pair each legacy id the tree lacks with the file a prefix rename made of it.
+
+    A twin is a tree file with the same tail under a different prefix AND the
+    same ``created_at`` as the legacy record (the earliest either store holds,
+    which is what conversion wrote). Exactly one such file, or no pairing. A
+    legacy id with no twin, whose prefix is one some other legacy id was renamed
+    away from, belongs under the current prefix -- that is a seed a pre-0.7
+    client created after the rename -- unless that id is already taken.
+    """
+    files_dir = seed_files_dir(seeds_dir)
+    if not files_dir.is_dir():
+        return RenameMatch()
+    skip = set(exclude)
+    tree = {p.name[: -len(FILE_SUFFIX)]: p for p in files_dir.glob(f"*{FILE_SUFFIX}")}
+    legacy: dict[str, datetime] = {}
+    for sides in side_maps:
+        for seed_id, side in sides.items():
+            if seed_id in tree or seed_id in skip:
+                continue
+            stamp = side.seed.created_at
+            legacy[seed_id] = min(stamp, legacy.get(seed_id, stamp))
+    if not legacy:
+        return RenameMatch()
+
+    by_tail: dict[str, list[str]] = {}
+    for tree_id in tree:
+        by_tail.setdefault(_split_id(tree_id)[1], []).append(tree_id)
+    created: dict[str, datetime | None] = {}
+
+    def created_at(tree_id: str) -> datetime | None:
+        if tree_id not in created:
+            try:
+                created[tree_id] = read_seed_file(tree[tree_id]).created_at
+            except SeedFileError:
+                created[tree_id] = None
+        return created[tree_id]
+
+    twins: dict[str, str] = {}
+    for seed_id, stamp in sorted(legacy.items()):
+        prefix, tail = _split_id(seed_id)
+        candidates = [
+            t
+            for t in by_tail.get(tail, [])
+            if _split_id(t)[0] != prefix and created_at(t) == stamp
+        ]
+        if len(candidates) == 1:
+            twins[seed_id] = candidates[0]
+
+    current = read_config(seeds_dir).get("prefix")
+    renamed_away = {_split_id(seed_id)[0] for seed_id in twins} - {current}
+    taken = set(tree) | {i for sides in side_maps for i in sides}
+    moved: dict[str, str] = {}
+    if current:
+        for seed_id in sorted(set(legacy) - set(twins)):
+            prefix, tail = _split_id(seed_id)
+            suffix = tail[1:].partition(".")[0]
+            if prefix not in renamed_away:
+                continue
+            if not (suffix.isdigit() or is_hash_suffix(suffix)):
+                continue
+            target = f"{current}{tail}"
+            if target not in taken:
+                moved[seed_id] = target
+    return RenameMatch(twins=twins, moved=moved)
+
+
+def _apply_renames(
+    renames: RenameMatch,
+    side_maps: Sequence[dict[str, _Side]],
+    halves: Sequence[_Half],
+) -> list[_Half]:
+    """Read the legacy store under the ids the tree uses, in place.
+
+    A twin leaves the source maps -- the tree already holds it under its new
+    id and this run never writes it -- but every edge naming it is redirected
+    there. A moved seed is re-keyed, and the id references in its own text are
+    rewritten the way ``rename-prefix`` rewrites them, so the file it lands in
+    reads as if it had been there for the rename.
+    """
+    if not renames.twins and not renames.moved:
+        return list(halves)
+    known_by_prefix: dict[str, set[str]] = {}
+    for old_id in [*renames.twins, *renames.moved]:
+        prefix = _split_id(old_id)[0]
+        known_by_prefix.setdefault(prefix, set()).add(old_id.partition(".")[0])
+    for sides in side_maps:
+        for old_id in renames.twins:
+            sides.pop(old_id, None)
+        for old_id, new_id in renames.moved.items():
+            side = sides.pop(old_id, None)
+            if side is None:
+                continue
+            old_prefix = _split_id(old_id)[0]
+            new_prefix = _split_id(new_id)[0]
+            known = known_by_prefix[old_prefix]
+            seed = side.seed
+            seed.id = new_id
+            seed.title = rewrite_id_refs(seed.title, old_prefix, new_prefix, known)[0]
+            seed.content = rewrite_id_refs(seed.content, old_prefix, new_prefix, known)[
+                0
+            ]
+            seed.resolution = rewrite_id_refs(
+                seed.resolution, old_prefix, new_prefix, known
+            )[0]
+            sides[new_id] = side
+    return [
+        _Half(
+            source_id=renames.tree_id(half.source_id),
+            target_id=renames.tree_id(half.target_id),
+            rel_type=half.rel_type,
+            created_at=half.created_at,
+        )
+        for half in halves
+    ]
+
+
+def _report_renamed(
+    seeds_dir: Path,
+    renames: RenameMatch,
+    side_maps: Sequence[dict[str, _Side]],
+    report: ConversionReport,
+) -> None:
+    """Count the twins as already in the tree, unless legacy edited them since.
+
+    Called before :func:`_apply_renames` takes the twins out of the source
+    maps. Their content is not compared: the rename rewrote id references
+    inside their text, so a byte comparison would call every one of them
+    diverged. The one thing that is checked is the one that would mean lost
+    deliberation -- a legacy record updated after its twin's ``converted_at``
+    -- and that is reported as a divergence like any other.
+    """
+    report.moved_to_current_prefix = dict(sorted(renames.moved.items()))
+    files_dir = seed_files_dir(seeds_dir)
+    for old_id, tree_id in sorted(renames.twins.items()):
+        updated = max(
+            sides[old_id].seed.updated_at for sides in side_maps if old_id in sides
+        )
+        try:
+            converted = read_seed_file(files_dir / (tree_id + FILE_SUFFIX)).converted_at
+        except SeedFileError:
+            converted = None
+        if converted is not None and updated > converted:
+            report.diverged.append(
+                TreeDivergence(
+                    seed_id=tree_id,
+                    legacy_updated_at=updated,
+                    converted_at=converted,
+                )
+            )
+        else:
+            report.renamed[old_id] = tree_id
+
+
+# --- A legacy store still being written beside the tree (seeds-mlc7) ---------
+
+#: What to do about legacy-store activity, in the one wording doctor and check
+#: both print. ``seeds convert`` is safe here only because a re-run is additive
+#: (seeds-z46j): it writes the seeds the tree lacks and never overwrites one it
+#: has.
+LEGACY_RECOVERY = (
+    "run 'seeds convert' -- it writes only the seeds the tree lacks and never "
+    "overwrites one it has -- then remove .seeds/seeds.jsonl (git rm; its git "
+    "history stays) and upgrade the pre-0.7 seeds client that wrote to the "
+    "legacy store"
+)
+
+#: The legacy edits convert will not apply, because the tree owns a seed once
+#: it has a file.
+LEGACY_EDIT_RECOVERY = (
+    "'seeds convert' will not apply these -- the tree owns a seed once it has "
+    "a file -- so merge each legacy edit into its seed file by hand ('seeds "
+    "convert' lists every one as diverged), then retire the legacy store: git "
+    "rm .seeds/seeds.jsonl, move .seeds/seeds.db out of .seeds/ (git holds no "
+    "copy of it, so keep it), and upgrade the pre-0.7 seeds client that wrote "
+    "them"
+)
+
+
+@dataclass
+class LegacyActivity:
+    """What the legacy store beside a converted tree holds that the tree does not.
+
+    A pre-0.7 client working in a converted checkout keeps writing to
+    ``seeds.db`` and, through ``seeds sync``, recreates ``seeds.jsonl`` --
+    and nothing 0.7 reads shows it. Measured 2026-10-06 on a scratch clone of
+    observatory: a seed created that way was absent from ``list`` while both
+    ``check`` and ``doctor`` passed.
+    """
+
+    seeds_dir: Path
+    db_present: bool
+    jsonl_present: bool
+    #: Ids a legacy store holds that have no file in the tree, by store file.
+    #: The ruled fixtures convert drops are not counted: their absence is the
+    #: conversion's, not a pre-0.7 client's.
+    missing: dict[str, list[str]] = field(default_factory=dict)
+    #: Ids whose legacy record was updated after its file's ``converted_at``,
+    #: by store file: a pre-0.7 client edited them after conversion.
+    edited: dict[str, list[str]] = field(default_factory=dict)
+    #: Why the legacy store could not be read, when it could not.
+    unreadable: str | None = None
+
+    @property
+    def missing_ids(self) -> list[str]:
+        return sorted({i for ids in self.missing.values() for i in ids})
+
+    @property
+    def edited_ids(self) -> list[str]:
+        return sorted({i for ids in self.edited.values() for i in ids})
+
+    @property
+    def split(self) -> bool:
+        """Whether the legacy store holds deliberation the tree lacks."""
+        return bool(self.missing or self.edited)
+
+
+def legacy_activity(seeds_dir: Path) -> LegacyActivity | None:
+    """Read the legacy store beside a converted tree and say what it holds.
+
+    ``None`` when there is no tree, or no legacy file beside it. Reads through
+    convert's own loaders, so "what the tree lacks" means exactly what a
+    conversion would add.
+    """
+    seeds_dir = Path(seeds_dir)
+    files_dir = seed_files_dir(seeds_dir)
+    db_path = seeds_dir / DB_FILE
+    jsonl_path = seeds_dir / JSONL_FILE
+    if not files_dir.is_dir() or not (db_path.exists() or jsonl_path.exists()):
+        return None
+    activity = LegacyActivity(
+        seeds_dir=seeds_dir,
+        db_present=db_path.exists(),
+        jsonl_present=jsonl_path.exists(),
+    )
+    try:
+        db_sides = _load_db(db_path).sides
+        jsonl_sides, _, _ = _load_jsonl(jsonl_path)
+    except (ConversionError, sqlite3.DatabaseError) as exc:
+        activity.unreadable = str(exc)
+        return activity
+
+    drops = set(_ruled_fixture_drops(db_sides, jsonl_sides))
+    converted: dict[str, datetime | None] = {}
+    for path in files_dir.glob(f"*{FILE_SUFFIX}"):
+        try:
+            converted[path.name[: -len(FILE_SUFFIX)]] = read_seed_file(
+                path
+            ).converted_at
+        except SeedFileError:
+            # Present, and the violations tier's to report. Its stamp is
+            # unknown, so it can be neither missing nor edited-after.
+            converted[path.name[: -len(FILE_SUFFIX)]] = None
+    # A legacy id a `seeds rename-prefix` moved is in the tree under its new
+    # id; one created under a renamed-away prefix is reported under the id
+    # `seeds convert` would write it as.
+    renames = match_renames(seeds_dir, [db_sides, jsonl_sides], exclude=drops)
+    for name, sides in ((DB_FILE, db_sides), (JSONL_FILE, jsonl_sides)):
+        missing = sorted(
+            f"{i} (as {renames.moved[i]})" if i in renames.moved else i
+            for i in sides
+            if renames.tree_id(i) not in converted and i not in drops
+        )
+        edited = sorted(
+            renames.tree_id(i)
+            for i, side in sides.items()
+            if (stamp := converted.get(renames.tree_id(i))) is not None
+            and side.seed.updated_at > stamp
+        )
+        if missing:
+            activity.missing[name] = missing
+        if edited:
+            activity.edited[name] = edited
+    return activity
+
+
+def preview_ids(ids: Sequence[str], limit: int = 5) -> str:
+    """A few ids, then a count, so one line stays one line."""
+    shown = ", ".join(ids[:limit])
+    if len(ids) > limit:
+        shown += f", ... (+{len(ids) - limit} more)"
+    return shown
+
+
+def legacy_findings(
+    activity: LegacyActivity | None,
+) -> tuple[list[Finding], list[Finding]]:
+    """``seeds check``'s view of :func:`legacy_activity`: (violations, smells).
+
+    Legacy seeds the tree lacks, or legacy edits made after conversion, are
+    violations: deliberation exists that every 0.7 command is blind to, and
+    the commit gate is what stops it from being committed unnoticed. A
+    ``seeds.jsonl`` that holds nothing the tree lacks is a smell -- stale, and
+    worth removing, but harmless.
+    """
+    if activity is None:
+        return [], []
+    seeds_dir = activity.seeds_dir
+    violations: list[Finding] = []
+    smells: list[Finding] = []
+    if activity.unreadable is not None:
+        smells.append(
+            Finding(
+                path=seeds_dir / (JSONL_FILE if activity.jsonl_present else DB_FILE),
+                code="legacy-store-unreadable",
+                message=(
+                    "the pre-0.7 store beside the tree could not be read, so "
+                    f"whether it holds seeds the tree lacks is unknown: "
+                    f"{activity.unreadable}"
+                ),
+                remediation=(
+                    "fix or remove the legacy file; if it may hold seeds the "
+                    "tree lacks, recover them by hand"
+                ),
+            )
+        )
+        return violations, smells
+    for name, ids in activity.missing.items():
+        violations.append(
+            Finding(
+                path=seeds_dir / name,
+                code="legacy-seed-not-in-tree",
+                message=(
+                    f"{len(ids)} seed(s) in this pre-0.7 store have no file in "
+                    f"the tree, so no 0.7 command sees them: {preview_ids(ids)}"
+                ),
+                remediation=LEGACY_RECOVERY,
+            )
+        )
+    for name, ids in activity.edited.items():
+        violations.append(
+            Finding(
+                path=seeds_dir / name,
+                code="legacy-edited-after-conversion",
+                message=(
+                    f"{len(ids)} seed(s) were edited in this pre-0.7 store "
+                    f"after their file's converted_at: {preview_ids(ids)}"
+                ),
+                remediation=LEGACY_EDIT_RECOVERY,
+            )
+        )
+    if activity.jsonl_present and not activity.split:
+        smells.append(
+            Finding(
+                path=seeds_dir / JSONL_FILE,
+                code="legacy-jsonl-beside-tree",
+                message=(
+                    "the retired pre-0.7 export is still here beside the "
+                    "converted tree; it holds nothing the tree lacks, and "
+                    "nothing reads it"
+                ),
+                remediation=(
+                    "remove it with git rm (its git history stays, and 'seeds "
+                    "history' still reads it); if a pre-0.7 client recreated "
+                    "it, upgrade that client"
+                ),
+            )
+        )
+    return violations, smells
