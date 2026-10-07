@@ -4,7 +4,7 @@ title: 'Focus set / board: a sprint-like set of seeds to work next, dropped in a
 status: resolved
 type: idea
 created_at: 2026-10-07T17:54:45.300356+00:00
-updated_at: 2026-10-07T18:50:21.498023+00:00
+updated_at: 2026-10-07T18:52:21.100816+00:00
 resolved_at: 2026-10-07T18:50:13.423301+00:00
 resolution: 'Tags only: the focus tag is the working set; convention shipped in seeds prime. --sort status deferred to seeds-1cho.'
 tags:
@@ -60,3 +60,5 @@ Verdict: tags alone cover it. No new concept, no new command, no new storage.
 Cut from the proposal: a `seeds board` command (it would be a second `list`); a reserved or special `focus` tag; sprint objects with dates or cadence; WIP limits; any new field in the seed file format.
 
 RULED 2026-10-07 (Ryan, relayed from another session): "let's not worry about sort right now and just use tags." Tags only. The convention, a `focus` tag added and removed with `--add-tag`/`--remove-tag` and viewed with `seeds list --tag focus`, is now one line in both short and full `seeds prime`. `--sort status` is DEFERRED, not rejected, and split out to seeds-1cho.
+
+RULED 2026-10-07 (Ryan, later the same day): "we just need to be able to break seeds into feature sets via tags ... Really, I just needed to be told, hey, use tags to create a cluster right now, and I can always refer back to it. If we're not doing anything else that's special about it, why bother making any changes?" The prime line was backed out before push: no focus convention, no reserved tag, no code or prime change. A cluster or feature set is just a tag (`--add-tag` / `list --tag`), which seeds already did. The resolution's "convention shipped in seeds prime" is superseded by this note.
