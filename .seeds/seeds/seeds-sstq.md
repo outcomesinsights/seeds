@@ -1,10 +1,12 @@
 ---
 id: seeds-sstq
 title: Deploying seeds means deploying main, not the release — the flake input has no ref pin, so a tag and what ships can diverge
-status: captured
+status: resolved
 type: concern
 created_at: 2026-08-31T19:40:37.308912+00:00
-updated_at: 2026-08-31T19:40:37.308912+00:00
+updated_at: 2026-10-12T22:44:29.610302+00:00
+resolved_at: 2026-10-12T22:44:29.610293+00:00
+resolution: 'Option A, 2026-10-12, at the v0.7.0 release: home-manager now pins the input to the release tag, url git+https://github.com/outcomesinsights/seeds?ref=refs/tags/v0.7.0 (home-manager 13caf40), so a deploy is exactly a release and a bump is an explicit edit of the tag. Chosen by the agent cutting the release under a "do all these" instruction, as the option that closes the divergence rather than reporting it; Ryan can still overturn it in favour of B or C.'
 tags:
   - release
   - nix
