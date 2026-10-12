@@ -498,13 +498,18 @@ def test_source_only_report_omits_the_prose_warning():
 # --------------------------------------------------------------------------
 
 
+# The CLI tests pass --since: the beads are dated from the fixed NOW above, and
+# the default window is thirty days back from the REAL clock, so without it
+# these began failing once 2026-10-12 put NOW outside the window.
 def test_cli_reads_stdin_and_reports(cli_runner, store, monkeypatch):
     from seeds.cli import main
 
     store.create(seed("seeds-aaa", title="a real seed"))
     monkeypatch.chdir(store.seeds_dir.parent)
     payload = json.dumps([bead("seeds-b1", notes="Source: seeds-aaa")])
-    result = cli_runner.invoke(main, ["candidates", "-"], input=payload)
+    result = cli_runner.invoke(
+        main, ["candidates", "-", "--since", "2026-09-01"], input=payload
+    )
     assert result.exit_code == 0, result.output
     assert "seeds-aaa" in result.output
     assert "[source]" in result.output
@@ -516,7 +521,9 @@ def test_cli_json_flag_emits_parseable_json(cli_runner, store, monkeypatch):
     store.create(seed("seeds-aaa"))
     monkeypatch.chdir(store.seeds_dir.parent)
     payload = json.dumps([bead("seeds-b1", notes="Source: seeds-aaa")])
-    result = cli_runner.invoke(main, ["candidates", "-", "--json"], input=payload)
+    result = cli_runner.invoke(
+        main, ["candidates", "-", "--json", "--since", "2026-09-01"], input=payload
+    )
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)["candidates"][0]["seed_id"] == "seeds-aaa"
 
