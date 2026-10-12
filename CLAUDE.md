@@ -61,7 +61,7 @@ ______________________________________________________________________
 ## Status
 
 - **Active**
-- Last meaningful work: 2026-02
+- Last meaningful work: 2026-10 (v0.7.0 released 2026-10-12)
 
 ## Tech Stack
 
@@ -129,14 +129,13 @@ which seeds
 ```
 
 - **`~/.nix-profile/bin/seeds`** — nix installed it (this is the case on titan).
-  Refresh from `~/.config/home-manager`: `nix flake update seeds`, then switch.
-  The flake input **is pinned to a branch** while 0.7 is unreleased —
-  `git+https://github.com/outcomesinsights/seeds?ref=0.7.0` in home-manager's
-  `flake.nix`. It does NOT track main, and main is deliberately still on the
-  0.6.x line. Either way the ref is fetched over https from GitHub, so a
-  change must be **pushed to that branch** before an update can see it; a
-  local commit is invisible to nix. Don't bump it by editing
-  `modules/packages.nix`.
+  The flake input in home-manager's `flake.nix` is **pinned to a release
+  tag**: `git+https://github.com/outcomesinsights/seeds?ref=refs/tags/v0.7.0`
+  (since 2026-10-12, seed seeds-sstq). So a deploy is exactly a release, and
+  commits on main after the tag do not ship. To deploy a new release, push its
+  tag, edit the tag in that URL, then `nix flake update seeds` and switch from
+  `~/.config/home-manager`. A local commit or tag is invisible to nix until it
+  is pushed. Don't bump it by editing `modules/packages.nix`.
 - **`~/.local/bin/seeds`** — `uv tool` installed it. Refresh with
   `uv cache clean seeds && uv tool install --reinstall .`. `--reinstall` already
   implies `--refresh`, so no separate `uv tool uninstall` is needed.
