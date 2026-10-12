@@ -184,14 +184,15 @@ lock-check:
 # ruff bare, mypy through the project env, actionlint and zizmor over the
 # workflows, cog over the commit subjects since the last release tag.
 # cog's own --from-latest-tag skips pre-release tags (it answers 0.6.0 while
-# v0.7.0-a.9 exists), so its window reached back over three permanent
-# non-conventional commits; git describe counts from the newest tag of any kind.
+# v0.7.0-a.9 exists), so git describe names the window's start instead. The
+# `&&` guard is load-bearing: in a depth-1 clone describe fails, and without it
+# cog checks one commit and exits 0 (gator f0804d9).
 lint:
     ruff check
     uv run mypy src/
     actionlint
     zizmor --offline --config .github/zizmor.yml .
-    cog check --ignore-merge-commits "$(git describe --tags --abbrev=0)..HEAD"
+    tag="$(git describe --tags --abbrev=0 --match 'v*')" && cog check --ignore-merge-commits "$tag..HEAD"
 
 # The seed store against git: violations plus the mass-rewrite gate. Through
 # `uv run`, not an installed seeds: this repo's store is gated by the seeds it
