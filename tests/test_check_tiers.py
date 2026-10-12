@@ -38,8 +38,8 @@ from seeds.check import (
     check_violations,
     format_findings,
 )
-from seeds.models import SeedStatus
-from seeds.seedfile import SeedRecord, read_seed_file, write_seed
+from seeds.models import RelationType, SeedStatus
+from seeds.seedfile import SeedEdge, SeedRecord, read_seed_file, write_seed
 from seeds.store import Store
 from tests.githelpers import git, git_init
 
@@ -1182,3 +1182,126 @@ class TestTheRenamePrefixExemption:
 
         findings = check_against_git(seeds_dir).findings
         assert "seeds-0000" in ids_for(findings, "body-rewritten-in-place")
+
+
+# --- An edge repointed onto a different seed (bead seeds-6rb) -----------------
+
+EDGE_AT = datetime(2026, 8, 29, 10, 0, 0, tzinfo=UTC)
+
+
+def questions(target: str) -> list[SeedEdge]:
+    return [SeedEdge(target, RelationType.QUESTIONS, EDGE_AT)]
+
+
+def questioned_by(target: str) -> list[SeedEdge]:
+    return [SeedEdge(target, RelationType.QUESTIONED_BY, EDGE_AT)]
+
+
+def hm_store(tmp_path: Path, *, hm6_title: str) -> Path:
+    """home-manager at c27ba89^, reduced: an edge under the old prefix, and an
+    ``hm-6`` that already exists before any rename touches it."""
+    git_init(tmp_path)
+    seeds_dir = store(
+        tmp_path,
+        record(
+            "seeds-6",
+            title="Cache invalidation design",
+            relationships=questioned_by("seeds-7"),
+        ),
+        record(
+            "seeds-7",
+            title="Does the cache survive a switch?",
+            relationships=questions("seeds-6"),
+        ),
+        record("hm-6", title=hm6_title),
+        *(record(f"hm-{n}", title=f"Seed {n}") for n in range(10, 20)),
+    )
+    Store(seeds_dir).set_prefix("hm")
+    git(tmp_path, "add", "-A")
+    git(tmp_path, "commit", "-q", "-m", "a store with two prefixes in it")
+    return seeds_dir
+
+
+def sed_rename(seeds_dir: Path) -> None:
+    """``seeds-N -> hm-N`` the way a sed pass does it: every reference moves,
+    and a file whose new name is taken is dropped rather than written over."""
+    files = seeds_dir / "seeds"
+    write_seed(
+        seeds_dir,
+        record(
+            "hm-7",
+            title="Does the cache survive a switch?",
+            relationships=questions("hm-6"),
+        ),
+    )
+    hm6 = read_seed_file(files / "hm-6.md")
+    hm6.relationships = questioned_by("hm-7")
+    write_seed(seeds_dir, hm6)
+    (files / "seeds-6.md").unlink()
+    (files / "seeds-7.md").unlink()
+
+
+class TestAnEdgeRepointedOntoADifferentSeed:
+    """Bead seeds-6rb. The measured case: both ends resolve and the pair is
+    symmetric, so the violations tier reports the store clean."""
+
+    def test_the_home_manager_case_is_caught(self, tmp_path):
+        seeds_dir = hm_store(tmp_path, hm6_title="Pick a terminal font")
+        sed_rename(seeds_dir)
+
+        # The precondition, asserted rather than assumed: nothing else sees it.
+        assert check_violations(seeds_dir) == []
+
+        findings = check_against_git(seeds_dir).findings
+        assert ids_for(findings, "edge-repointed-onto-different-seed") == ["hm-7"]
+        (finding,) = [f for f in findings if f.seed_id == "hm-7"]
+        assert "seeds-6" in finding.message
+        assert "Pick a terminal font" in finding.message
+
+    def test_a_duplicate_collapsing_into_its_twin_is_not_flagged(self, tmp_path):
+        """50 of the 51 home-manager collisions: the same seed under both
+        prefixes, so the edge still means what it meant."""
+        seeds_dir = hm_store(tmp_path, hm6_title="Cache invalidation design")
+        sed_rename(seeds_dir)
+
+        findings = check_against_git(seeds_dir).findings
+        assert ids_for(findings, "edge-repointed-onto-different-seed") == []
+
+    def test_a_sanctioned_rename_is_not_flagged(self, tmp_path):
+        seeds_dir = corpus(tmp_path, 20)
+        files = seeds_dir / "seeds"
+        for source, edges in (
+            ("seeds-0001", questions("seeds-0002")),
+            ("seeds-0002", questioned_by("seeds-0001")),
+        ):
+            moved = read_seed_file(files / f"{source}.md")
+            moved.relationships = edges
+            write_seed(seeds_dir, moved)
+        git(tmp_path, "add", "-A")
+        git(tmp_path, "commit", "-q", "-m", "an edge")
+        Store(seeds_dir).rename_prefix("sprout")
+
+        assert check_against_git(seeds_dir).findings == []
+
+    def test_an_edge_retargeted_with_no_id_gone_is_not_flagged(self, tmp_path):
+        """Pointing an edge somewhere else is ordinary editing, not a rename."""
+        seeds_dir = hm_store(tmp_path, hm6_title="Pick a terminal font")
+        files = seeds_dir / "seeds"
+        seven = read_seed_file(files / "seeds-7.md")
+        seven.relationships = questions("hm-6")
+        write_seed(seeds_dir, seven)
+
+        findings = check_against_git(seeds_dir).findings
+        assert ids_for(findings, "edge-repointed-onto-different-seed") == []
+
+    def test_the_cli_fails_and_names_the_finding(
+        self, tmp_path, cli_runner, monkeypatch
+    ):
+        seeds_dir = hm_store(tmp_path, hm6_title="Pick a terminal font")
+        sed_rename(seeds_dir)
+        monkeypatch.chdir(tmp_path)
+        from seeds.cli import main
+
+        result = cli_runner.invoke(main, ["check", "--against-git"])
+        assert result.exit_code == 1, result.output
+        assert "edge-repointed-onto-different-seed" in result.output

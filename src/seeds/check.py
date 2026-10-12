@@ -1283,6 +1283,10 @@ def _compare(
     if not before:
         return comparison
 
+    # Judged on the raw before-state: the rename replay below would move the
+    # edge's old target onto the very id this rule needs to tell apart from it.
+    comparison.findings.extend(_repointed_edges(reldir, before, after, before_label))
+
     # A `seeds rename-prefix` moves every id, so keyed by id it reads as the
     # whole corpus deleted and re-added -- a 95% mass change on every field
     # (marketscan_mdcd 596555b, seeds-7q8g). When the diff is recognisably a
@@ -1326,6 +1330,98 @@ def _compare(
         _rewritten_bodies(reldir, before, after, before_label, after_label)
     )
     return comparison
+
+
+# --- An edge repointed onto a different seed ---------------------------------
+
+# Bead seeds-6rb. A seeds-N -> hm-N rename in home-manager (c27ba89) rewrote
+# one end of a relationship onto an id that already existed as a DIFFERENT seed:
+# hm-7 `questions` hm-6, and hm-6 `questioned-by` hm-7. Both ends resolve and
+# the pair is symmetric, so every edge rule in the violations tier passes it.
+#
+# The signal looks at the RENAME, not the edge (seed seeds-l2f3, measured on
+# home-manager at c27ba89^: 51 suffixes under both prefixes, 50 the same seed,
+# 1 not). An edge whose target left the store and now names the same suffix
+# under another prefix is suspect only when that other id was already a seed
+# of its own, with a different title, before the change. A same-titled pair is
+# a duplicate collapsing into its twin, and keeps its meaning. No edge is
+# judged on its own, so legitimate inverse pairs cannot trip it.
+#
+# The gap that remains. `seeds rename-prefix` and `seeds convert` already
+# refuse a target id that exists, so this catches damage from sed, a hand edit
+# or an older tool -- and only at the commit that does it, because
+# --against-git compares HEAD with the working tree, or HEAD~1 with HEAD. A
+# rename that landed in history before this rule existed is not re-read. Id
+# references in body prose are not judged here either; a body rewritten under
+# a frozen stamp is `body-rewritten-in-place`'s finding.
+
+
+def _id_suffix(seed_id: str) -> str:
+    """Everything after the prefix: ``hm-7.1`` -> ``-7.1``."""
+    top, dot, rest = seed_id.partition(".")
+    return top[len(top.rpartition("-")[0]) :] + dot + rest
+
+
+def _repointed_edges(
+    reldir: str,
+    before: dict[str, SeedRecord],
+    after: dict[str, SeedRecord],
+    before_label: str,
+) -> list[Finding]:
+    """One finding per edge moved onto a pre-existing seed of another subject."""
+    gone = set(before) - set(after)
+    if not gone:
+        return []
+    gone_by_suffix: dict[str, list[str]] = defaultdict(list)
+    for seed_id in gone:
+        gone_by_suffix[_id_suffix(seed_id)].append(seed_id)
+
+    findings: list[Finding] = []
+    for seed_id in sorted(after):
+        # The seed holding the edge may itself have moved in the same rename.
+        sources = (
+            [seed_id] if seed_id in before else gone_by_suffix[_id_suffix(seed_id)]
+        )
+        now = {
+            (edge.rel_type, edge.created_at): edge.target_id
+            for edge in after[seed_id].relationships
+        }
+        for source in sources:
+            for edge in before[source].relationships:
+                was = edge.target_id
+                target = now.get((edge.rel_type, edge.created_at))
+                if (
+                    was not in gone
+                    or target is None
+                    or target == was
+                    or target not in before
+                    or _id_suffix(target) != _id_suffix(was)
+                    or before[target].title == before[was].title
+                ):
+                    continue
+                findings.append(
+                    Finding(
+                        path=Path(f"{reldir}/{seed_id}{FILE_SUFFIX}"),
+                        code="edge-repointed-onto-different-seed",
+                        seed_id=seed_id,
+                        message=(
+                            f"`{edge.rel_type.value}` edge to {was} now points at "
+                            f"{target}, but at {before_label} {target} was already "
+                            f"a different seed ({before[target].title!r}, not "
+                            f"{before[was].title!r}). Both ends resolve, so no "
+                            f"edge rule sees it."
+                        ),
+                        remediation=(
+                            f"an id rewrite moved {was} onto an id that was taken. "
+                            f"Give {was}'s seed an id of its own and point this edge "
+                            f"(and its inverse in {target}) at it, or drop the edge "
+                            f"if {target} was the intended target; "
+                            f"`git show {before_label}:{reldir}/{was}{FILE_SUFFIX}` "
+                            f"has the seed it meant (seeds-6rb)"
+                        ),
+                    )
+                )
+    return findings
 
 
 def _mass_finding(
