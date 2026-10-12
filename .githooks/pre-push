@@ -25,9 +25,23 @@ J() { just --justfile "./$jf" --working-directory . "$@"; }
 refs=""
 [ -t 0 ] || refs="$(cat)"
 shas=""
-for sha in $(printf '%s\n' "$refs" | while read -r _lref lsha _rref _rsha; do echo "$lsha"; done); do
-  case "$sha" in *[!0]*) ;; *) continue ;; esac # all zeros: a deletion, nothing to test
-  c="$(git rev-parse --verify -q "$sha^{commit}")" || continue # a tag on a tree or blob
+for c in $(printf '%s\n' "$refs" | while read -r _lref lsha rref _rsha; do
+  case "$lsha" in *[!0]*) ;; *) continue ;; esac # all zeros: a deletion, nothing to test
+  commit="$(git rev-parse --verify -q "$lsha^{commit}")" || continue # a tag on a tree or blob
+  case "$rref" in
+  refs/tags/*)
+    # A tag is tested only if CI will test it: GitHub runs the workflow files of the tagged
+    # commit, so when none of them triggers on tags, nothing checks this commit for the tag.
+    # Testing it anyway made an old release tag unpushable once its tests rotted (seeds,
+    # 2026-10-12). A false match (a `tags:` step input) only means testing it.
+    if ! git grep -qE '^[[:space:]]+tags:' "$commit" -- .github/workflows 2>/dev/null; then
+      echo "pre-push: ${rref#refs/tags/} at $(git rev-parse --short "$commit"): no workflow there runs on tag pushes -- not tested" >&2
+      continue
+    fi
+    ;;
+  esac
+  echo "$commit"
+done); do
   case " $shas " in *" $c "*) ;; *) shas="$shas $c" ;; esac
 done
 if [ -z "$refs" ]; then
