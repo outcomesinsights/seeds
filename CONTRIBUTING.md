@@ -5,29 +5,33 @@ Thanks for your interest in contributing to seeds!
 ## Getting Started
 
 1. Fork the repository
-2. Clone your fork and install dependencies:
+2. Clone your fork and set it up. You need [mise](https://mise.jdx.dev) and
+   [just](https://just.systems); `mise.toml` pins every other tool:
 
 ```bash
-uv sync
+just setup
 ```
 
-3. Run the test suite to make sure everything works:
+3. Run the full local CI equivalent to make sure everything works:
 
 ```bash
-uv run pytest
+just ci
 ```
 
 ## Development
 
-- Format and lint with ruff: `uv run ruff check . && uv run ruff format .`
-- Type check with mypy: `uv run mypy src/`
-- Run tests with coverage: `uv run pytest --cov=seeds`
+The recipes are the interface, the same ones CI runs:
+
+- `just fmt` formats every tracked file (treefmt: ruff, mdformat, nixfmt,
+  prettier, taplo, just); `just fmt-check` reports drift.
+- `just lint` runs ruff, mypy (strict), actionlint, zizmor and `cog check`.
+- `just test` runs the suite on the local interpreter; `just ci` runs everything.
 
 ## Submitting Changes
 
 1. Create a branch for your change
 2. Make your changes and add tests
-3. Ensure all checks pass (`ruff check`, `ruff format --check`, `mypy`, `pytest`)
+3. Ensure `just ci` passes
 4. Open a pull request with a clear description of what and why
 
 ## Commit Messages
@@ -169,9 +173,9 @@ seed file. The hook does not run `--smells`, which never blocks and was most of
 its runtime; run `seeds check --smells` yourself when you want that report.
 
 If it refuses a change you meant to make, confirm it explicitly with
-`SEEDS_GATE_CONFIRM=1 git commit` (`SKIP=seeds-check` works too, under prek).
-Never `git commit --no-verify`: it also skips the beads export and the git
-config sanity check, which have nothing to do with the store. A
+`SEEDS_GATE_CONFIRM=1 git commit`. Never `git commit --no-verify`: it also skips
+the git config sanity check, formatting and lint, which have nothing to do with
+the store. A
 `seeds rename-prefix` needs no confirmation; the gate reads it as a rename. Expect
 to need confirmation **twice** for one intended
 mass rewrite — when the store is unchanged relative to `HEAD`, `--against-git`
@@ -179,25 +183,25 @@ falls back to comparing `HEAD~1` with `HEAD` and audits the commit that just
 landed, which is the reading that would have caught the original sweep on any of
 the three days it went unread. The commit after that clears it.
 
-Install the hooks for both stages, or the pre-push stage never fires:
-`prek install --hook-type pre-commit --hook-type pre-push` (`pre-commit` works
-too). On push they run `just pre-push`, the full local CI equivalent, which you
-can also run by hand. It lives in the `justfile`; `.pre-commit-config.yaml`
-only wires it to the push, behind a step that publishes this host's beads with
-the shared `bd-publish` command when it is installed and does nothing otherwise.
+The hooks run two recipes: `just pre-commit` at commit (git config sanity,
+`fmt-check`, `lint`, `seeds-check`) and `just ci` at push. Until this repo moves
+to gator's tracked `.githooks/`, prek wires them through `.pre-commit-config.yaml`;
+install both stages, or the push stage never fires:
+`prek install --hook-type pre-commit --hook-type pre-push`. The push stage also
+publishes this host's beads with the shared `bd-publish` command when it is
+installed, and does nothing otherwise.
 
-`just pre-push` runs `uv lock --check` first, because `uv sync` and `uv run` both
-re-lock and would otherwise make it pass unconditionally. Then mypy (strict),
-`ruff check`, `ruff format --check` and `just flake-deps`. Then, concurrently,
-the full pytest suite on the local interpreter, on 3.11 and on 3.12, and
+`just ci` is the full local CI equivalent, and GitHub Actions runs exactly that
+recipe, so a green push gate means a green CI. It runs `uv lock --check` first,
+because `uv sync` and `uv run` both re-lock and would otherwise make it pass
+unconditionally (`just setup` uses `uv sync --locked` for the same reason). Then
+`lint`, `fmt-check`, `just flake-deps` and `seeds-check`. Then, concurrently, the
+full pytest suite on the local interpreter, on 3.11 and on 3.12, and
 `nix flake check` (skipped cleanly when nix is absent). Each concurrent job logs
-to `claude_stuff/pre-push-<stamp>-<job>.log`, and a failure names the job. If it
-passes, the GitHub Actions CI on push is the last line of defense rather than
-the first. If you add a step to `.github/workflows/ci.yml`, add it to
-`just pre-push` too.
+to `claude_stuff/ci-<stamp>-<job>.log`, and a failure names the job. To add a
+check, add it to a recipe `ci` runs, never to the workflow alone.
 
-`just flake-deps` is the one pre-push check with no counterpart in `ci.yml`, and
-that is deliberate. `flake.nix` copies `[project.dependencies]` by hand, so
+`just flake-deps` is a separate check from the nix job, and that is deliberate. `flake.nix` copies `[project.dependencies]` by hand, so
 adding or removing a runtime dependency means editing two files; the script
 compares the two lists by name and names whichever dependency only one of them
 knows about. CI already catches that mismatch — inside the nix job, about two

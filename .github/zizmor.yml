@@ -1,0 +1,7 @@
+# zizmor configuration, passed EXPLICITLY: `zizmor --offline --config .github/zizmor.yml .`
+# (discovery resolves against the git common dir, so from a worktree it reads the main
+# checkout's file). Run on the repo ROOT, not .github/workflows/, or dependabot.yml is not
+# audited. Finding-specific ignores live inline, as a YAML comment on the step's `run: |`
+# line -- `run: | # zizmor: ignore[adhoc-packages]` -- never inside the block scalar, where
+# they are not honoured. This file holds repo-wide settings only.
+rules: {}

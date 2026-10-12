@@ -1,3 +1,15 @@
+# Install the declared toolchain: the pinned tools (mise.toml), then the locked
+# Python environment, then arm the tracked hooks (gator's standard setup).
+# `uv sync --locked`, not bare `uv sync`: a bare sync re-locks a stale uv.lock and
+# leaves every later `uv lock --check` passing unconditionally (bead seeds-3p1),
+# so here a stale lock fails setup instead. bd bootstrap, never bd init: in a clone
+# that already has .beads, init re-points the hooks and commits.
+setup:
+    mise install
+    uv sync --locked
+    @if [ -d .beads ] && [ ! -d .beads/embeddeddolt ] && command -v bd >/dev/null 2>&1; then bd bootstrap; fi
+    @if [ -d .githooks ]; then git config core.hooksPath .githooks; fi
+
 test:
     uv run pytest
 
@@ -86,7 +98,7 @@ changelog-section VERSION RANGE="":
 # uv.lock and flake.nix; `uv lock --check` gates the first and this gates the
 # second.
 #
-# Also runs in the pre-push stage, immediately ahead of `nix flake check`, which
+# Also runs in `ci`, ahead of `nix flake check`, which
 # is what used to catch this: dropping flask from pyproject.toml on 2026-08-31
 # left flake.nix naming it, and ruff, mypy, the full pytest suite and `uv lock
 # --check` were ALL green with the mismatch in place. The nix job found it two
@@ -142,20 +154,14 @@ differential-selftest REPO:
     @uv run python scripts/differential_harness.py {{ REPO }} --inject mutate-title --no-cross-repo
     @uv run python scripts/differential_harness.py {{ REPO }} --inject truncate-body --no-cross-repo
 
-# Rewrite files to canonical format. Run deliberately; never from a hook.
+# Rewrite files to canonical format (treefmt.toml). Run deliberately; never from a hook.
 fmt:
-    uv run ruff format .
-    git ls-files "*.nix" | xargs -r nixfmt
-    just --fmt --unstable
-    git ls-files "*.md" | xargs -r uv run mdformat
+    treefmt
 
-# Report format drift without changing anything. This is what the hooks run —
-# a formatter that rewrites files mid-commit changes what you already reviewed.
+# Report format drift. treefmt --fail-on-change FORMATS and then exits 1:
+# fix-and-fail, the one rewrite gator's standard allows a gate.
 fmt-check:
-    uv run ruff format --check .
-    git ls-files "*.nix" | xargs -r nixfmt --check
-    just --fmt --check --unstable
-    git ls-files "*.md" | xargs -r uv run mdformat --check
+    treefmt --fail-on-change
 
 # Gate: the lock must match pyproject. MUST run before anything invokes
 # `uv run`, which re-locks by default and leaves this passing unconditionally —
@@ -173,20 +179,36 @@ lock-check:
 # hypothetical: 0.7.0a7 shipped two ruff findings and a mypy error, and CI could
 # not have caught them either, because ci.yml only triggered on `main` and this
 # work happens on the 0.7.0 branch. Both gates missed for 213 commits.
+#
+# Every non-rewriting check, each tool pinned in mise.toml (gator's standard):
+# ruff bare, mypy through the project env, actionlint and zizmor over the
+# workflows, cog over the commit subjects since the last release tag.
+# cog's own --from-latest-tag skips pre-release tags (it answers 0.6.0 while
+# v0.7.0-a.9 exists), so its window reached back over three permanent
+# non-conventional commits; git describe counts from the newest tag of any kind.
 lint:
-    uv run ruff check .
+    ruff check
     uv run mypy src/
+    actionlint
+    zizmor --offline --config .github/zizmor.yml .
+    cog check --ignore-merge-commits "$(git describe --tags --abbrev=0)..HEAD"
+
+# The seed store against git: violations plus the mass-rewrite gate. Through
+# `uv run`, not an installed seeds: this repo's store is gated by the seeds it
+# is building (see `seeds check --help`).
+seeds-check:
+    uv run seeds check --gate
+
+# On 2026-08-26 a test fixture in an agent worktree wrote core.bare=true and a
+# test identity into the shared .git/config; the only symptom was git refusing
+# every command. This catches a config already poisoned and prints the repair
+# (bead seeds-p0x).
+git-config-sanity:
+    python3 scripts/check_git_config_sanity.py
 
 # The fast, serial checks every gate starts with. `lock-check` is first because
-# it has to precede anything that runs `uv run`. Shared by `ci` and `pre-push`
-# so the two cannot drift apart.
-checks: lock-check lint fmt-check flake-deps
-
-# Local CI equivalent for the lint and test jobs, on the local interpreter.
-# The recipe IS the contract: if CI runs a check and this does not, the gate is
-# decorative (see ~/.config/home-manager/docs/ci-gates.md). `pre-push` below
-# adds the rest of ci.yml: the other Python versions and the nix job.
-ci: checks test
+# it has to precede anything that runs `uv run`.
+checks: lock-check lint fmt-check flake-deps seeds-check
 
 # ci.yml's test job runs 3.11, 3.12 and 3.13; `test` covers only the local
 # interpreter (3.13). Each version gets its OWN environment. The hook this
@@ -197,7 +219,7 @@ ci: checks test
 test-matrix:
     for v in {{ matrix }}; do echo "--- python $v ---"; "{{ just_executable() }}" test-python "$v" || exit 1; done
 
-# The non-local interpreters `test-matrix` and `pre-push` cover.
+# The non-local interpreters `test-matrix` and `ci` cover.
 matrix := "3.11 3.12"
 
 # One interpreter of the matrix, in its own environment (usage: just test-python 3.11).
@@ -216,8 +238,8 @@ nix-check:
     nix flake check --print-build-logs
     nix run . -- --version
 
-# What runs before a push: every job in ci.yml, so a green push means a green CI
-# (seeds-29i, ruled 2026-09-28). The serial `checks` go first, because
+# The full local CI equivalent, and the one recipe CI runs: a green `just ci`
+# means a green CI (seeds-29i, ruled 2026-09-28). The serial `checks` go first, because
 # `lock-check` has to precede anything that runs `uv run`. Then the four test
 # runs -- `test` on the local interpreter, `test-python` for each version in
 # `matrix`, and `nix-check` -- run CONCURRENTLY (seeds-0o5): they were 94% of a
@@ -231,15 +253,15 @@ nix-check:
 #   and each carries a lock file that stops another session's cleanup deleting
 #   it while in use. The nix job's pytest runs in the build sandbox anyway.
 #
-# Each job logs to claude_stuff/pre-push-<stamp>-<job>.log. Every PID is waited
+# Each job logs to claude_stuff/ci-<stamp>-<job>.log. Every PID is waited
 # on and its status checked individually; a failure names the job and its log
 # and prints the log's tail, and the recipe exits non-zero.
-pre-push: checks
+ci: checks
     #!/usr/bin/env bash
     set -euo pipefail
     export UV_LOCKED=1
     mkdir -p claude_stuff
-    prefix="claude_stuff/pre-push-$(date +%Y%m%d-%H%M%S)"
+    prefix="claude_stuff/ci-$(date +%Y%m%d-%H%M%S)"
     # Parallel indexed arrays, not `declare -A`: macOS's /bin/bash is 3.2.
     names=()
     pids=()
@@ -270,16 +292,17 @@ pre-push: checks
             failed="$failed $name"
         fi
     done
-    [ -z "$failed" ] && { echo "pre-push passed; logs: $prefix-*.log"; exit 0; }
+    [ -z "$failed" ] && { echo "ci passed; logs: $prefix-*.log"; exit 0; }
     for name in $failed; do
         echo
         echo "===== $name: last 40 lines of $prefix-$name.log ====="
         tail -n 40 "$prefix-$name.log"
     done
     echo
-    echo "pre-push FAILED:$failed"
+    echo "ci FAILED:$failed"
     exit 1
 
-# Runs on every commit, so it must stay FAST — a sub-minute budget. Tests belong
-# here when they fit; lint alone when they do not. fmt-check never rewrites.
-pre-commit: fmt-check
+# The commit gate, run on the working tree (gator's standard .githooks/pre-commit
+# runs it; until seeds migrates, .pre-commit-config.yaml does). It must stay
+# FAST, a sub-minute budget, so the suite runs at push (`ci`), not here.
+pre-commit: git-config-sanity fmt-check lint seeds-check

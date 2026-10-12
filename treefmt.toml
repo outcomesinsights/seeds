@@ -1,0 +1,66 @@
+# treefmt config, assembled from gator's standard/treefmt.toml (seed gator-rga): the
+# [global] table and the blocks for the languages this repo has, byte for byte.
+# `just fmt` is `treefmt`; `just fmt-check` is `treefmt --fail-on-change`.
+
+[global]
+excludes = [
+  # generated or owned by another tool
+  "*.lock",
+  "uv.lock",
+  "Gemfile.lock",
+  "package-lock.json",
+  "yarn.lock",
+  "renv.lock",
+  "*.min.*",
+  # other tools' stores: their formatters are their own business
+  ".beads/**",
+  ".seeds/**",
+  "claude_stuff/**",
+  "node_modules/**",
+  "vendor/**",
+  ".claude/worktrees/**",
+]
+
+[formatter.ruff-format]
+command = "ruff"
+options = ["format"]
+includes = ["*.py", "*.pyi"]
+priority = 1
+
+[formatter.ruff-check]
+command = "ruff"
+options = ["check", "--fix", "--exit-zero"]
+includes = ["*.py", "*.pyi"]
+priority = 2
+
+[formatter.mdformat]
+command = "uvx"
+options = [
+  "--from",
+  "mdformat",
+  "--with",
+  "mdformat-gfm",
+  "--with",
+  "mdformat-frontmatter",
+  "mdformat",
+]
+includes = ["*.md"]
+
+[formatter.nixfmt]
+command = "nixfmt"
+includes = ["*.nix"]
+
+[formatter.just]
+command = "just"
+options = ["--fmt", "--unstable", "--justfile"]
+includes = ["justfile", "Justfile", "*.just"]
+
+[formatter.prettier]
+command = "prettier"
+options = ["--write"]
+includes = ["*.yml", "*.yaml", "*.json"]
+
+[formatter.taplo]
+command = "taplo"
+options = ["fmt"]
+includes = ["*.toml"]

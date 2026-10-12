@@ -27,7 +27,9 @@ Local commits are not "stranded" — they are the normal resting state here.
 
 1. **File issues for remaining work** — anything that needs follow-up
 2. **Run the quality gate** (if code changed) — `just ci`, which is the full local
-   CI equivalent: lock check, ruff lint, mypy, formatting, flake deps, pytest
+   CI equivalent and the recipe CI runs: lock check, lint (ruff, mypy, actionlint,
+   zizmor, cog), fmt-check, flake deps, seeds-check, then pytest on three
+   interpreters and the nix flake check
 3. **Update issue status** — close finished work, update in-progress items
 4. **Commit** — a clean tree is the deliverable; leave the push to the maintainer
 5. **Hand off** — say plainly what is committed, what is unpushed, and what is left

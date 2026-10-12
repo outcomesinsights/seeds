@@ -1,0 +1,5 @@
+# cocogitto: `cog check --from-latest-tag --ignore-merge-commits` in `lint` reads commit
+# subjects since the last release tag. Releases are tagged vX.Y.Z (git-cliff and release.yml
+# agree on the prefix); without tag_prefix, cog finds no tag and errors "unable to get any
+# tag" -- which, piped through tee or tail, passes as rc 0 (sequel-duckdb, 2026-10-02).
+tag_prefix = "v"

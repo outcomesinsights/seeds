@@ -1,0 +1,17 @@
+# Tool pins, copied line for line from gator's standard/mise.toml (seed gator-rga).
+# Only the tools this repo's recipes and treefmt.toml run. `just setup` runs
+# `mise install`; CI does the same through jdx/mise-action.
+
+[tools]
+just = "1"
+uv = "0"
+"aqua:numtide/treefmt" = "2"
+prettier = "3"
+taplo = "0"
+"ubi:NixOS/nixfmt" = "1"      # ubi: the NixOS/nixfmt GitHub release ships a static binary; measured 2026-10-02, nixfmt 1.5.0 in 0.7s
+ruff = "0"
+"aqua:rhysd/actionlint" = "1"
+zizmor = "1"
+cocogitto = "7"
+pinact = "5"
+git-cliff = "2"

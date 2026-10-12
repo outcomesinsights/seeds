@@ -1,87 +1,31 @@
+# TRANSITION wiring. prek still owns .git/hooks here (core.hooksPath unset,
+# seeds-29i) until seeds moves to gator's tracked .githooks/, whose hooks run the
+# same two recipes directly: `just pre-commit` at commit, `just ci` at push. So
+# this file only forwards to the justfile, and the gate and `just ci` cannot drift.
+# Install BOTH hook types, or the push stage never fires:
+#   prek install --hook-type pre-commit --hook-type pre-push
+#
 # A hook with no `stages:` runs in EVERY installed stage, so without this the
-# commit-stage hooks ran a second time at push, measured on the first real push
-# on 2026-09-30. Hooks that belong at push say `stages: [pre-push]` explicitly.
+# commit-stage hook ran a second time at push (measured 2026-09-30).
 default_stages: [pre-commit]
 
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.13
-    hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
-
   - repo: local
     hooks:
-      # Runs first, ahead of every uv-invoking hook: on 2026-08-26 a test
-      # fixture in an agent worktree wrote core.bare=true plus a test identity
-      # into this repo's shared .git/config, and the only symptom was git
-      # refusing every command with "fatal: this operation must be run in a
-      # work tree". Nothing connected that to the config for ~20 minutes.
-      # tests/conftest.py catches the write as it happens; this catches a
-      # config already poisoned, and prints the repair. See bead seeds-p0x.
-      - id: git-config-sanity
-        name: git config sanity (not bare, no test identity)
-        entry: python3 scripts/check_git_config_sanity.py
+      # git-config-sanity, fmt-check, lint and seeds-check: see the recipe. The
+      # suite is not here; it runs at push. Confirm an intended mass rewrite of
+      # the seed store with `SEEDS_GATE_CONFIRM=1 git commit`, never --no-verify.
+      - id: just-pre-commit
+        name: just pre-commit (sanity, fmt-check, lint, seeds-check)
+        entry: just pre-commit
         language: system
         pass_filenames: false
         always_run: true
 
-      # The only gate on store integrity that actually holds. Claude Code's
-      # PostToolUse hooks fire on the Write/Edit *tools*, and an agent reaching
-      # a file through `bash -c 'cat > …'`, `sed -i` or a Python one-liner --
-      # most agent file access in practice -- never fires them. Everything
-      # reaches a commit eventually, so this is where detection has to live.
-      # See bead seeds-4co.13.
-      #
-      # `seeds check --gate` is the whole commit-path check, shipped in the
-      # package so every repo wires it the same one-line way (seeds-l80; the
-      # standard recipe is in `seeds check --help` and `seeds prime --full`). It runs
-      # violations (blocks) and --against-git (blocks on one field rewritten
-      # across >=20% of the corpus AND >=10 seeds, which catches a MASS
-      # deletion; a single deleted seed is allowed, because git keeps every seed
-      # file -- seeds-w9h). --smells is NOT run: it never blocks and was ~94% of
-      # the check's time (seeds-7q8g). Run `seeds check --smells` on demand.
-      #
-      # Confirm an intended mass rewrite with `SEEDS_GATE_CONFIRM=1 git commit`
-      # (`SKIP=seeds-check` also works here, under prek), never --no-verify.
-      # Expect to confirm TWICE: when the store is unchanged relative to HEAD,
-      # --against-git audits HEAD~1 against HEAD -- the reading seeds-wurl
-      # needed, since that rewrite survived three days and three commits.
-      #
-      # `uv run`, not the standard recipe's bare `seeds`: this repo's commits
-      # are gated by the seeds they are building, not by whatever is installed.
-      - id: seeds-check
-        name: seeds check --gate (violations + mass-rewrite gate)
-        entry: uv run seeds check --gate
-        language: system
-        pass_filenames: false
-        always_run: true
-
-      - id: beads-pre-commit
-        name: beads pre-commit
-        # BD_GIT_HOOK=1 mirrors the .beads/hooks/pre-commit shim so bd knows it
-        # runs inside a commit and suppresses its racing auto-export `git add`
-        # (which otherwise fails on .git/index.lock and trips pre-commit).
-        # Guarded: this repo is public and most clones have no bd. Unguarded,
-        # every commit on such a clone fails this hook.
-        entry: sh -c 'command -v bd >/dev/null 2>&1 || exit 0; BD_GIT_HOOK=1 exec bd hooks run pre-commit'
-        language: system
-        pass_filenames: false
-        always_run: true
-
-      # --- pre-push. prek owns .git/hooks and core.hooksPath stays unset
-      # (seeds-29i). Install BOTH hook types, or this stage never fires and the
-      # push just succeeds:
-      #   prek install --hook-type pre-commit --hook-type pre-push
-      #
       # Publish first, so beads leave this host even when the code gate below
       # refuses the push. refs/dolt/data is a non-branch ref that `git push`
       # does not carry, so this is the only thing that publishes them
-      # (seeds-tkk). bd-publish is the shared command home-manager ships; it
-      # decides on bd's output, not its exit code, and allows silently when bd
-      # or a sync.remote is absent (seeds-iaz). Guarded like beads-pre-commit:
-      # a host or clone without bd-publish skips the publish silently.
+      # (seeds-tkk). Guarded: a host or clone without bd-publish skips it.
       - id: beads-publish
         name: bd dolt push (publish this host's beads)
         entry: sh -c 'command -v bd-publish >/dev/null 2>&1 || exit 0; bd-publish'
@@ -90,16 +34,10 @@ repos:
         always_run: true
         stages: [pre-push]
 
-      # The code gate: every ci.yml job, with the four test runs concurrent
-      # (seeds-0o5). It lives in the justfile so it can also be run by hand;
-      # this entry only wires it to the push. always_run, or it reports
-      # Skipped whenever no staged file matches.
-      #
-      # pytest is not a commit-stage hook: at ~1 min it is over the sub-minute
-      # budget a commit gate has to fit (see `pre-commit` in the justfile).
-      - id: just-pre-push
-        name: just pre-push (every ci.yml job)
-        entry: just pre-push
+      # The push gate: the full local CI equivalent, the same recipe CI runs.
+      - id: just-ci
+        name: just ci (the full local CI equivalent)
+        entry: just ci
         language: system
         pass_filenames: false
         always_run: true
