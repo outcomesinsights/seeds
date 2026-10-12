@@ -1,7 +1,7 @@
-# TRANSITION wiring. prek still owns .git/hooks here (core.hooksPath unset,
-# seeds-29i) until seeds moves to gator's tracked .githooks/, whose hooks run the
-# same two recipes directly: `just pre-commit` at commit, `just ci` at push. So
-# this file only forwards to the justfile, and the gate and `just ci` cannot drift.
+# TRANSITION leftover. seeds runs gator's tracked .githooks/ (armed by `just setup`),
+# which never run prek. This file serves only a checkout whose .git/hooks prek
+# generated and that has not run `just setup` yet; it forwards to the same two
+# recipes. Delete it when every checkout is armed (ask Ryan first).
 # Install BOTH hook types, or the push stage never fires:
 #   prek install --hook-type pre-commit --hook-type pre-push
 #

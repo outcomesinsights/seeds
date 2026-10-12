@@ -303,7 +303,12 @@ ci: checks
     echo "ci FAILED:$failed"
     exit 1
 
-# The commit gate, run on the working tree (gator's standard .githooks/pre-commit
-# runs it; until seeds migrates, .pre-commit-config.yaml does). It must stay
+# The commit gate, run on the working tree by gator's standard .githooks/pre-commit
+# (and by .pre-commit-config.yaml in a checkout still on prek). It must stay
 # FAST, a sub-minute budget, so the suite runs at push (`ci`), not here.
 pre-commit: git-config-sanity fmt-check lint seeds-check
+
+# TRANSITION: checkouts still on an old hook wrapper call this by name. Delete it
+# only once every checkout of seeds, on every host, is armed (gator's
+# githooks-migration.md, "Ending the transition"); ask Ryan first.
+pre-push: ci
