@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-12
+
+**The first public 0.7 release, and the one that replaces 0.6.x on `main`.**
+0.7 drops the SQLite database and its tracked JSONL for one markdown file per
+seed, `.seeds/seeds/<id>.md`. Git is the store and `seeds check` is the
+verifier, so there is nothing to sync. `docs/storage-format.md` is the format's
+normative spec.
+
+The 0.7.0aN alphas below were internal and are the detailed record. Nothing
+changed in this release beyond the alpha 9 soak build except the fix below and
+the repo's own tooling.
+
+### Upgrading from 0.6.x
+
+- **Run `seeds convert` once in each repo with a store.** It writes
+  `.seeds/seeds/*.md` from `seeds.db` and `seeds.jsonl` and leaves both legacy
+  files in place, so reverting is `rm -rf .seeds/seeds/`. A re-run is
+  additive-only and never overwrites a seed edited since the conversion.
+- **Upgrade every checkout and host together.** A 0.6 client in a converted
+  checkout writes seeds no 0.7 command can see. 0.7 warns when `seeds.jsonl`
+  sits beside the tree, and `seeds check --gate` reports what the tree lacks.
+- **Commands removed:** `sync`, `import`, `serve` and `suggest`. Each now says
+  what replaced it.
+- **Behaviour changes:** `seeds prime` prints the short form by default, and the
+  full reference is under `--full`. `--content` refuses to replace a non-empty
+  body without `--replace`. Free-text options refuse a value that is a seeds
+  flag. The alpha sections list each with its commit.
+
+### Fixed
+
+- **check:** Flag an edge an id rewrite moved onto a different seed (seeds-6rb) ([b2fb61e](https://github.com/outcomesinsights/seeds/commit/b2fb61ea6655413fd88ac4a0ba9c96bee310dba8)). `seeds check --against-git`, and so the `--gate` commit hook, now reports `edge-repointed-onto-different-seed`. That is a relationship whose target id was rewritten onto an id another, unrelated seed already held. Both ends resolve, so no other rule could see it.
+
+### Tooling
+
+- **hooks:** Move to gator's githooks standard ([6417eb6](https://github.com/outcomesinsights/seeds/commit/6417eb6fc2f012f2de8cbd15eeb7ddecd3e71161))
+
 ## [0.7.0a9] - 2026-10-06
 
 **Not a public release** — an internal alpha on the `0.7.0` branch, as every
@@ -928,6 +964,7 @@ Initial public beta release.
 [0.4.0]: https://github.com/outcomesinsights/seeds/compare/v0.3.5...v0.4.0
 [0.5.0]: https://github.com/outcomesinsights/seeds/compare/v0.4.0...v0.5.0
 [0.6.0]: https://github.com/outcomesinsights/seeds/compare/v0.5.0...v0.6.0
+[0.7.0]: https://github.com/outcomesinsights/seeds/compare/v0.6.0...v0.7.0
 [0.7.0a2]: https://github.com/outcomesinsights/seeds/compare/v0.6.0...v0.7.0a2
 [0.7.0a3]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a2...v0.7.0a3
 [0.7.0a4]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a3...v0.7.0a4
@@ -935,4 +972,4 @@ Initial public beta release.
 [0.7.0a6]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a5...v0.7.0a6
 [0.7.0a7]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a6...v0.7.0a7
 [0.7.0a8]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a7...v0.7.0a8
-[unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a8...HEAD
+[unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0...HEAD
