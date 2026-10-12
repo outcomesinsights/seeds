@@ -14,6 +14,10 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore(deps)"
+    # Wait a week before proposing a release: most malicious or broken
+    # publishes are yanked within days (zizmor dependabot-cooldown).
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -21,3 +25,7 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore(ci)"
+    # Wait a week before proposing a release: most malicious or broken
+    # publishes are yanked within days (zizmor dependabot-cooldown).
+    cooldown:
+      default-days: 7

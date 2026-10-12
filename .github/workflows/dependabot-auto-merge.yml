@@ -2,23 +2,33 @@ name: Dependabot Auto-Merge
 
 on: pull_request
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
-    if: github.actor == 'dependabot[bot]'
+    # The PR's author, not github.actor: the actor is whoever triggered this run,
+    # which a person re-running or pushing to a Dependabot branch can make
+    # dependabot[bot]'s PR look like their own, and vice versa (zizmor
+    # bot-conditions).
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
-      - name: Approve PR
-        run: gh pr review --approve "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Enable auto-merge
-        run: gh pr merge --auto --squash "$PR_URL"
+      - id: metadata
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2.5.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      # Minor and patch only. A major bump waits for a person: PR #32 raised
+      # click's floor past what nixpkgs ships, auto-merged with the nix job red,
+      # and left main unbuildable for three weeks (bead seeds-ihn). `--auto`
+      # still waits on the required checks.
+      - name: Approve and enable auto-merge
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        run: |
+          gh pr review --approve "$PR_URL"
+          gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
