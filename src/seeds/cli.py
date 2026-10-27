@@ -2581,7 +2581,8 @@ def _echo_legacy_activity(
         "The commit-path check, for a hook or a justfile recipe: violations "
         "plus --against-git, never --smells. Exits 0 where there is no "
         "seed-file store, and names the escape when it refuses "
-        "(SEEDS_GATE_CONFIRM=1). Implies --against-git; refuses --smells."
+        "(SEEDS_GATE_CONFIRM=1, which only --gate reads). Implies "
+        "--against-git; refuses --smells."
     ),
 )
 def check_cmd(smells: bool, against_git: bool, gate: bool) -> None:
@@ -2624,9 +2625,11 @@ def check_cmd(smells: bool, against_git: bool, gate: bool) -> None:
     It runs violations plus --against-git, never --smells (which never gates
     and was ~94% of the cost; seeds-7q8g). A repo with no .seeds/seeds/ store
     passes silently, so the recipe is harmless anywhere. A refusal names the
-    escape for an intended mass rewrite, SEEDS_GATE_CONFIRM=1 on the commit,
-    which works however the gate is wired. A `seeds rename-prefix` commit is
-    read as a rename, not as a mass deletion (seeds-l80).
+    escape for an intended mass rewrite, SEEDS_GATE_CONFIRM=1 on the commit.
+    Only --gate reads that variable: a hook that runs plain `seeds check
+    --against-git` ignores it, so wire the hook to --gate. A `seeds
+    rename-prefix` commit is read as a rename, not as a mass deletion
+    (seeds-l80).
     """
     if gate:
         if smells:
@@ -2730,7 +2733,9 @@ the gate:
 
     {GATE_CONFIRM_ENV}=1 git commit …
 
-That works however the gate is wired: a justfile recipe, prek, pre-commit.
+Only `seeds check --gate` reads {GATE_CONFIRM_ENV}. It works when the hook
+calls `seeds check --gate`, whether through a justfile recipe, prek or
+pre-commit. A hook that runs plain `seeds check --against-git` ignores it.
 Do not use `git commit --no-verify`: it skips every other hook as well.
 Expect to confirm twice for one rewrite: with nothing left uncommitted, the
 next commit audits the one that just landed.

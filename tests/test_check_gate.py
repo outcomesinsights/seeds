@@ -283,6 +283,34 @@ class TestTheEscape:
         monkeypatch.setenv(GATE_CONFIRM_ENV, value)
         assert gate(monkeypatch, tmp_path).exit_code == 1
 
+    def test_plain_against_git_ignores_the_confirmation(self, tmp_path, monkeypatch):
+        """Ruled in seeds-ikkx: the escape lives in --gate only (seeds-uk5p).
+
+        A hook wired to plain `seeds check --against-git` gets no escape, so
+        the help, the refusal and prime must say so rather than claim the
+        escape "works however the gate is wired"."""
+        seeds_dir = committed_repo(tmp_path, *corpus(20))
+        sweep_titles(seeds_dir, 10)
+        monkeypatch.setenv(GATE_CONFIRM_ENV, "1")
+        monkeypatch.chdir(tmp_path)
+        result = CliRunner().invoke(main, ["check", "--against-git"])
+        assert result.exit_code == 1, result.output
+        assert "mass-field-rewrite" in result.output
+
+        refusal = " ".join(seeds_cli.GATE_REFUSAL.split())
+        assert "however the gate is wired" not in refusal
+        assert "plain `seeds check --against-git` ignores it" in refusal
+
+        help_text = " ".join(
+            CliRunner().invoke(main, ["check", "--help"]).output.split()
+        )
+        assert "however the gate is wired" not in help_text
+        assert "only --gate reads" in help_text
+        assert "--against-git` ignores it" in help_text
+
+        prime = " ".join(CliRunner().invoke(main, ["prime", "--full"]).output.split())
+        assert "plain `seeds check --against-git` ignores it" in prime
+
 
 # --- A real `seeds rename-prefix` is a rename, not a mass deletion -----------
 
