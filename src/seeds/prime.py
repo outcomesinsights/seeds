@@ -300,8 +300,10 @@ seeds-check:
 `--gate` runs the violations tier plus `--against-git` (never `--smells`), and
 passes silently in a repo with no seed store. When it refuses an intended mass
 rewrite, confirm with `SEEDS_GATE_CONFIRM=1 git commit …` — never
-`--no-verify`, which skips every other hook too. A `seeds rename-prefix` needs
-no confirmation: the gate reads it as a rename.
+`--no-verify`, which skips every other hook too. Only `--gate` reads
+`SEEDS_GATE_CONFIRM`: a hook that runs plain `seeds check --against-git`
+ignores it, so wire the hook to `--gate`. A `seeds rename-prefix` needs no
+confirmation: the gate reads it as a rename.
 
 ### Project Prefix
 Every seed ID carries a project prefix (e.g., `myproj-7`), recorded in
