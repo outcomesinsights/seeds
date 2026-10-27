@@ -2728,18 +2728,20 @@ GATE_CONFIRM_ENV = "SEEDS_GATE_CONFIRM"
 
 GATE_REFUSAL = f"""
 ────────────────────────────────────────────────────────────────────────────
-`seeds check --gate` refused this commit. If this is a mass rewrite you
+`seeds check --gate` refused this change. If this is a mass rewrite you
 intended, confirm it explicitly -- that confirmation is the whole point of
-the gate:
+the gate. Confirm on the command that the refusing hook belongs to:
 
     {GATE_CONFIRM_ENV}=1 git commit …
+    {GATE_CONFIRM_ENV}=1 git push …     (when a pre-push gate runs the check)
 
 Only `seeds check --gate` reads {GATE_CONFIRM_ENV}. It works when the hook
 calls `seeds check --gate`, whether through a justfile recipe, prek or
 pre-commit. A hook that runs plain `seeds check --against-git` ignores it.
-Do not use `git commit --no-verify`: it skips every other hook as well.
-Expect to confirm twice for one rewrite: with nothing left uncommitted, the
-next commit audits the one that just landed.
+Do not use `--no-verify` on either command: it skips every other hook too.
+Expect to confirm twice for one rewrite. With nothing left uncommitted, the
+check audits the commit that just landed, so the next commit or a push gate
+refuses it again.
 ────────────────────────────────────────────────────────────────────────────"""
 
 

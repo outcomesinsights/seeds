@@ -299,8 +299,11 @@ seeds-check:
 
 `--gate` runs the violations tier plus `--against-git` (never `--smells`), and
 passes silently in a repo with no seed store. When it refuses an intended mass
-rewrite, confirm with `SEEDS_GATE_CONFIRM=1 git commit …` — never
-`--no-verify`, which skips every other hook too. Only `--gate` reads
+rewrite, confirm with `SEEDS_GATE_CONFIRM=1 git commit …`, or with
+`SEEDS_GATE_CONFIRM=1 git push …` when a pre-push gate runs the check —
+never `--no-verify`, which skips every other hook too. One rewrite is
+usually confirmed twice: once on its commit, and once when a later check
+audits that commit from a clean tree. Only `--gate` reads
 `SEEDS_GATE_CONFIRM`: a hook that runs plain `seeds check --against-git`
 ignores it, so wire the hook to `--gate`. A `seeds rename-prefix` needs no
 confirmation: the gate reads it as a rename.

@@ -221,6 +221,9 @@ class TestMassRewriteBlocks:
         assert result.exit_code == 1
         assert "mass-field-rewrite" in result.output
         assert f"{GATE_CONFIRM_ENV}=1 git commit" in result.output
+        # A pre-push gate refuses the same rewrite again from a clean tree,
+        # and there the confirmation rides on the push (gator 64b730e).
+        assert f"{GATE_CONFIRM_ENV}=1 git push" in result.output
         # SKIP is prek's and pre-commit's, and a justfile recipe has no such
         # thing. --no-verify is named only to warn against it.
         assert "SKIP=" not in result.output
