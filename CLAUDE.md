@@ -61,7 +61,7 @@ ______________________________________________________________________
 ## Status
 
 - **Active**
-- Last meaningful work: 2026-10 (v0.7.0 released 2026-10-12)
+- Last meaningful work: 2026-10 (v0.7.1 released 2026-10-27; main is the integration branch)
 
 ## Tech Stack
 
@@ -130,7 +130,7 @@ which seeds
 
 - **`~/.nix-profile/bin/seeds`** — nix installed it (this is the case on titan).
   The flake input in home-manager's `flake.nix` is **pinned to a release
-  tag**: `git+https://github.com/outcomesinsights/seeds?ref=refs/tags/v0.7.0`
+  tag**: `git+https://github.com/outcomesinsights/seeds?ref=refs/tags/v0.7.1`
   (since 2026-10-12, seed seeds-sstq). So a deploy is exactly a release, and
   commits on main after the tag do not ship. To deploy a new release, push its
   tag, edit the tag in that URL, then `nix flake update seeds` and switch from
