@@ -2570,7 +2570,8 @@ def _echo_legacy_activity(
     is_flag=True,
     help=(
         "Also compare every field with its value at the previous commit and "
-        "fail on one field rewritten across a large fraction of the corpus, or "
+        "fail on one field rewritten across a large fraction of the corpus "
+        "(updated_at alone does not count, since every edit bumps it), or "
         "on any seed body that moved while its updated_at did not."
     ),
 )

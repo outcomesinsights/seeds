@@ -809,18 +809,99 @@ class TestDeletionsAreSubsumed:
             path.unlink()
 
         findings = check_against_git(seeds_dir).findings
-        # Every compared field lost 40 of 100 values, so every one is named.
-        assert codes(findings) == ["mass-field-rewrite"] * 12
+        # Every scored field lost 40 of 100 values, so every one is named:
+        # the 12 format fields less updated_at, which is not scored (seeds-euzf).
+        assert codes(findings) == ["mass-field-rewrite"] * 11
         assert all("40 deleted" in f.message for f in findings)
         assert any("title differs on 40 of 100" in f.message for f in findings)
+        assert not any("updated_at differs" in f.message for f in findings)
 
     def test_the_whole_store_removed_is_flagged_not_read_as_clean(self, tmp_path):
         seeds_dir = corpus(tmp_path, 40)
         for path in (seeds_dir / "seeds").glob("*.md"):
             path.unlink()
         findings = check_against_git(seeds_dir).findings
-        assert codes(findings) == ["mass-field-rewrite"] * 12
+        assert codes(findings) == ["mass-field-rewrite"] * 11
         assert all("100% of the corpus" in f.message for f in findings)
+
+
+class TestUpdatedAtIsNotScored:
+    """Ruled in seeds-ikkx (bead seeds-euzf): a changed updated_at alone is not
+    a mass rewrite. Every edit through seeds bumps it, so scoring it counted
+    the seeds a commit touched, not a field rewritten across them."""
+
+    def test_the_roobetl_mix_passes(self, tmp_path):
+        """The reported commit: 40 seeds, 5 resolved, 4 appended to, 1
+        abandoned. Hand-counted: updated_at differs on 10 (25%, over both
+        halves of the threshold), status on 6, resolved_at on 6, resolution
+        on 6, body on 4. Only updated_at reaches 10, so nothing is a finding."""
+        seeds_dir = corpus(tmp_path, 40)
+        seeds = Store(seeds_dir)
+        for n in range(5):
+            item = seeds.get(f"seeds-{n:04d}")
+            item.status = SeedStatus.RESOLVED
+            item.resolved_at = NOW
+            item.resolution = f"Shipped in bead {n}."
+            seeds.save(item)
+        for n in range(5, 9):
+            item = seeds.get(f"seeds-{n:04d}")
+            item.body = item.body + f"\nAn appended note {n}.\n"
+            seeds.save(item)
+        item = seeds.get("seeds-0009")
+        item.status = SeedStatus.ABANDONED
+        item.resolved_at = NOW
+        item.resolution = "Not worth pursuing."
+        seeds.save(item)
+
+        assert check_against_git(seeds_dir).findings == []
+
+    def test_bumping_updated_at_on_the_whole_store_is_not_a_finding(self, tmp_path):
+        seeds_dir = corpus(tmp_path, 40)
+        seeds = Store(seeds_dir)
+        for n in range(40):
+            seeds.save(seeds.get(f"seeds-{n:04d}"))
+
+        assert check_against_git(seeds_dir).findings == []
+
+    def test_the_wurl_shape_through_the_cli_still_fails_on_title(self, tmp_path):
+        """Titles rewritten the way `seeds update` would, stamp and all, on
+        25% of the store: title is named and updated_at is not."""
+        seeds_dir = corpus(tmp_path, 40)
+        seeds = Store(seeds_dir)
+        for n in range(10):
+            item = seeds.get(f"seeds-{n:04d}")
+            item.title = "/tmp/claude-scratch/notes.md"
+            seeds.save(item)
+
+        findings = check_against_git(seeds_dir).findings
+        assert codes(findings) == ["mass-field-rewrite"]
+        assert "title differs on 10 of 40 seeds (25% of the corpus" in (
+            findings[0].message
+        )
+
+    def test_ten_body_appends_still_trip_the_rule_on_body(self, tmp_path):
+        """Known and intended: 10 appends in one commit is a mass body change.
+        The confirmation through `seeds check --gate` is the path for it."""
+        seeds_dir = corpus(tmp_path, 40)
+        seeds = Store(seeds_dir)
+        for n in range(10):
+            item = seeds.get(f"seeds-{n:04d}")
+            item.body = item.body + f"\nAn appended note {n}.\n"
+            seeds.save(item)
+
+        findings = check_against_git(seeds_dir).findings
+        assert codes(findings) == ["mass-field-rewrite"]
+        assert "body differs on 10 of 40" in findings[0].message
+
+    def test_a_body_moved_without_its_stamp_is_still_its_own_finding(self, tmp_path):
+        """The body rule reads updated_at directly, so dropping it from the
+        mass scoring leaves that rule intact."""
+        seeds_dir = corpus(tmp_path, 40)
+        rewrite_body(seeds_dir, "seeds-0000", "Reformatted by some tool.\n")
+
+        findings = check_against_git(seeds_dir).findings
+        assert codes(findings) == ["body-rewritten-in-place"]
+        assert findings[0].seed_id == "seeds-0000"
 
 
 class TestWhatItCompared:

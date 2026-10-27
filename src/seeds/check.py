@@ -44,7 +44,9 @@ Three tiers live here now.
   was rejected: the labels are prose convention, not format grammar, and a long
   body that only accumulated is fine either way.
 * **Against git** (``seeds check --against-git``) compares every field of every
-  seed with its value at the previous commit and flags one field rewritten
+  seed except ``updated_at`` (which every edit bumps, so it scores nothing but
+  the number of seeds touched) with its value at the previous commit and flags
+  one field rewritten
   across a large fraction of the corpus. That is the ``seeds-wurl`` shape
   exactly, and it *does* gate: a commit rewriting 87 files has no cheap human
   review, and demanding confirmation for it subsumes gating ``D`` and ``R`` in
@@ -1143,12 +1145,19 @@ MASS_CHANGE_MINIMUM = 10
 # The fields compared, as (attribute, the name the format calls it). ``id`` is
 # absent because it is the join key, not a value: a seed whose id changed is a
 # different file, and shows up here as a deletion plus an addition.
+#
+# ``updated_at`` is absent too (ruled in seeds-ikkx, bead seeds-euzf). Every
+# edit through seeds bumps it, so it differs on every seed a commit touched for
+# any reason. Scoring it made ordinary work in a small store a mass rewrite:
+# 10 legitimate edits of 40 seeds in roobetl tripped the rule on updated_at
+# alone. A changed updated_at alone is not a mass rewrite. The field it
+# accompanies is what carries the signal, and that field is scored. The
+# body-rewritten-in-place rule still reads updated_at, directly.
 _COMPARED_FIELDS: tuple[tuple[str, str], ...] = (
     ("title", "title"),
     ("status", "status"),
     ("seed_type", "type"),
     ("created_at", "created_at"),
-    ("updated_at", "updated_at"),
     ("parent", "parent"),
     ("resolved_at", "resolved_at"),
     ("resolution", "resolution"),
