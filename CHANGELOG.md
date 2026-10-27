@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-27
+
+Fixes to the commit gate's escape for an intended mass rewrite. Ordinary work
+in a small store no longer trips the mass-rewrite check, and the gate's
+messages now say where the escape works. If your pre-commit hook runs
+`seeds check --against-git`, change it to `seeds check --gate`. Only `--gate`
+reads `SEEDS_GATE_CONFIRM=1`.
+
+### Fixed
+
+- **check:** A changed `updated_at` no longer counts toward
+  `mass-field-rewrite`. Every edit through seeds sets it, so 10 ordinary
+  edits in a store of 40 seeds tripped the check. Title, body, status and the
+  other fields are still scored, each on its own.
+  ([5870dd3](https://github.com/outcomesinsights/seeds/commit/5870dd39bbefa2738f537b52510e55e819358bb8))
+- **check:** `seeds check --help`, the gate's refusal and `seeds prime --full`
+  say that only `seeds check --gate` reads `SEEDS_GATE_CONFIRM`. They said
+  it worked however the gate was wired, but plain `--against-git` ignores it.
+  ([82bf6a4](https://github.com/outcomesinsights/seeds/commit/82bf6a493f6e9761eae418e05d51d83d0f0733ce))
+- **check:** The refusal names `SEEDS_GATE_CONFIRM=1 git push …` as well as
+  `git commit …`. After a confirmed rewrite, a pre-push gate audits that
+  commit again and refuses it, so the second confirmation can arrive at push.
+  ([ff85f09](https://github.com/outcomesinsights/seeds/commit/ff85f09dfd434348cf068c7d9bf4ddb02be994fa))
+
+### Tooling
+
+- **hooks:** Take gator's pre-push that tests a tag only when CI would
+  ([6916184](https://github.com/outcomesinsights/seeds/commit/6916184edda0a072b66d9d7f726b92f1da2ed32d))
+
 ## [0.7.0] - 2026-10-12
 
 **The first public 0.7 release, and the one that replaces 0.6.x on `main`.**
@@ -972,4 +1001,5 @@ Initial public beta release.
 [0.7.0a6]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a5...v0.7.0a6
 [0.7.0a7]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a6...v0.7.0a7
 [0.7.0a8]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a7...v0.7.0a8
-[unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.0...HEAD
+[0.7.1]: https://github.com/outcomesinsights/seeds/compare/v0.7.0...v0.7.1
+[unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.1...HEAD
