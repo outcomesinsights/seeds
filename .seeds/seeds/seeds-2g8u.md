@@ -1,10 +1,12 @@
 ---
 id: seeds-2g8u
 title: 'seeds check --gate re-refuses an unrelated commit after a confirmed mass change: what should the gate compare when the store equals HEAD?'
-status: captured
+status: resolved
 type: question
 created_at: 2026-11-03T14:30:24.754835+00:00
-updated_at: 2026-11-03T14:30:41.546113+00:00
+updated_at: 2026-11-03T14:40:04.416056+00:00
+resolved_at: 2026-11-03T14:40:04.416044+00:00
+resolution: 'Ruled (a): --gate drops the HEAD~1 fallback; plain --against-git keeps it. Built under bead seeds-fn85.'
 ---
 
 ## The report
@@ -48,3 +50,5 @@ Lean: (a). The gate exists to stop a rewrite at the commit that makes it. The au
 Also noted, not part of the fork: the gate reads the working tree, not the index. Under the pre-commit framework, unstaged changes are stashed, so the two agree there. A hook outside that framework can judge unstaged edits.
 
 Defect bead: seeds-fn85.
+
+RULED 2026-11-03 (Ryan): direction (a). `seeds check --gate` drops the HEAD~1 fallback. When the seed store equals HEAD, the gate does no git comparison and passes. Plain `seeds check --against-git` keeps the fallback as the history audit that seeds-wurl needed. Ryan accepted the cost: a mass change that enters through a merge, cherry-pick or rebase is not caught automatically. Build work is bead seeds-fn85.
