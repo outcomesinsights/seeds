@@ -142,8 +142,13 @@ class TestWhatTheGateRuns:
         result = gate(monkeypatch, tmp_path)
         assert result.exit_code == 0, result.output
         assert "20 files, no violations" in result.output
-        assert "seeds check --against-git: 20 seed(s) at HEAD~1" not in result.output
-        assert "seeds check --against-git: 20 seed(s)" in result.output
+        # The store equals HEAD, so the git tier compares nothing (seeds-2g8u)
+        # and says so, rather than printing a clean comparison it never made.
+        assert "at HEAD~1" not in result.output
+        assert (
+            "seeds check --against-git: the seed store equals HEAD, so there "
+            "is nothing to compare."
+        ) in result.output
 
     def test_the_smells_tier_is_never_run(self, tmp_path, monkeypatch):
         """--smells never gates, and it was ~94% of the hook's time (seeds-7q8g).
@@ -221,9 +226,12 @@ class TestMassRewriteBlocks:
         assert result.exit_code == 1
         assert "mass-field-rewrite" in result.output
         assert f"{GATE_CONFIRM_ENV}=1 git commit" in result.output
-        # A pre-push gate refuses the same rewrite again from a clean tree,
-        # and there the confirmation rides on the push (gator 64b730e).
+        # A pre-push gate that refuses (a dirty tree, or a violation) takes
+        # the confirmation on the push (gator 64b730e).
         assert f"{GATE_CONFIRM_ENV}=1 git push" in result.output
+        # A committed rewrite is not refused again (seeds-2g8u), so the
+        # refusal no longer warns that one rewrite needs two confirmations.
+        assert "confirm twice" not in result.output
         # SKIP is prek's and pre-commit's, and a justfile recipe has no such
         # thing. --no-verify is named only to warn against it.
         assert "SKIP=" not in result.output
@@ -382,15 +390,23 @@ class TestRenamePrefix:
         assert "read as `seeds rename-prefix`" in result.output
 
     def test_a_committed_rename_passes_on_the_next_commit(self, tmp_path, monkeypatch):
-        """marketscan_mdcd's exact state: the rename is HEAD, nothing staged,
-        so --against-git audits HEAD~1 against HEAD."""
+        """marketscan_mdcd's exact state: the rename is HEAD, nothing staged.
+        The gate compares nothing there (seeds-2g8u); plain --against-git
+        still audits HEAD~1 against HEAD and reads the rename."""
         renamed_repo(tmp_path, monkeypatch)
         git(tmp_path, "add", "-A")
         git(tmp_path, "commit", "-q", "-m", "rename the prefix")
         result = gate(monkeypatch, tmp_path)
         assert result.exit_code == 0, result.output
-        assert "at HEAD~1, compared with HEAD" in result.output
-        assert "read as `seeds rename-prefix`" in result.output
+        assert "the seed store equals HEAD, so there is nothing to compare" in (
+            result.output
+        )
+        assert "HEAD~1" not in result.output
+
+        audit = CliRunner().invoke(main, ["check", "--against-git"])
+        assert audit.exit_code == 0, audit.output
+        assert "at HEAD~1, compared with HEAD" in audit.output
+        assert "read as `seeds rename-prefix`" in audit.output
 
     def test_a_title_sweep_riding_along_with_a_rename_is_refused(
         self, tmp_path, monkeypatch
@@ -406,3 +422,82 @@ class TestRenamePrefix:
         result = gate(monkeypatch, tmp_path)
         assert result.exit_code == 1, result.output
         assert "title differs on 10 of 21 seeds" in result.output
+
+
+# --- A confirmed change already in HEAD is not judged again (seeds-2g8u) ----
+
+
+def commit_a_confirmed_sweep(root: Path) -> Path:
+    """A committed 20-seed store, then a confirmed title sweep committed on it.
+
+    The roobetl shape (792706c): 15 of 46 bodies changed under
+    SEEDS_GATE_CONFIRM=1. Here it is 10 of 20 titles, which the gate refuses
+    when it is uncommitted.
+    """
+    seeds_dir = committed_repo(root, *corpus(20))
+    sweep_titles(seeds_dir, 10)
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "a confirmed mass rewrite")
+    return seeds_dir
+
+
+class TestNoAuditOfTheLastCommit:
+    """RULED (seeds-2g8u, direction a): when the store equals HEAD, --gate
+    compares nothing and passes. Plain --against-git keeps the HEAD~1 audit."""
+
+    def test_an_unrelated_commit_after_a_confirmed_sweep_passes(
+        self, tmp_path, monkeypatch
+    ):
+        """roobetl 55eef56: the next commit changed only a CSV, and the gate
+        refused it until SEEDS_GATE_CONFIRM=1 was set."""
+        commit_a_confirmed_sweep(tmp_path)
+        (tmp_path / "data.csv").write_text("a,b\n1,2\n")
+        git(tmp_path, "add", "data.csv")
+        result = gate(monkeypatch, tmp_path)
+        assert result.exit_code == 0, result.output
+        assert "mass-field-rewrite" not in result.output
+        assert "the seed store equals HEAD, so there is nothing to compare" in (
+            result.output
+        )
+
+        # The history audit is unchanged: plain --against-git still finds it.
+        audit = CliRunner().invoke(main, ["check", "--against-git"])
+        assert audit.exit_code == 1, audit.output
+        assert "mass-field-rewrite" in audit.output
+        assert "at HEAD~1, compared with HEAD" in audit.output
+
+    def test_an_unrelated_commit_after_merging_a_confirmed_sweep_passes(
+        self, tmp_path, monkeypatch
+    ):
+        """roobetl 8ccd5bd: after a --no-ff merge, HEAD~1 is the first parent,
+        so the old fallback judged the whole merged sweep on the next commit."""
+        seeds_dir = committed_repo(tmp_path, *corpus(20))
+        main_branch = git(tmp_path, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+        git(tmp_path, "checkout", "-q", "-b", "sweep")
+        sweep_titles(seeds_dir, 10)
+        git(tmp_path, "add", "-A")
+        git(tmp_path, "commit", "-q", "-m", "a confirmed mass rewrite")
+        git(tmp_path, "checkout", "-q", main_branch)
+        git(tmp_path, "merge", "-q", "--no-ff", "-m", "merge the sweep", "sweep")
+        (tmp_path / "data.csv").write_text("a,b\n1,2\n")
+        git(tmp_path, "add", "data.csv")
+        result = gate(monkeypatch, tmp_path)
+        assert result.exit_code == 0, result.output
+        assert "mass-field-rewrite" not in result.output
+
+    def test_a_new_sweep_on_top_of_a_confirmed_one_is_still_refused(
+        self, tmp_path, monkeypatch
+    ):
+        """The gate still judges what is uncommitted: HEAD against the tree."""
+        seeds_dir = commit_a_confirmed_sweep(tmp_path)
+        for index in range(10, 20):
+            write_seed(
+                seeds_dir,
+                record(
+                    f"seeds-a{index:02d}", title="scratchpad", body=f"Body {index}.\n"
+                ),
+            )
+        result = gate(monkeypatch, tmp_path)
+        assert result.exit_code == 1, result.output
+        assert "mass-field-rewrite" in result.output
+        assert "at HEAD, compared with the working tree" in result.output

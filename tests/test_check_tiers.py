@@ -920,6 +920,28 @@ class TestWhatItCompared:
         git(tmp_path, "commit", "-q", "-m", "second")
         comparison = check_against_git(seeds_dir)
         assert (comparison.before, comparison.after) == ("HEAD~1", "HEAD")
+        assert not comparison.store_equals_head
+
+    def test_without_the_audit_a_clean_store_compares_nothing(self, tmp_path):
+        """What --gate asks for (seeds-2g8u): the same committed mass rewrite
+        that the default audits at HEAD~1 is not judged again."""
+        seeds_dir = corpus(tmp_path, 20)
+        rewrite_titles(seeds_dir, 10, "scratchpad")
+        git(tmp_path, "add", "-A")
+        git(tmp_path, "commit", "-q", "-m", "a mass rewrite, committed")
+        assert codes(check_against_git(seeds_dir).findings) == ["mass-field-rewrite"]
+        comparison = check_against_git(seeds_dir, audit_last_commit=False)
+        assert comparison.store_equals_head
+        assert comparison.findings == []
+        assert comparison.corpus == 20
+
+    def test_without_the_audit_a_dirty_store_is_still_compared(self, tmp_path):
+        seeds_dir = corpus(tmp_path, 20)
+        rewrite_titles(seeds_dir, 10, "scratchpad")
+        comparison = check_against_git(seeds_dir, audit_last_commit=False)
+        assert (comparison.before, comparison.after) == ("HEAD", "the working tree")
+        assert not comparison.store_equals_head
+        assert codes(comparison.findings) == ["mass-field-rewrite"]
 
     def test_a_single_commit_repo_has_nothing_earlier_to_fall_back_to(self, tmp_path):
         seeds_dir = corpus(tmp_path, 20)

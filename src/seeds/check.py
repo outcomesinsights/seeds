@@ -1186,19 +1186,32 @@ class GitComparison:
     # ``seeds rename-prefix``, else ``None``. Reported, because a rename that
     # was judged after being undone is a reading the operator should see.
     rename: tuple[str, str, int] | None = None
+    # True when the store equals ``HEAD`` and the caller asked for no audit of
+    # the last commit (``audit_last_commit=False``): nothing was compared.
+    store_equals_head: bool = False
 
 
-def check_against_git(seeds_dir: Path) -> GitComparison:
+def check_against_git(
+    seeds_dir: Path, *, audit_last_commit: bool = True
+) -> GitComparison:
     """Flag a mass field rewrite, and any body rewritten with a frozen stamp.
 
     Compares the working store against ``HEAD`` — which is what a pre-commit
     hook needs, since there "the previous commit" is ``HEAD`` and the state
     being committed is on disk. When the store is identical to ``HEAD`` there
-    is nothing uncommitted to gate, so it falls back to ``HEAD~1`` against
-    ``HEAD`` and audits the commit that just landed. seeds-wurl needed exactly
-    that second reading: the rewrite was committed and then survived three days
-    and three further commits, so a tool that only ever looked at uncommitted
-    work would have had nothing to say for any of them.
+    is nothing uncommitted to gate, so by default it falls back to ``HEAD~1``
+    against ``HEAD`` and audits the commit that just landed. seeds-wurl needed
+    exactly that second reading: the rewrite was committed and then survived
+    three days and three further commits, so a tool that only ever looked at
+    uncommitted work would have had nothing to say for any of them.
+
+    ``audit_last_commit=False`` drops that fallback, and ``seeds check --gate``
+    passes it (seed seeds-2g8u). A gate that audits ``HEAD~1`` judges a commit
+    that already landed, so it refuses the next unrelated commit after a
+    confirmed mass change, or after a merge of one. With the fallback off, a
+    store identical to ``HEAD`` returns a comparison with no findings and
+    ``store_equals_head`` set. The accepted cost: a mass change that enters
+    through a merge, cherry-pick or rebase is not caught by the gate.
 
     Raises :class:`GitUnavailable` when there is no git to ask. An unborn
     ``HEAD`` is not that case — it means the before-state is empty, nothing can
@@ -1213,6 +1226,13 @@ def check_against_git(seeds_dir: Path) -> GitComparison:
         return _compare(reldir, {}, after, "the empty tree", "the working tree")
 
     before = _state_at_rev(root, "HEAD", reldir)
+    if before == after and not audit_last_commit:
+        return GitComparison(
+            before="HEAD",
+            after="the working tree",
+            corpus=len(before),
+            store_equals_head=True,
+        )
     if before == after and rev_exists(root, "HEAD~1"):
         return _compare(
             reldir,
@@ -1359,8 +1379,9 @@ def _compare(
 # The gap that remains. `seeds rename-prefix` and `seeds convert` already
 # refuse a target id that exists, so this catches damage from sed, a hand edit
 # or an older tool -- and only at the commit that does it, because
-# --against-git compares HEAD with the working tree, or HEAD~1 with HEAD. A
-# rename that landed in history before this rule existed is not re-read. Id
+# --against-git compares HEAD with the working tree, or HEAD~1 with HEAD when
+# the store equals HEAD. --gate never makes the second comparison (seeds-2g8u).
+# A rename that landed in history before this rule existed is not re-read. Id
 # references in body prose are not judged here either; a body rewritten under
 # a frozen stamp is `body-rewritten-in-place`'s finding.
 

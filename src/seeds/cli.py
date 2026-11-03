@@ -2581,7 +2581,9 @@ def _echo_legacy_activity(
     help=(
         "The commit-path check, for a hook or a justfile recipe: violations "
         "plus --against-git, never --smells. Exits 0 where there is no "
-        "seed-file store, and names the escape when it refuses "
+        "seed-file store. When the store equals HEAD it compares nothing and "
+        "passes: unlike plain --against-git, it never audits HEAD~1. Names "
+        "the escape when it refuses "
         "(SEEDS_GATE_CONFIRM=1, which only --gate reads). Implies "
         "--against-git; refuses --smells."
     ),
@@ -2625,8 +2627,12 @@ def check_cmd(smells: bool, against_git: bool, gate: bool) -> None:
 
     It runs violations plus --against-git, never --smells (which never gates
     and was ~94% of the cost; seeds-7q8g). A repo with no .seeds/seeds/ store
-    passes silently, so the recipe is harmless anywhere. A refusal names the
-    escape for an intended mass rewrite, SEEDS_GATE_CONFIRM=1 on the commit.
+    passes silently, so the recipe is harmless anywhere. When the store equals
+    HEAD, --gate compares nothing and passes. Plain --against-git audits
+    HEAD~1 against HEAD there instead, as a history audit. The gate does not,
+    so a confirmed mass change is not refused again on the next commit
+    (seeds-2g8u). A refusal names the escape for an intended mass rewrite,
+    SEEDS_GATE_CONFIRM=1 on the commit.
     Only --gate reads that variable: a hook that runs plain `seeds check
     --against-git` ignores it, so wire the hook to --gate. A `seeds
     rename-prefix` commit is read as a rename, not as a mass deletion
@@ -2703,6 +2709,12 @@ def _echo_violations(seeds_dir: Path, findings: list[Finding]) -> None:
 def _echo_git_comparison(comparison: GitComparison) -> None:
     """What --against-git compared, any rename it read, and what it found."""
     click.echo()
+    if comparison.store_equals_head:
+        click.echo(
+            "seeds check --against-git: the seed store equals HEAD, so there "
+            "is nothing to compare."
+        )
+        return
     click.echo(
         f"seeds check --against-git: {comparison.corpus} seed(s) at "
         f"{comparison.before}, compared with {comparison.after}."
@@ -2739,9 +2751,6 @@ Only `seeds check --gate` reads {GATE_CONFIRM_ENV}. It works when the hook
 calls `seeds check --gate`, whether through a justfile recipe, prek or
 pre-commit. A hook that runs plain `seeds check --against-git` ignores it.
 Do not use `--no-verify` on either command: it skips every other hook too.
-Expect to confirm twice for one rewrite. With nothing left uncommitted, the
-check audits the commit that just landed, so the next commit or a push gate
-refuses it again.
 ────────────────────────────────────────────────────────────────────────────"""
 
 
@@ -2771,7 +2780,10 @@ def _check_gate() -> None:
     _echo_violations(seeds_dir, findings)
     failed = bool(findings)
     try:
-        comparison = check_against_git(seeds_dir)
+        # No HEAD~1 fallback (seeds-2g8u): a store equal to HEAD has nothing
+        # to gate, and auditing the commit that already landed would refuse
+        # the next unrelated commit after a confirmed mass change.
+        comparison = check_against_git(seeds_dir, audit_last_commit=False)
     except GitUnavailable as exc:
         click.echo(f"Error: seeds check --against-git: {exc}", err=True)
         failed = True
