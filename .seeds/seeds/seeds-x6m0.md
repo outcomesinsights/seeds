@@ -4,7 +4,7 @@ title: 'Seed walkthrough format: prose context block + AskUserQuestion chips, sc
 status: exploring
 type: decision
 created_at: 2026-08-27T13:41:42.138187+00:00
-updated_at: 2026-11-03T16:17:40.347708+00:00
+updated_at: 2026-11-03T16:31:40.036086+00:00
 tags:
   - ai-ux
   - walkthrough
@@ -149,3 +149,5 @@ The seeds session then asked one more question, because ruling 3 needs a trim ga
 - `/clear` erases tier 1 of the scoping above (seeds named in this conversation). So the first session builds the whole queue and writes it to disk before the first clear. The queue stays out of git. One option is the per-worktree git dir.
 
 Build work: bead seeds-z03u (the herdr helper) and bead seeds-stwi (the skill).
+
+UPDATE 2026-11-03: built. Bead seeds-z03u (the herdr helper, commit f95e920) and bead seeds-stwi (the seeds:tend skill, commit 47f9026) are merged into main. Tier 3 of the scoping above names `seeds suggest --open-only`. Version 0.7 removed `seeds suggest`, so the skill uses `seeds search` for tier 3, which returns open seeds by default. The helper confirms a `/clear` through a plugin SessionStart hook with matcher `clear`. The hook writes a marker file only while a helper waits on that herdr pane. A live trial in a real herdr pane is still to be run by Ryan.
