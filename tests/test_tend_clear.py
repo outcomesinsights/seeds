@@ -290,3 +290,14 @@ def test_the_hook_does_nothing_outside_herdr(env):
     assert proc.returncode == 0
     assert proc.stdout == ""
     assert not (Path(env["XDG_STATE_HOME"]) / "seeds").exists()
+
+
+def test_the_skill_runs_this_helper_and_takes_the_command_it_sends():
+    """The skill (bead seeds-stwi) and the helper must agree on two strings:
+    the path the skill runs, and the command the helper types."""
+    skill = (TEND_DIR / "SKILL.md").read_text()
+
+    assert 'python3 "${CLAUDE_SKILL_DIR}/tend_clear.py"' in skill
+    assert "/seeds:tend next" in skill
+    assert "If the argument is exactly `next`" in skill
+    assert "/seeds:tend next" in HELPER.read_text()
