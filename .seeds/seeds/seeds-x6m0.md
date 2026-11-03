@@ -1,10 +1,10 @@
 ---
 id: seeds-x6m0
 title: 'Seed walkthrough format: prose context block + AskUserQuestion chips, scoped to a related set — validated on the seeds-147 cluster'
-status: captured
+status: exploring
 type: decision
 created_at: 2026-08-27T13:41:42.138187+00:00
-updated_at: 2026-08-31T20:02:50.328200+00:00
+updated_at: 2026-11-03T16:17:40.347708+00:00
 tags:
   - ai-ux
   - walkthrough
@@ -119,3 +119,33 @@ One observation that applies to both: seeds-74.2.1 specs `seeds sweep` as a CLI 
 **Residual risk and its cheap mitigation.** The cold path is exactly the mode that surfaced the irrelevant Dolt cluster in the 2026-08-27 test. The mitigation is not a gate: state the scope in **one line** before presenting seed #1 ("12 seeds updated in the last 7 days, starting with the storage cluster"), so a wrong scope is visible and redirectable before much has been spent. Announcing is not gating.
 
 **Held provisionally, by intent (@aguynamedryan, 2026-08-27):** "we'll attempt to use recent/ready first and see if we need to tweak that approach later." The cold-open ruling is a starting point to be revised from lived use, not a settled design — so first real tending sessions should note when the cold set was wrong and what would have scoped it better. If it needs tweaking, the one-line scope announcement is the place to start (make it richer, or let it offer a narrower cut) before reaching back for a gate that was already rejected on friction grounds.
+
+## RULED 2026-11-03: build `seeds:tend`, one topic per cleared session (@aguynamedryan)
+
+Ryan's request, verbatim, relayed by the cumulation session: "when I'm doing a seeds feedback session, perhaps across multiple seeds, I'd like that to be done one seed/topic at a time. Can we setup a skill for seeds to do that and have it clear the session between seeds/topics?"
+
+Ryan ruled four points through AskUserQuestion in the cumulation session. That session relayed them to the seeds session.
+
+1. **Name: `tend`.** This confirms the 2026-08-27 ruling above.
+2. **Home: the seeds plugin.** The skill uses the format above: one seed per turn, a prose context block, then AskUserQuestion, and context-aware scoping.
+3. **Unit: one topic per cleared session.** A topic is one seed plus the parent, child or related seeds that Ryan groups with it at the trim gate.
+4. **Clearing: automatic through herdr, with a manual fallback.** At the end of each topic the skill asks "Clear and continue" or "Stop". On "Clear and continue", a detached helper process waits until this pane is idle. Then it types `/clear` and `/seeds:tend next` through herdr. Outside herdr, the skill tells Ryan to type those two commands. herdr is optional, because the plugin is public.
+
+The seeds session then asked one more question, because ruling 3 needs a trim gate and the 2026-08-27 ruling dropped it. Ryan chose:
+
+5. **One trim gate, in the first session only.** This replaces the 2026-08-27 "no trim gate" ruling. The first session shows the candidate list once. Ryan removes seeds and groups the rest into topics. The skill saves that queue to disk, and later sessions skip the gate. Reason: a wrong queue now costs one cleared session per topic, so one check at the start is worth the friction. The cold-open scoping (`recent` + `ready`) still builds the candidate list when the conversation named no seeds.
+
+### Verified facts, from the cumulation session
+
+- Claude Code 2.1.317 gives a model, a skill or a hook no way to run `/clear` or to start a turn after one. A SessionStart hook with source `clear` can only add context (code.claude.com/docs/en/hooks.md and /commands.md).
+- In herdr 0.9.5, `HERDR_PANE_ID` is set in the session environment. `herdr agent wait <pane> --until idle --until done` and `herdr agent prompt <pane> "<text>"` exist. On 2026-10-07, `herdr agent prompt <pane> "/autocompact 400k"` ran a slash command in an idle session.
+
+### Hazards for the helper (measured 2026-10-07 unless noted)
+
+- A command sent while a turn runs is lost.
+- `agent_status` can report idle while a turn still runs. The helper must confirm that `/clear` took effect before it sends `/seeds:tend next`.
+- Ryan can have a draft in the input box. The helper sends only after he picks "Clear and continue".
+- The helper must outlive the `/clear`. It must be detached, and a test must show that it survives.
+- `/clear` erases tier 1 of the scoping above (seeds named in this conversation). So the first session builds the whole queue and writes it to disk before the first clear. The queue stays out of git. One option is the per-worktree git dir.
+
+Build work: bead seeds-z03u (the herdr helper) and bead seeds-stwi (the skill).
