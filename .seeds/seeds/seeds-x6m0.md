@@ -4,7 +4,7 @@ title: 'Seed walkthrough format: prose context block + AskUserQuestion chips, sc
 status: exploring
 type: decision
 created_at: 2026-08-27T13:41:42.138187+00:00
-updated_at: 2026-11-04T02:33:45.218121+00:00
+updated_at: 2026-11-04T02:37:02.241757+00:00
 tags:
   - ai-ux
   - walkthrough
@@ -153,3 +153,9 @@ Build work: bead seeds-z03u (the herdr helper) and bead seeds-stwi (the skill).
 UPDATE 2026-11-03: built. Bead seeds-z03u (the herdr helper, commit f95e920) and bead seeds-stwi (the seeds:tend skill, commit 47f9026) are merged into main. Tier 3 of the scoping above names `seeds suggest --open-only`. Version 0.7 removed `seeds suggest`, so the skill uses `seeds search` for tier 3, which returns open seeds by default. The helper confirms a `/clear` through a plugin SessionStart hook with matcher `clear`. The hook writes a marker file only while a helper waits on that herdr pane. A live trial in a real herdr pane is still to be run by Ryan.
 
 UPDATE 2026-11-03: main was rebased onto origin/main, and the 0.7.2 branch was force-pushed to match it (65417ee). The commit SHAs in the note above changed. The tend helper is e62cc4d (was f95e920). The tend skill is b2f2d3b (was 47f9026). The old SHAs are on no branch now.
+
+UPDATE 2026-11-03 (loop closed against shipped code, seed kept open by Ryan's ruling): the build matches the rulings. The skill is `src/seeds/plugin/claude-plugin/skills/tend/SKILL.md` (trim gate once, at the section "Show the trim gate, once"; queue file `$(git rev-parse --absolute-git-dir)/seeds-tend-queue.md`). The helper is `skills/tend/tend_clear.py`. It detaches with a double fork and `os.setsid()`, and it waits for a marker that the plugin's SessionStart hook with matcher `clear` writes (`.claude-plugin/plugin.json`). Commits on main: e62cc4d (helper) and b2f2d3b (skill).
+
+Efficacy: minor tweaking. The bead named `seeds suggest --open-only` for tier 3, and 0.7 had removed that command, so the skill uses `seeds search`. This was a planning miss. A better bead would have checked every command it named against `seeds --help`. The relayed rulings also conflicted with the 2026-08-27 no-trim-gate ruling, and the conflict was caught before the beads were written.
+
+Still open: Ryan has not run the live trial in a real herdr pane, and the cold-open scoping is provisional until real use. Resolve this seed after the trial and a first real tending session.

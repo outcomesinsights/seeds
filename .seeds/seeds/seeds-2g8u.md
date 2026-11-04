@@ -4,7 +4,7 @@ title: 'seeds check --gate re-refuses an unrelated commit after a confirmed mass
 status: resolved
 type: question
 created_at: 2026-11-03T14:30:24.754835+00:00
-updated_at: 2026-11-03T14:40:04.416056+00:00
+updated_at: 2026-11-04T02:37:04.461291+00:00
 resolved_at: 2026-11-03T14:40:04.416044+00:00
 resolution: 'Ruled (a): --gate drops the HEAD~1 fallback; plain --against-git keeps it. Built under bead seeds-fn85.'
 ---
@@ -52,3 +52,5 @@ Also noted, not part of the fork: the gate reads the working tree, not the index
 Defect bead: seeds-fn85.
 
 RULED 2026-11-03 (Ryan): direction (a). `seeds check --gate` drops the HEAD~1 fallback. When the seed store equals HEAD, the gate does no git comparison and passes. Plain `seeds check --against-git` keeps the fallback as the history audit that seeds-wurl needed. Ryan accepted the cost: a mass change that enters through a merge, cherry-pick or rebase is not caught automatically. Build work is bead seeds-fn85.
+
+UPDATE 2026-11-03: shipped under bead seeds-fn85 as commit 03d8243 on main. `check_against_git` in `src/seeds/check.py` takes `audit_last_commit`, and `--gate` passes False, so a store equal to HEAD makes no git comparison (check.py, the `if before == after and not audit_last_commit` branch). Tests: `tests/test_check_gate.py`, `test_an_unrelated_commit_after_a_confirmed_sweep_passes` and `test_an_unrelated_commit_after_merging_a_confirmed_sweep_passes`. Efficacy: planning held, and the build needed no changes. Released to titan on the unreleased 0.7.2 branch, not yet in a tagged release.
