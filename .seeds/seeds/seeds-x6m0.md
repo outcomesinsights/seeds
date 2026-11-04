@@ -4,7 +4,7 @@ title: 'Seed walkthrough format: prose context block + AskUserQuestion chips, sc
 status: exploring
 type: decision
 created_at: 2026-08-27T13:41:42.138187+00:00
-updated_at: 2026-11-03T16:31:40.036086+00:00
+updated_at: 2026-11-04T02:33:45.218121+00:00
 tags:
   - ai-ux
   - walkthrough
@@ -151,3 +151,5 @@ The seeds session then asked one more question, because ruling 3 needs a trim ga
 Build work: bead seeds-z03u (the herdr helper) and bead seeds-stwi (the skill).
 
 UPDATE 2026-11-03: built. Bead seeds-z03u (the herdr helper, commit f95e920) and bead seeds-stwi (the seeds:tend skill, commit 47f9026) are merged into main. Tier 3 of the scoping above names `seeds suggest --open-only`. Version 0.7 removed `seeds suggest`, so the skill uses `seeds search` for tier 3, which returns open seeds by default. The helper confirms a `/clear` through a plugin SessionStart hook with matcher `clear`. The hook writes a marker file only while a helper waits on that herdr pane. A live trial in a real herdr pane is still to be run by Ryan.
+
+UPDATE 2026-11-03: main was rebased onto origin/main, and the 0.7.2 branch was force-pushed to match it (65417ee). The commit SHAs in the note above changed. The tend helper is e62cc4d (was f95e920). The tend skill is b2f2d3b (was 47f9026). The old SHAs are on no branch now.
