@@ -211,8 +211,10 @@ git-config-sanity:
 # it has to precede anything that runs `uv run`.
 checks: lock-check lint fmt-check flake-deps seeds-check
 
-# ci.yml's test job runs 3.11, 3.12 and 3.13; `test` covers only the local
-# interpreter (3.13). Each version gets its OWN environment. The hook this
+# `test` covers only the pinned interpreter (.python-version); this covers the
+# other supported versions (gator-4ws.34: test every Python that still gets
+# updates). The nix job covers nixpkgs' python3. Each version gets its OWN
+# environment. The hook this
 # replaced ran `uv run --python 3.11 --no-sync pytest`, and --no-sync makes uv
 # fall back to the existing 3.13 .venv ("Using incompatible environment"), so
 # it re-ran 3.13 twice and never exercised 3.11 or 3.12 (seeds-29i, measured
@@ -220,8 +222,9 @@ checks: lock-check lint fmt-check flake-deps seeds-check
 test-matrix:
     for v in {{ matrix }}; do echo "--- python $v ---"; "{{ just_executable() }}" test-python "$v" || exit 1; done
 
-# The non-local interpreters `test-matrix` and `ci` cover.
-matrix := "3.11 3.12"
+# The non-local interpreters `test-matrix` and `ci` cover. With the pin
+# (3.15) and the nix job (3.14), all five supported versions are tested.
+matrix := "3.11 3.12 3.13"
 
 # One interpreter of the matrix, in its own environment (usage: just test-python 3.11).
 test-python VERSION:
