@@ -4,7 +4,7 @@ title: 'A write on an unknown seed ID fails invisibly when stderr is silenced: s
 status: captured
 type: idea
 created_at: 2026-11-05T13:57:41.923391+00:00
-updated_at: 2026-11-05T13:57:41.923391+00:00
+updated_at: 2026-11-05T14:13:57.352589+00:00
 tags:
   - agent-ux
   - errors
@@ -56,7 +56,7 @@ Script and log: `claude_stuff/searchbench/notfound2.py`,
 
 Both directions from the issue comment go into this seed:
 
-1. **Did-you-mean IDs.** On a not-found ID, print the closest existing IDs,
+1. **Did-you-mean IDs** (replaced 2026-11-05 by exact checks; see below). On a not-found ID, print the closest existing IDs,
    for example `did you mean <prefix>-1.6.3.143?`.
 2. **Prime guidance.** `seeds prime` gets one line: do not send a write's
    stderr to /dev/null, because a refusal exits 1 and becomes invisible. The
@@ -74,3 +74,49 @@ This ruling records the direction. It does not authorize the build.
 - Which commands get it. Every command that prints `not found` is a
   candidate: `show`, `resolve`, `abandon`, `defer`, `explore`, `update`,
   `answer` (question IDs), `link` (both ends), and `create --parent`.
+
+## RULED 2026-11-05 (Ryan): exact checks replace the edit-distance suggestion
+
+This replaces direction 1 of the first ruling (did-you-mean by closest IDs).
+Direction 2, the `seeds prime` line against silenced stderr, stands.
+
+### Why: what the 86 refusals were
+
+Each of the 86 not-found refusals in titan transcripts was classified against
+the current store of the session's working directory, and each candidate was
+looked up with `bd show` in that repo. Scripts: `claude_stuff/searchbench/nfclass.py`,
+`nfclass_bd.py`. Logs: `claude_stuff/nfclass-20261105-060110.log`,
+`claude_stuff/nfclass-bd-20261105-060511.log` (not committed).
+
+| Cause                          | Count                          | Example                                                                        |
+| ------------------------------ | ------------------------------ | ------------------------------------------------------------------------------ |
+| A bead ID passed to seeds      | at least 29, probably about 36 | `csc-36hz` is a bead                                                           |
+| An ID in the wrong form        | about 16 distinct IDs          | `176` for `csc-176`; `seeds~cpkr` for `seeds-cpkr`; `seeds-060` for `seeds-60` |
+| A seed in another repo's store | 3                              | `vfm-6x1` exists in vocabulary_formats                                         |
+| No similar ID anywhere         | about 15                       | `agent-a3a646c9701200f5e`, `demo-2`                                            |
+| The ID exists now              | 8                              | probably created after the attempt                                             |
+
+Edit distance (`difflib.get_close_matches`, cutoff 0.8) found a "near match"
+for 24 refusals. 18 of the 24 were bead IDs: `csc-36hz` gave seed `csc-36`,
+`csc-8ar7` gave `csc-87`. The other 6 also look accidental, because hash
+suffixes are random (`hm-ash` gave `hm-sh2`). Only `seeds-060` gave a
+plausible answer (`seeds-60`). An agent that receives a wrong suggestion can
+act on it and write to the wrong seed, which is worse than the refusal.
+
+Most refusals were reads: `show` 43, `link` 6, `update` 3, `defer` 1, and 31
+that the script could not attribute to one command.
+
+### The three checks, in order, on a not-found seed ID
+
+1. **Bead check.** If `bd` finds the ID in this repo, say that it is a bead,
+   not a seed, and name `bd show <id>`. Reuse `seeds.beads.query_bead_ids`,
+   which already returns `None` when beads cannot be consulted. On `None`,
+   print nothing extra.
+2. **Wrong-form check.** Try fixed corrections and suggest an ID only when a
+   seed with exactly that ID exists: add the store prefix to a bare number
+   (`176` to `<prefix>-176`), change `~` to `-`, and drop leading zeros from a
+   numeric segment (`seeds-060` to `seeds-60`). No edit distance.
+3. **Prefix check.** If the ID's prefix is not this store's prefix, say which
+   prefix this store uses.
+
+The refusal still exits 1, and the extra lines go to stderr with it.
