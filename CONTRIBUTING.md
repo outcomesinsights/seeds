@@ -190,12 +190,14 @@ tracked `.githooks/`, and `just setup` arms a checkout by setting
 hook also publishes this host's beads with the shared `bd-publish` command, and
 refuses the push when that command is missing.
 
-`just ci` is the full local CI equivalent, and GitHub Actions runs exactly that
-recipe, so a green push gate means a green CI. It runs `uv lock --check` first,
+`just ci` is the full local CI equivalent, so a green push gate means a green
+CI. GitHub Actions runs the same recipes, each on its own runner: `checks`, one
+test job per Python version, and `nix-check`. A final job named `ci` passes only
+when all of them pass. It runs `uv lock --check` first,
 because `uv sync` and `uv run` both re-lock and would otherwise make it pass
 unconditionally (`just setup` uses `uv sync --locked` for the same reason). Then
 `lint`, `fmt-check`, `just flake-deps` and `seeds-check`. Then, concurrently, the
-full pytest suite on the local interpreter, on 3.11 and on 3.12, and
+full pytest suite on the pinned interpreter, on 3.11, 3.12 and 3.13, and
 `nix flake check` (skipped cleanly when nix is absent). Each concurrent job logs
 to `claude_stuff/ci-<stamp>-<job>.log`, and a failure names the job. To add a
 check, add it to a recipe `ci` runs, never to the workflow alone.

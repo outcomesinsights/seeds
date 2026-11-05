@@ -242,8 +242,9 @@ nix-check:
     nix flake check --print-build-logs
     nix run . -- --version
 
-# The full local CI equivalent, and the one recipe CI runs: a green `just ci`
-# means a green CI (seeds-29i, ruled 2026-09-28). The serial `checks` go first, because
+# The full local CI equivalent: a green `just ci` means a green CI (seeds-29i,
+# ruled 2026-09-28). GitHub runs the same recipes, one per runner (ci.yml), and
+# reads `matrix` above for its versions. The serial `checks` go first, because
 # `lock-check` has to precede anything that runs `uv run`. Then the four test
 # runs -- `test` on the local interpreter, `test-python` for each version in
 # `matrix`, and `nix-check` -- run CONCURRENTLY (seeds-0o5): they were 94% of a

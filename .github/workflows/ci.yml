@@ -27,12 +27,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # One job running `just ci`, the same recipe the push gate runs, so "if the
-  # push gate passes, CI passes" holds by construction. `just ci` runs the
-  # serial checks (lock, lint, fmt-check, flake-deps, seeds-check), then the
-  # suite on the default interpreter, 3.11 and 3.12, and the nix flake check,
-  # concurrently. See the recipe for why each is there.
-  ci:
+  # `just ci` is the push gate, and it runs every recipe below on one machine.
+  # CI runs the same recipes, one per runner, so they finish sooner. Each job
+  # runs only a recipe that `just ci` also runs, so "if the push gate passes,
+  # CI passes" still holds. To add a check, add it to a recipe `ci` runs,
+  # never to this workflow alone.
+
+  # The versions to test come from the justfile, so `matrix` there is the one
+  # list: its versions, plus the pin in .python-version, which runs `just test`.
+  versions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      list: ${{ steps.list.outputs.list }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+        with:
+          just-version: "1" # the mise pin; zizmor fails the step without it
+      - id: list
+        run: |
+          list=$(just --evaluate matrix | jq -Rc --arg pin "$(cat .python-version)" 'split(" ") + [$pin]')
+          echo "list=$list" | tee -a "$GITHUB_OUTPUT"
+
+  # lock-check, lint, fmt-check, flake-deps, seeds-check, in that order.
+  checks:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -41,19 +63,73 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0 # cog check reads the commit subjects since the last tag
-      # Enables nix-command and flakes, so `just nix-check` needs no extra flags.
-      # Its comments explain the two-run split of `nix flake check`.
-      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
       - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
         with:
-          just-version: "1" # the mise pin; zizmor fails the step without it
-      # `seeds search` shells out to ripgrep, and so do a dozen tests. The
-      # ubuntu-latest image ships it today; making the dependency explicit means
-      # a runner-image change fails here with one clear line instead of twelve
-      # obscure ones inside pytest.
-      - run: rg --version || (sudo apt-get update && sudo apt-get install -y ripgrep)
+          just-version: "1"
       # `uv sync --locked`: a stale uv.lock fails here rather than being
       # silently re-locked (bead seeds-3p1).
       - run: just setup
-      - run: just ci
+      - run: just checks
+
+  test:
+    needs: versions
+    name: test (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false # report every version, not only the first to fail
+      matrix:
+        python: ${{ fromJSON(needs.versions.outputs.list) }}
+    env:
+      PY: ${{ matrix.python }}
+      UV_LOCKED: "1" # as in `just ci`: a re-lock fails instead of passing
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+        with:
+          just-version: "1"
+      # `seeds search` uses ripgrep when it is on PATH and Python otherwise.
+      # The suite tests both engines only when rg is present, so make sure.
+      - run: rg --version || (sudo apt-get update && sudo apt-get install -y ripgrep)
+      - run: just setup
+      - run: |
+          if [ "$PY" = "$(cat .python-version)" ]; then just test; else just test-python "$PY"; fi
+
+  # Mirrors `just nix-check`; the recipe's comments explain the two-run split.
+  nix-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # Enables nix-command and flakes, so `just nix-check` needs no extra flags.
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4.0.0
+        with:
+          just-version: "1"
+      - run: just nix-check
+
+  # Branch protection requires a check named `ci`, and Dependabot's auto-merge
+  # waits for it, so this job keeps that name and passes only when every job
+  # above succeeded. `always()` matters: without it, a failed job makes this
+  # one SKIPPED, and GitHub counts a skipped required check as passing.
+  ci:
+    if: always()
+    needs: [versions, checks, test, nix-check]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for r in $RESULTS; do [ "$r" = success ] || exit 1; done
