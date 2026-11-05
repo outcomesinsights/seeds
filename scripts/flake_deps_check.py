@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Pass/fail gate: prove flake.nix still mirrors [project.dependencies].
 
-Run via ``just flake-deps``; wired into the pre-push stage in
-``.pre-commit-config.yaml``, immediately ahead of the nix job.
+Run via ``just flake-deps``, which ``just checks`` runs, so it gates both
+CI and the pre-push hook.
 
 Why this exists
 ---------------

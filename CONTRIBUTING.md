@@ -184,12 +184,11 @@ landed, which is the reading that would have caught the original sweep on any of
 the three days it went unread. The commit after that clears it.
 
 The hooks run two recipes: `just pre-commit` at commit (git config sanity,
-`fmt-check`, `lint`, `seeds-check`) and `just ci` at push. Until this repo moves
-to gator's tracked `.githooks/`, prek wires them through `.pre-commit-config.yaml`;
-install both stages, or the push stage never fires:
-`prek install --hook-type pre-commit --hook-type pre-push`. The push stage also
-publishes this host's beads with the shared `bd-publish` command when it is
-installed, and does nothing otherwise.
+`fmt-check`, `lint`, `seeds-check`) and `just ci` at push. They are gator's
+tracked `.githooks/`, and `just setup` arms a checkout by setting
+`core.hooksPath` to `.githooks`. Run `just setup` once in every clone. The push
+hook also publishes this host's beads with the shared `bd-publish` command, and
+refuses the push when that command is missing.
 
 `just ci` is the full local CI equivalent, and GitHub Actions runs exactly that
 recipe, so a green push gate means a green CI. It runs `uv lock --check` first,
