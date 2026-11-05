@@ -75,8 +75,9 @@
           # Without this wrap, `nix run github:outcomesinsights/seeds -- search`
           # works on a machine that happens to have ripgrep and fails on one
           # that does not, which is a dependency the package declared nowhere.
-          # The Python side still raises a message naming ripgrep, for the
-          # `pip install` / `uv tool install` routes that cannot wrap anything.
+          # The `pip install` / `uv tool install` routes cannot wrap anything,
+          # so without rg on PATH the Python side searches in-process instead
+          # (issue #44). The wrap keeps the nix build on the faster engine.
           nativeBuildInputs = [ makeWrapper ];
           makeWrapperArgs = [
             "--prefix"

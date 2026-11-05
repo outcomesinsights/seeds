@@ -1236,12 +1236,12 @@ def format_seed_detail(
 )
 @pass_context
 def search(ctx: Context, query: str, include_all: bool, literal: bool) -> None:
-    """Search seed files with ripgrep.
+    """Search seed files with ripgrep, or with Python when rg is not on PATH.
 
-    QUERY is a ripgrep regular expression, matched case-insensitively over the
-    whole seed file -- body, title and the rest of the frontmatter. Resolved
-    and abandoned seeds are excluded unless --all is passed, and that filter is
-    part of the ripgrep pass rather than a scan afterwards.
+    QUERY is a regular expression, matched case-insensitively over the whole
+    seed file -- body, title and the rest of the frontmatter. Resolved and
+    abandoned seeds are excluded unless --all is passed. Both engines return
+    the same seeds, so rg is optional.
 
       - Simple words:  seeds search deliberation
       - Phrases:       seeds search 'agent reasoning'
@@ -3577,7 +3577,7 @@ _REMOVED_COMMANDS = {
     ),
     "suggest": (
         "use 'seeds search <regex> --all' to find existing seeds about a "
-        "topic (ripgrep over the seed files; no ranking or stemming)."
+        "topic (a regex search over the seed files; no ranking or stemming)."
     ),
 }
 

@@ -555,47 +555,77 @@ class Store:
         include_terminal: bool = False,
         literal: bool = False,
     ) -> list[SeedRecord]:
-        """Seeds whose file matches ``query``, via ripgrep.
+        """Seeds whose file matches ``query``, via ripgrep or a Python scan.
 
-        The status filter is part of the ripgrep pass rather than a Python
-        post-filter: ``--files-without-match`` on the ``status:`` line narrows
-        the candidate set, and the query then runs over exactly those files.
-        Measured on the real corpus at 17 ms across 303 files.
+        ripgrep runs when it is on PATH. Otherwise the same search runs in
+        Python's ``re`` (issue #44): a pip or pipx install has no ripgrep, and
+        Claude Code's built-in rg is a shell function that a subprocess cannot
+        call. Measured on titan, 2026-11-05: Python returned the same files as
+        ripgrep on all 457 distinct queries agents had passed to seeds search,
+        and took about 0.1 s on the largest store (663 files, 4.1 MB). System
+        grep is not the fallback: GNU grep -E disagreed with ripgrep on 21 of
+        those queries, mostly ones starting with (?i), and returned no error.
 
-        ``query`` is a ripgrep regular expression, matched case-insensitively
-        over the whole file — frontmatter included. What it gives up against
-        the FTS5 index it replaces is stemming ("merging" no longer finds
-        "merge") and ranking. Recall is not the casualty: on a real query grep
-        returned 72 hits to FTS's 77 and found one FTS missed.
+        ``query`` is a regular expression, matched case-insensitively over the
+        whole file — frontmatter included. ``^`` and ``$`` match at line ends
+        in both engines. What it gives up against the FTS5 index it replaces is
+        stemming ("merging" no longer finds "merge") and ranking. Recall is not
+        the casualty: on a real query grep returned 72 hits to FTS's 77 and
+        found one FTS missed.
         """
         if literal:
             query = re.escape(query)
+        if not self.files_dir.is_dir():
+            raise StoreError(f"no seed-file store at {self.files_dir}")
+        if shutil.which(RIPGREP) is None:
+            paths = self._python_matches(query, include_terminal)
+        else:
+            paths = self._rg_matches(query, include_terminal)
         return sorted(
             (
                 record
-                for record in (
-                    self.get(_id_of(path))
-                    for path in self._rg_matches(query, include_terminal)
-                )
+                for record in (self.get(_id_of(path)) for path in paths)
                 if record is not None
             ),
             key=lambda record: record.id,
         )
 
+    def _python_matches(self, query: str, include_terminal: bool) -> list[Path]:
+        """The ripgrep pass below, done in-process with ``re``.
+
+        ``re.MULTILINE`` matches ripgrep's line-oriented ``^`` and ``$``. A
+        malformed pattern raises, for the same reason as in ``_rg``.
+        """
+        try:
+            pattern = re.compile(escape_tolerant(query), re.IGNORECASE | re.MULTILINE)
+        except re.error as exc:
+            raise StoreError(f"invalid search pattern: {exc}") from exc
+        matches = []
+        for path in sorted(self.files_dir.glob(f"*{FILE_SUFFIX}")):
+            text = path.read_text(encoding="utf-8")
+            if not include_terminal and _TERMINAL_STATUS_LINE.search(text):
+                continue
+            if pattern.search(text):
+                matches.append(path)
+        return matches
+
     def _rg_matches(self, query: str, include_terminal: bool) -> list[Path]:
-        """Paths whose file matches ``query`` and passes the status filter."""
-        if not self.files_dir.is_dir():
-            raise StoreError(f"no seed-file store at {self.files_dir}")
+        """Paths whose file matches ``query`` and passes the status filter.
+
+        The status filter is part of the ripgrep pass rather than a Python
+        post-filter: ``--files-without-match`` on the ``status:`` line narrows
+        the candidate set, and the query then runs over exactly those files.
+        Measured on the real corpus at 17 ms across 303 files.
+        """
         if include_terminal:
             candidates = sorted(self.files_dir.glob(f"*{FILE_SUFFIX}"))
         else:
-            terminal = f"{SeedStatus.RESOLVED.value}|{SeedStatus.ABANDONED.value}"
             candidates = _rg(
                 "--files-without-match",
                 "--glob",
                 f"*{FILE_SUFFIX}",
                 "-e",
-                rf"^status: ({terminal})$",
+                _TERMINAL_STATUS,
                 "--",
                 str(self.files_dir),
             )
@@ -848,6 +878,13 @@ def new_record(
 
 RIPGREP = "rg"
 
+# The frontmatter line of a resolved or abandoned seed. Both search engines use
+# this one pattern, so they cannot disagree about what "terminal" means.
+_TERMINAL_STATUS = (
+    rf"^status: ({SeedStatus.RESOLVED.value}|{SeedStatus.ABANDONED.value})$"
+)
+_TERMINAL_STATUS_LINE = re.compile(_TERMINAL_STATUS, re.MULTILINE)
+
 
 def _rg(*args: str) -> list[Path]:
     """Run ripgrep in file-listing mode; return the paths it named.
@@ -856,13 +893,9 @@ def _rg(*args: str) -> list[Path]:
     else -- a bad regex above all -- is raised with ripgrep's own message,
     because a search that silently returned nothing when the pattern was
     malformed is the green-while-broken shape this project refuses everywhere
-    else.
+    else. The caller checks that ripgrep is on PATH; without it, search uses
+    ``Store._python_matches`` instead.
     """
-    if shutil.which(RIPGREP) is None:
-        raise StoreError(
-            "'seeds search' needs ripgrep (rg) on PATH; install it, or use "
-            "'seeds export --json' and grep the stream."
-        )
     proc = subprocess.run(
         [RIPGREP, "--no-messages", "--no-ignore", *args],
         capture_output=True,

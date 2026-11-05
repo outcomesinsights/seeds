@@ -43,17 +43,16 @@ uv tool install git+https://github.com/outcomesinsights/seeds.git
 # pip
 pip install git+https://github.com/outcomesinsights/seeds.git
 
-# Nix (bundles its own ripgrep)
+# Nix
 nix profile install github:outcomesinsights/seeds
 ```
 
 These install the latest release, from the `main` branch. To try a
 pre-release branch, append `@<branch>` to the git URL.
 
-Requires Python 3.11+ and [ripgrep](https://github.com/BurntSushi/ripgrep)
-(`rg`) on `PATH`. `seeds search` is a ripgrep pass over the seed files. Every
-other command works without it, and `seeds search` says so rather than failing
-obscurely.
+Requires Python 3.11+. `seeds search` uses
+[ripgrep](https://github.com/BurntSushi/ripgrep) (`rg`) when it is on `PATH`,
+and an in-process Python search otherwise. Both return the same seeds.
 
 **2. Install the Claude Code integration** (skip if you don't use
 [Claude Code](https://claude.com/claude-code)):
@@ -136,7 +135,7 @@ seeds show <id> --full                   # ...including superseded text
 seeds tree                               # Hierarchical view
 seeds ready                              # Seeds ready for attention
 seeds blocked                            # Seeds blocked by unresolved children
-seeds search "<regex>"                   # ripgrep over the seed files
+seeds search "<regex>"                   # regex search over the seed files
 seeds history <id>                       # How this seed changed, commit by commit
 ```
 
@@ -168,7 +167,7 @@ the conversion commit, and `.seeds/seeds.jsonl` before it. **That file stops
 being written on conversion day, but its git history stays load-bearing forever
 — never filter it out of the repository as cleanup.**
 
-`seeds search` is a ripgrep pass over `.seeds/seeds/`, case-insensitive, with
+`seeds search` is a regex search over `.seeds/seeds/`, case-insensitive, with
 the resolved/abandoned filter inline (`--all` includes them). The query is an
 ordinary regular expression, so hyphens, quotes and punctuation are literal.
 There is no stemmer, so search for the stem: `merg` finds both `merge` and

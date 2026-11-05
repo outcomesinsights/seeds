@@ -14,6 +14,7 @@ isolated seed-file store in a temp directory, never the real project .seeds/.
 
 import os
 import re
+import shutil
 import tempfile
 from datetime import timedelta
 from pathlib import Path
@@ -551,8 +552,22 @@ class TestFindSeedsDir:
                 os.chdir(original)
 
 
+@pytest.fixture(params=["ripgrep", "python"])
+def engine(request, monkeypatch):
+    """Run a search test once with ripgrep and once with the Python fallback.
+
+    The fallback runs when ``shutil.which(RIPGREP)`` finds nothing, so pointing
+    RIPGREP at a name that is on no PATH selects it.
+    """
+    if request.param == "python":
+        monkeypatch.setattr("seeds.store.RIPGREP", "rg-absent-for-this-test")
+    return request.param
+
+
+@pytest.mark.usefixtures("engine")
 class TestSearch:
-    """`seeds search` over ripgrep (bead seeds-4co.10).
+    """`seeds search` over ripgrep (bead seeds-4co.10), and over Python's
+    ``re`` when ripgrep is not on PATH (issue #44). Every test runs on both.
 
     What went with FTS5 is stemming and ranking, and only stemming is a
     behaviour a test can state. Recall did not go with it: on a real query grep
@@ -640,8 +655,44 @@ class TestSearch:
         is the green-while-broken shape this project refuses everywhere."""
         add(store, "seeds-a1", "Deliberation capture")
 
-        with pytest.raises(StoreError, match="ripgrep failed"):
+        with pytest.raises(StoreError, match=r"ripgrep failed|invalid search pattern"):
             store.search("(unclosed")
+
+    def test_anchors_match_at_line_ends(self, store):
+        """ripgrep is line-oriented, so the fallback needs ``re.MULTILINE``."""
+        add(store, "seeds-a1", "Anchored", body="first line\nsweep here\nlast")
+        add(store, "seeds-b2", "Unanchored", body="a sweep in the middle")
+
+        assert [r.id for r in store.search("^sweep")] == ["seeds-a1"]
+
+    def test_literal_matches_a_formatter_escaped_reference(self, store):
+        add(store, "seeds-a1", "Ref", body=r"see \[[clc-97e]\] for this")
+        add(store, "seeds-b2", "Decoy", body="digit [9] only")
+
+        assert [r.id for r in store.search("[[clc-97e]]", literal=True)] == ["seeds-a1"]
+
+
+@pytest.mark.skipif(shutil.which("rg") is None, reason="needs ripgrep")
+def test_both_engines_return_the_same_seeds(store, monkeypatch):
+    """The fallback must not change what a query finds."""
+    add(store, "seeds-a1", "Merge the agent sweep", body="merging\nI50.x code")
+    add(store, "seeds-b2", "Agents", body=r"see \[[clc-97e]\]", tags=["storage"])
+    add(store, "seeds-c3", "Closed sweep", status=SeedStatus.RESOLVED)
+    add(store, "seeds-d4", "Nothing relevant", body="status: resolved in prose")
+    queries = ["merg", "agent|sweep", r"I50\.x", "^status", "STORAGE", r"\bsweep\b"]
+
+    def run():
+        return {
+            (query, include): [
+                r.id for r in store.search(query, include_terminal=include)
+            ]
+            for query in queries
+            for include in (False, True)
+        }
+
+    with_rg = run()
+    monkeypatch.setattr("seeds.store.RIPGREP", "rg-absent-for-this-test")
+    assert run() == with_rg
 
 
 class TestRenamePrefix:

@@ -110,7 +110,7 @@ alignment are not markdown constructs; a fence is.
 - `seeds deferred` - Review backlog
 - `seeds blocked` - Seeds with unresolved children
 - `seeds recent [--since=7d]` - Recently touched (any status)
-- `seeds search '<regex>'` - ripgrep over the seed files (case-insensitive; no stemming, so search for the stem: `merg` finds both `merge` and `merging`)
+- `seeds search '<regex>'` - regex search over the seed files (case-insensitive; no stemming, so search for the stem: `merg` finds both `merge` and `merging`)
 
 **Use `seeds search -F` for any query carrying a code, a wildcard, or a
 reference.** QUERY is a regex, so anything code-shaped is regex-live:

@@ -232,7 +232,7 @@ seeds show seeds-a1b2                           # one seed in detail
 seeds tree                                      # hierarchy view
 seeds prime                                     # short context for an AI agent
 seeds prime --full                              # the full reference, with the current seeds
-seeds search "<regex>"                          # ripgrep over the seed files
+seeds search "<regex>"                          # regex search over the seed files
 seeds history seeds-a1b2                        # how it changed, commit by commit
 seeds check                                     # verify the seed files
 seeds doctor                                    # store and installation health
