@@ -2062,8 +2062,7 @@ def answer(
 
     question_seed = store.get(question_id)
     if question_seed is None:
-        click.echo(f"Error: Question '{question_id}' not found.", err=True)
-        sys.exit(1)
+        exit_seed_not_found(store, question_id, noun="Question")
 
     if not append and not replace:
         _guard_content_replacement(
@@ -2095,7 +2094,10 @@ def questions(ctx: Context, seed_id: str | None) -> None:
     store = ctx.get_store()
 
     if seed_id:
-        # Get question-seeds for a specific seed
+        # An unknown seed has no questions, but "No open questions." and exit 0
+        # would read as an answer about a real seed. Refuse it instead.
+        if not store.exists(seed_id):
+            exit_seed_not_found(store, seed_id)
         qs = [q for q in store.questions_for(seed_id) if not is_terminal(q)]
     else:
         # Get all unresolved question-type seeds
