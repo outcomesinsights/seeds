@@ -6,6 +6,10 @@
 just = "1"
 uv = "0"
 "aqua:numtide/treefmt" = "2"
+# prettier uses mise's npm backend, which installs the package and NO node: it
+# runs with whatever node is on PATH, and fails with "exec: node: not found" on a
+# host with none (gator-ncm). So the node line comes with it.
+node = "24"
 prettier = "3"
 taplo = "0"
 "ubi:NixOS/nixfmt" = "1"      # ubi: the NixOS/nixfmt GitHub release ships a static binary; measured 2026-10-02, nixfmt 1.5.0 in 0.7s
