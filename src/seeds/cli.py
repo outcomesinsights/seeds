@@ -1234,8 +1234,17 @@ def format_seed_detail(
     help="Match QUERY as literal text, not a regex. Use it to paste a "
     "reference exactly as it appears in a file.",
 )
+@click.option(
+    "--ignore-case",
+    "-i",
+    is_flag=True,
+    help="Accepted and ignored: search is always case-insensitive. Agents "
+    "type -i from grep habit, and 68 such calls once failed on it.",
+)
 @pass_context
-def search(ctx: Context, query: str, include_all: bool, literal: bool) -> None:
+def search(
+    ctx: Context, query: str, include_all: bool, literal: bool, ignore_case: bool
+) -> None:
     """Search seed files with ripgrep, or with Python when rg is not on PATH.
 
     QUERY is a regular expression, matched case-insensitively over the whole

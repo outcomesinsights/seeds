@@ -4329,3 +4329,19 @@ class TestAMultiLineBodyCannotComeThroughArgv:
             main, ["create", "-t", "S", "--content", "-"], input=body
         )
         assert from_stdin.exit_code == 0
+
+
+class TestSearchCommand:
+    def test_dash_i_is_accepted_and_search_stays_case_insensitive(
+        self, cli_runner, initialized_env
+    ):
+        """Agents type `seeds search -i` from grep habit. Titan transcripts
+        held 68 such calls, and every one failed with a usage error before
+        the flag existed (measured 2026-11-05)."""
+        created = cli_runner.invoke(main, ["create", "-t", "Deliberation capture"])
+        seed_id = _extract_created_id(created.output)
+
+        for args in (["-i", "DELIBERATION"], ["--ignore-case", "deliberation"]):
+            result = cli_runner.invoke(main, ["search", *args])
+            assert result.exit_code == 0, result.output
+            assert seed_id in result.output
