@@ -4470,3 +4470,23 @@ class TestNotFoundHints:
     def test_ask_shows_hint(self, cli_runner, env):
         hint = self._refusal(cli_runner, ["ask", "Why?", "--seed", "176"], "176")
         assert hint == ["Hint: did you mean 'seeds-176'? That seed exists."]
+
+    def test_answer_shows_hint(self, cli_runner, env):
+        """A question is a seed, so a question ID gets the same hints."""
+        hint = self._refusal(
+            cli_runner, ["answer", "176", "Because."], "176", noun="Question"
+        )
+        assert hint == ["Hint: did you mean 'seeds-176'? That seed exists."]
+
+    def test_questions_for_an_unknown_seed_is_refused(self, cli_runner, env):
+        """It printed "No open questions." and exited 0, which reads as an
+        answer about a seed that does not exist."""
+        hint = self._refusal(cli_runner, ["questions", "--seed", "176"], "176")
+        assert hint == ["Hint: did you mean 'seeds-176'? That seed exists."]
+
+    def test_questions_for_a_known_seed_without_questions_still_succeeds(
+        self, cli_runner, env
+    ):
+        result = cli_runner.invoke(main, ["questions", "--seed", "seeds-176"])
+        assert result.exit_code == 0, result.output
+        assert "No open questions." in result.output
