@@ -183,6 +183,16 @@ seeds written that day by exactly that route. `seeds check --smells` reports
 such a file as `non-canonical-bytes`; `seeds check` alone will not, because
 canonicality is a smell and never a violation.
 
+**NEVER SEND A WRITE'S STDERR TO /dev/null.** A refused write exits 1 and
+prints the reason on stderr. A refusal for an unknown ID also prints a hint
+there. With stderr discarded, the refusal is invisible, and you believe the
+write happened. Sending only stdout to /dev/null is fine. This form keeps a
+refusal visible:
+
+```
+out=$(seeds <command> ... 2>&1) || echo "$out"
+```
+
 ### Updating
 - `seeds explore <id>` - Start working on a seed
 - `seeds resolve <id> --resolution="what happened"` - Mark as resolved with outcome
@@ -348,6 +358,8 @@ PRIME_SHORT_OUTPUT = """# seeds Workflow Context
 - `seeds update <id> --append -` (body on stdin): add to a seed's deliberation, the normal way to write to an existing seed
 - `seeds explore` / `defer` / `resolve -r "outcome"` / `abandon -r "why"` `<id>`: lifecycle
 - **WARNING**: `-c/--content` REPLACES a body and is refused on any non-empty one. Never use it to add.
+- **Never send a write's stderr to /dev/null.** A refused write exits 1 and prints the reason and any hint on stderr. Sending only stdout there is fine.
+- To keep a refusal visible: `out=$(seeds <command> ... 2>&1) || echo "$out"`
 
 ## Correcting what a seed says
 - A fact that turned out **false**: fix it in place with `seeds update <id> --edit OLD NEW`.

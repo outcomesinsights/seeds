@@ -3343,6 +3343,19 @@ class TestPrimeCommand:
         assert "append a dated note" in section
         assert "Do not delete the old position" in section
 
+    @pytest.mark.parametrize("argv", [["prime"], ["prime", "--full"]])
+    def test_prime_says_never_to_discard_a_writes_stderr(
+        self, argv, cli_runner, initialized_env
+    ):
+        """Bead seeds-zb4m (seed seeds-wmge): a refused write exits 1 and says
+        why on stderr. Titan transcripts held 138 seeds writes with stderr sent
+        to /dev/null, so each refusal was invisible to the agent."""
+        out = cli_runner.invoke(main, argv).output
+
+        assert "write's stderr to /dev/null" in out.lower()
+        assert "only stdout" in out
+        assert 'out=$(seeds <command> ... 2>&1) || echo "$out"' in out
+
     def test_short_form_count_line_is_computed(self, cli_runner, env_with_seeds):
         """Fixture: four seeds, none a question, seed-test2 exploring."""
         out = cli_runner.invoke(main, ["prime"]).output
