@@ -5,12 +5,13 @@ from __future__ import annotations
 import functools
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import IO, Any, NamedTuple
+from typing import IO, Any, NamedTuple, NoReturn
 
 import click
 
@@ -964,8 +965,7 @@ def create(
     if parent_id:
         # Verify parent exists
         if not store.exists(parent_id):
-            click.echo(f"Error: Parent seed '{parent_id}' not found.", err=True)
-            sys.exit(1)
+            exit_seed_not_found(store, parent_id, noun="Parent seed")
         seed_id = store.next_child_id(parent_id)
     else:
         seed_id = store.next_id(seed_text=title)
@@ -1323,8 +1323,7 @@ def show(
 
     record = store.get(seed_id)
     if record is None:
-        click.echo(f"Error: Seed '{seed_id}' not found.", err=True)
-        sys.exit(1)
+        exit_seed_not_found(store, seed_id)
 
     output = format_seed_detail(record, store, include_questions=questions, full=full)
 
@@ -1366,8 +1365,7 @@ def history_cmd(ctx: Context, seed_id: str) -> None:
 
     record = store.get(seed_id)
     if record is None:
-        click.echo(f"Error: Seed '{seed_id}' not found.", err=True)
-        sys.exit(1)
+        exit_seed_not_found(store, seed_id)
 
     try:
         history = seed_history(store.seeds_dir, record)
@@ -1445,12 +1443,91 @@ def blocked(ctx: Context) -> None:
 # --- Status change commands ---
 
 
+_BARE_NUMBER_RE = re.compile(r"^[0-9]+(\.[0-9]+)*$")
+
+
+def _drop_leading_zeros(seed_id: str) -> str:
+    """``seeds-060.01`` -> ``seeds-60.1``: each all-digit segment as a plain int."""
+    parts = re.split(r"([-.])", seed_id)
+    return "".join(str(int(p)) if p.isascii() and p.isdigit() else p for p in parts)
+
+
+def _corrected_forms(seed_id: str, prefix: str) -> list[str]:
+    """The fixed corrections of a wrong-form ID (bead seeds-ptxi).
+
+    No edit distance and no fuzzy match: a wrong suggestion sends an agent to
+    write to the wrong seed, and 18 of 24 edit-distance suggestions measured
+    in seeds-wmge named an unrelated seed. Each correction is applied on top
+    of the earlier ones, so ``060`` becomes ``<prefix>-060`` and then
+    ``<prefix>-60``.
+    """
+    forms = {seed_id}
+    forms |= {f.replace("~", "-") for f in forms}
+    forms |= {f"{prefix}-{f}" for f in forms if _BARE_NUMBER_RE.match(f)}
+    forms |= {_drop_leading_zeros(f) for f in forms}
+    forms.discard(seed_id)
+    return sorted(forms)
+
+
+def _id_prefix(seed_id: str) -> str | None:
+    """The prefix part of ``seed_id`` (``q`` in ``q-abc.1``), or None if it has none."""
+    head = re.sub(r"(\.[0-9]+)+$", "", seed_id)
+    prefix, sep, suffix = head.rpartition("-")
+    if not sep or not prefix or not suffix:
+        return None
+    return prefix
+
+
+def not_found_hint(store: Store, seed_id: str) -> list[str]:
+    """Hint lines for an unknown seed ID: the first of three checks that finds one.
+
+    1. The ID is a bead in this repo -> name ``bd show``.
+    2. A fixed correction of the ID names a seed that exists -> suggest it.
+    3. The ID's prefix is not this store's -> name this store's prefix.
+
+    Beads that cannot be consulted (no workspace, no ``bd``, a timeout) skip
+    the first check silently.
+    """
+    # An ID that starts with "-" would reach bd as an option, not an ID.
+    beads = (
+        None if seed_id.startswith("-") else query_bead_ids(store.seeds_dir, [seed_id])
+    )
+    if beads and seed_id in beads:
+        return [
+            f"Hint: '{seed_id}' is a bead, not a seed. Run: bd show {seed_id}",
+        ]
+
+    prefix = store.get_prefix()
+    matches = [f for f in _corrected_forms(seed_id, prefix) if store.exists(f)]
+    if matches:
+        return [f"Hint: did you mean '{m}'? That seed exists." for m in matches]
+
+    id_prefix = _id_prefix(seed_id)
+    if id_prefix is not None and id_prefix != prefix:
+        return [
+            f"Hint: this store's seed IDs use the prefix '{prefix}', "
+            f"not '{id_prefix}' (e.g. {prefix}-...)."
+        ]
+    return []
+
+
+def exit_seed_not_found(store: Store, seed_id: str, noun: str = "Seed") -> NoReturn:
+    """Refuse an unknown seed ID: the error line, then any hint, then exit 1.
+
+    The first line stays exactly ``Error: <noun> '<id>' not found.`` so that
+    scripts matching it keep working; hint lines follow it on stderr.
+    """
+    click.echo(f"Error: {noun} '{seed_id}' not found.", err=True)
+    for line in not_found_hint(store, seed_id):
+        click.echo(line, err=True)
+    sys.exit(1)
+
+
 def get_seed_or_exit(store: Store, seed_id: str) -> SeedRecord:
     """Get a seed by ID or exit with error."""
     record = store.get(seed_id)
     if record is None:
-        click.echo(f"Error: Seed '{seed_id}' not found.", err=True)
-        sys.exit(1)
+        exit_seed_not_found(store, seed_id)
     return record
 
 
@@ -1919,8 +1996,7 @@ def ask(ctx: Context, question_text: str, seed_id: str) -> None:
 
     # Verify seed exists
     if not store.exists(seed_id):
-        click.echo(f"Error: Seed '{seed_id}' not found.", err=True)
-        sys.exit(1)
+        exit_seed_not_found(store, seed_id)
 
     question_id = store.next_id(seed_text=question_text)
     store.create(
@@ -2069,8 +2145,7 @@ def link(ctx: Context, seed_id: str, related_id: str, rel_type: str) -> None:
 
     record = get_seed_or_exit(store, seed_id)
     if not store.exists(related_id):
-        click.echo(f"Error: Seed '{related_id}' not found.", err=True)
-        sys.exit(1)
+        exit_seed_not_found(store, related_id)
 
     rel_type_enum = RelationType(rel_type)
 

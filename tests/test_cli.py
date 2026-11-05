@@ -4345,3 +4345,115 @@ class TestSearchCommand:
             result = cli_runner.invoke(main, ["search", *args])
             assert result.exit_code == 0, result.output
             assert seed_id in result.output
+
+
+class TestNotFoundHints:
+    """An unknown seed ID gets a hint after the error line. Bead seeds-ptxi.
+
+    Three checks, first match wins: the ID is a bead; a fixed correction of
+    its form names a seed that exists; its prefix is not this store's.
+    """
+
+    @pytest.fixture
+    def env(self, initialized_env):
+        store = Store(initialized_env / SEEDS_DIR)
+        for seed_id in ("seeds-176", "seeds-60", "seeds-11", "seeds-11.1"):
+            store.create(new_record(seed_id, f"Seed {seed_id}"))
+        return initialized_env
+
+    def _refusal(self, cli_runner, args, missing, noun="Seed"):
+        result = cli_runner.invoke(main, args)
+        assert result.exit_code == 1, result.output
+        assert "Traceback" not in result.output
+        lines = result.stderr.splitlines()
+        assert lines[0] == f"Error: {noun} '{missing}' not found."
+        return lines[1:]
+
+    def test_bead_id_names_bd_show(self, cli_runner, env, tmp_path, monkeypatch):
+        make_beads_workspace(env / SEEDS_DIR)
+        log = install_fake_bd(
+            tmp_path, monkeypatch, stdout=json.dumps([{"id": "seeds-ab1"}])
+        )
+        hint = self._refusal(cli_runner, ["show", "seeds-ab1"], "seeds-ab1")
+        assert len(hint) == 1
+        assert "is a bead, not a seed" in hint[0]
+        assert "bd show seeds-ab1" in hint[0]
+        assert any("show seeds-ab1 --json" in line for line in call_lines(log))
+
+    def test_no_bd_on_path_gives_no_bead_hint(
+        self, cli_runner, env, tmp_path, monkeypatch
+    ):
+        make_beads_workspace(env / SEEDS_DIR)
+        hide_bd(monkeypatch, tmp_path)
+        hint = self._refusal(cli_runner, ["show", "seeds-ab1"], "seeds-ab1")
+        assert hint == []
+
+    def test_bd_says_no_such_bead_falls_through(
+        self, cli_runner, env, tmp_path, monkeypatch
+    ):
+        make_beads_workspace(env / SEEDS_DIR)
+        install_fake_bd(
+            tmp_path, monkeypatch, stdout=json.dumps({"error": "no issues found"})
+        )
+        hint = self._refusal(cli_runner, ["show", "176"], "176")
+        assert hint == ["Hint: did you mean 'seeds-176'? That seed exists."]
+
+    @pytest.mark.parametrize(
+        ("given", "suggested"),
+        [
+            ("176", "seeds-176"),
+            ("11.1", "seeds-11.1"),
+            ("seeds~176", "seeds-176"),
+            ("seeds-060", "seeds-60"),
+            ("060", "seeds-60"),
+            ("seeds-011.01", "seeds-11.1"),
+        ],
+    )
+    def test_wrong_form_suggests_existing_seed(self, cli_runner, env, given, suggested):
+        hint = self._refusal(cli_runner, ["show", given], given)
+        assert hint == [f"Hint: did you mean '{suggested}'? That seed exists."]
+
+    @pytest.mark.parametrize("given", ["177", "seeds~177", "seeds-061"])
+    def test_correction_naming_no_seed_suggests_nothing(self, cli_runner, env, given):
+        hint = self._refusal(cli_runner, ["show", given], given)
+        assert hint == []
+
+    def test_other_prefix_names_store_prefix(self, cli_runner, env):
+        hint = self._refusal(cli_runner, ["show", "q-abc"], "q-abc")
+        assert len(hint) == 1
+        assert "prefix 'seeds'" in hint[0]
+        assert "not 'q'" in hint[0]
+
+    def test_resolve_shows_hint(self, cli_runner, env):
+        hint = self._refusal(cli_runner, ["resolve", "176"], "176")
+        assert hint == ["Hint: did you mean 'seeds-176'? That seed exists."]
+
+    def test_link_source_shows_hint(self, cli_runner, env):
+        hint = self._refusal(
+            cli_runner, ["link", "176", "--relates-to", "seeds-60"], "176"
+        )
+        assert hint == ["Hint: did you mean 'seeds-176'? That seed exists."]
+
+    def test_link_target_shows_hint(self, cli_runner, env):
+        hint = self._refusal(
+            cli_runner, ["link", "seeds-60", "--relates-to", "176"], "176"
+        )
+        assert hint == ["Hint: did you mean 'seeds-176'? That seed exists."]
+
+    def test_create_parent_shows_hint(self, cli_runner, env):
+        hint = self._refusal(
+            cli_runner,
+            ["create", "-t", "Child", "--parent", "176"],
+            "176",
+            noun="Parent seed",
+        )
+        assert hint == ["Hint: did you mean 'seeds-176'? That seed exists."]
+
+    @pytest.mark.parametrize("command", ["history", "tree"])
+    def test_other_readers_show_hint(self, cli_runner, env, command):
+        hint = self._refusal(cli_runner, [command, "176"], "176")
+        assert hint == ["Hint: did you mean 'seeds-176'? That seed exists."]
+
+    def test_ask_shows_hint(self, cli_runner, env):
+        hint = self._refusal(cli_runner, ["ask", "Why?", "--seed", "176"], "176")
+        assert hint == ["Hint: did you mean 'seeds-176'? That seed exists."]
