@@ -144,10 +144,11 @@ Cutting a release (manual steps; intentionally no automation yet):
    `seeds` got onto your PATH, so check first with `which seeds`:
 
    - **`~/.nix-profile/bin/seeds`** — nix installed it (the case on titan).
-     Refresh from `~/.config/home-manager`: `nix flake update seeds`, then
-     switch. The flake input carries no ref pin, so it tracks **main**, not the
-     tag — step 5's `git push origin main` must have landed first. Don't bump it
-     by editing `modules/packages.nix`.
+     The flake input is pinned to a release tag
+     (`?ref=refs/tags/vX.Y.Z`), so commits after the tag do not ship. In
+     `~/.config/home-manager`, change the tag in that URL, run
+     `nix flake update seeds`, then switch. The tag must be pushed first. Don't
+     bump it by editing `modules/packages.nix`.
    - **`~/.local/bin/seeds`** — `uv tool` installed it, per-user. Refresh with
      `uv cache clean seeds && uv tool install --reinstall .`. `--reinstall`
      already implies `--refresh`, so no separate `uv tool uninstall` is needed.
