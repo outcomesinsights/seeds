@@ -6,6 +6,58 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-06
+
+`seeds search` now works without ripgrep, and a write that names an unknown
+seed ID says what the ID probably is. Both come from issue #44. One exit
+status changes: `seeds questions --seed <unknown-id>` now exits 1. It used to
+print "No open questions." and exit 0, which read as an answer about a seed
+that does not exist.
+
+### Added
+
+- **cli:** A refusal of an unknown seed ID now names a likely cause. If `bd`
+  knows the ID, it says that the ID is a bead and names `bd show <id>`. If a
+  fixed correction gives a real seed (a missing prefix, `~` for `-`, or a
+  leading zero), it names that seed. If the prefix is not this store's, it
+  says which prefix the store uses. There is no edit-distance guess, because
+  on real refusals those guesses pointed at the wrong seed.
+  ([8609100](https://github.com/outcomesinsights/seeds/commit/8609100147cc84e4cf884ebf2b7b066b0cc0c1db))
+- **prime:** `seeds prime` tells agents not to send a write's stderr to
+  `/dev/null`, because a refused write then fails without a message.
+  ([a3960cc](https://github.com/outcomesinsights/seeds/commit/a3960cca7de11856b24a899341bfb13733d991e9))
+- **plugin:** The `seeds:tend` skill takes a related set of seeds to rulings,
+  one topic at a time, with a helper that clears the session between topics
+  through herdr.
+  ([b2f2d3b](https://github.com/outcomesinsights/seeds/commit/b2f2d3b4421bf0e0d836d651896b633d3f21a02a),
+  [e62cc4d](https://github.com/outcomesinsights/seeds/commit/e62cc4d2c16a4a4322483b44a30ccc2860042734))
+
+### Fixed
+
+- **search:** `seeds search` falls back to Python's `re` when ripgrep is not
+  on PATH. In Claude Code, `rg` is a shell function, so a subprocess cannot
+  see it. Both engines return the same seeds.
+  ([bf830c6](https://github.com/outcomesinsights/seeds/commit/bf830c643684564d7a82dbdd1882671945ca36f3))
+- **search:** `seeds search` accepts `-i` and `--ignore-case`. Search was
+  already case-insensitive.
+  ([6f98fdd](https://github.com/outcomesinsights/seeds/commit/6f98fdd8e5b34db3368544f55426fc4ece95456e))
+- **cli:** `seeds questions --seed` refuses an unknown seed ID with exit 1,
+  and `seeds answer` gives the same hints as the other commands.
+  ([21c53a8](https://github.com/outcomesinsights/seeds/commit/21c53a8df3a841fbacf0c999af0f8bf3b1cca7a2))
+- **check:** `seeds check --gate` no longer audits `HEAD~1` when the store
+  equals `HEAD`, so it no longer refuses an unrelated commit again.
+  ([03d8243](https://github.com/outcomesinsights/seeds/commit/03d82434ace09e51bfff8013a34a1c1f8db6e0f0))
+
+### Tooling
+
+- Development pins Python 3.15.2. Python 3.11 and later is still supported,
+  and CI tests 3.11, 3.12, 3.13, 3.14 and 3.15, each version on its own
+  runner. pytest is 9.2.0 and mypy is 2.4.1. mise pins node for prettier.
+  ([73592b2](https://github.com/outcomesinsights/seeds/commit/73592b2599aa44d95a3e69097dfa980927f7c93e),
+  [992bbac](https://github.com/outcomesinsights/seeds/commit/992bbac091f411be41c5b332dba1748ee841f77a),
+  [a81cab7](https://github.com/outcomesinsights/seeds/commit/a81cab7322c022d174b607d2b0176881facde186))
+- The hooks are gator's standard `.githooks`. The prek config is deleted.
+
 ## [0.7.1] - 2026-10-27
 
 Fixes to the commit gate's escape for an intended mass rewrite. Ordinary work
@@ -1002,4 +1054,5 @@ Initial public beta release.
 [0.7.0a7]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a6...v0.7.0a7
 [0.7.0a8]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a7...v0.7.0a8
 [0.7.1]: https://github.com/outcomesinsights/seeds/compare/v0.7.0...v0.7.1
-[unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.1...HEAD
+[0.7.2]: https://github.com/outcomesinsights/seeds/compare/v0.7.1...v0.7.2
+[unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.2...HEAD
