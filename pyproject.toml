@@ -42,7 +42,7 @@ dependencies = [
   # Nothing here uses a click API newer than 8.0 — the whole surface is
   # argument/option/group/echo/Context/File/Choice/ClickException. Raise this
   # floor only for a feature actually used, and only once nixpkgs ships it.
-  "click>=8.1.8",
+  "click>=8.5.1",
   # Pinned, not floated: the formatter's output IS the store's canonical
   # form, so a version whose style changed would make every file
   # non-canonical at once and two hosts disagree on the same body.
