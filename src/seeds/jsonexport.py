@@ -57,6 +57,7 @@ from seeds.seedfile import (
     read_seed_file,
     seed_files_dir,
 )
+from seeds.store import store_initialized
 
 
 class ExportError(Exception):
@@ -116,6 +117,10 @@ def read_corpus(seeds_dir: Path) -> list[SeedRecord]:
     """
     files_dir = seed_files_dir(seeds_dir)
     if not files_dir.is_dir():
+        if store_initialized(seeds_dir):
+            # An empty store (§1): config.yaml marks it, and git dropped the
+            # empty seeds/ directory. Nothing to export.
+            return []
         raise ExportError(
             f"no seed-file store at {files_dir} -- 'seeds export' reads "
             f"{files_dir.name}/, not the database"

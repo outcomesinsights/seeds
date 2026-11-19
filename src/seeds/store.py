@@ -168,6 +168,26 @@ def needs_conversion(seeds_dir: Path) -> bool:
     return (seeds_dir / JSONL_FILE).exists() and not seed_files_dir(seeds_dir).is_dir()
 
 
+def store_initialized(seeds_dir: Path) -> bool:
+    """Whether ``seeds_dir`` holds an initialized seed-file store (§1, §9).
+
+    ``.seeds/config.yaml`` marks a store, and so does a ``.seeds/seeds/``
+    directory. The config is the marker that survives a commit: git does not
+    track an empty directory, so a store committed before its first seed has
+    no ``seeds/`` in any clone or worktree made from that commit. That store
+    is empty, not missing (seeds-vpif). Readers treat the missing directory as
+    no files, and the first write creates it.
+
+    :func:`needs_conversion` wins over both markers. An unconverted pre-0.7
+    store must keep sending the operator to ``seeds convert``, and must never
+    read as an empty store.
+    """
+    seeds_dir = Path(seeds_dir)
+    if needs_conversion(seeds_dir):
+        return False
+    return (seeds_dir / CONFIG_FILE).is_file() or seed_files_dir(seeds_dir).is_dir()
+
+
 def legacy_jsonl_beside_tree(seeds_dir: Path) -> bool:
     """Whether the retired ``seeds.jsonl`` sits beside a converted tree.
 
@@ -260,8 +280,12 @@ class Store:
         return seed_files_dir(self.seeds_dir)
 
     def is_initialized(self) -> bool:
-        """Whether this directory holds a seed-file store."""
-        return self.files_dir.is_dir()
+        """Whether this directory holds a seed-file store.
+
+        See :func:`store_initialized`. An initialized store can lack its
+        ``seeds/`` directory, and that is an empty store.
+        """
+        return store_initialized(self.seeds_dir)
 
     def path_for(self, seed_id: str) -> Path:
         """The file ``seed_id`` lives in."""
@@ -317,12 +341,14 @@ class Store:
         nothing on stdout to say so.
         """
         if self._corpus is None:
-            if not self.files_dir.is_dir():
+            if not self.is_initialized():
                 raise StoreError(
                     f"no seed-file store at {self.files_dir}. Run 'seeds init' "
                     f"in a new project, or 'seeds convert' in one that still "
                     f"has {self.seeds_dir}/seeds.jsonl."
                 )
+            # An initialized store with no seeds/ directory is an empty store
+            # (§1). Globbing a missing directory yields nothing.
             corpus: dict[str, SeedRecord] = {}
             for path in sorted(self.files_dir.glob(f"*{FILE_SUFFIX}")):
                 stem = path.name[: -len(FILE_SUFFIX)]
@@ -575,8 +601,11 @@ class Store:
         """
         if literal:
             query = re.escape(query)
-        if not self.files_dir.is_dir():
+        if not self.is_initialized():
             raise StoreError(f"no seed-file store at {self.files_dir}")
+        if not self.files_dir.is_dir():
+            # An empty store (§1). Never hand rg a path that does not exist.
+            return []
         if shutil.which(RIPGREP) is None:
             paths = self._python_matches(query, include_terminal)
         else:
@@ -928,5 +957,6 @@ __all__ = [
     "questions_asked_about",
     "read_config",
     "relates_to",
+    "store_initialized",
     "write_prefix",
 ]

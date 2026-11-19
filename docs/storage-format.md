@@ -30,6 +30,18 @@ normative form.
 Every seed is exactly one file. There is no index, no database, no manifest, and
 no second copy of anything. The directory listing *is* the seed set.
 
+**`.seeds/config.yaml` marks an initialized store** (§9), and so does a
+`.seeds/seeds/` directory. **A missing `.seeds/seeds/` in an initialized store
+is an empty store**, not an error. git does not track an empty directory, so a
+store committed before its first seed has no `seeds/` in any clone or worktree
+made from that commit. Readers treat the missing directory as zero files. The
+first write creates it. `seeds init` still creates it, and never rewrites an
+existing `config.yaml`.
+
+One state overrides both markers: a `.seeds/seeds.jsonl` with no `seeds/` is an
+unconverted pre-0.7 store. It is never an empty store, and every command names
+`seeds convert` there (§11).
+
 ### 1.1 The path rule
 
 ```
@@ -633,6 +645,12 @@ than of any seed — 312 copies of one value would only drift. And it is **not**
 derived from seed filenames, tempting though that is: a repo with no seeds yet has
 no prefix to read, so `seeds init` would have nothing to record and the first
 `seeds jot` would not know what to name its file.
+
+**`config.yaml` is the marker of an initialized store** (§1). It is tracked, and
+git keeps it where it drops an empty `seeds/` directory. So a project that holds
+`.seeds/config.yaml` and no `.seeds/seeds/` is initialized and empty. `seeds init` there reports "already initialized" and leaves the prefix alone. The
+exception is an unconverted pre-0.7 store (`seeds.jsonl` with no `seeds/`),
+which needs `seeds convert` whether or not `config.yaml` exists.
 
 ### 9.1 The store is data, not source
 
