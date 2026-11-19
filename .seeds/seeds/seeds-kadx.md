@@ -1,10 +1,10 @@
 ---
 id: seeds-kadx
 title: seeds init leaves .seeds/seeds/ empty, so git drops it and a worktree of a new project reads as uninitialized
-status: captured
+status: exploring
 type: question
 created_at: 2026-11-19T04:52:06.002813+00:00
-updated_at: 2026-11-19T04:52:12.731350+00:00
+updated_at: 2026-11-19T04:57:02.345616+00:00
 tags:
   - init
   - worktree
@@ -53,3 +53,13 @@ The hm session stated no preference. It noted that (b)+(c) also fix projects ini
 ## Cross-references
 
 - home-manager bead hm-sh8l tracks the local workaround in new-project-init.sh (touch `.seeds/seeds/.gitkeep` after `seeds init`). It can be dropped once this ships.
+
+## RULED 2026-11-18
+
+Ryan: "let's do b and c together". A `.seeds/config.yaml` marks an initialized store, and a missing `.seeds/seeds/` reads as an empty store (b). The first write creates `.seeds/seeds/` (c). Option (a), a `.gitkeep` from `seeds init`, was not chosen.
+
+Found while writing the bead: `write_seed_file` already creates the directory before every write (`src/seeds/seedfile.py:1427`), so (c) needs only a test. The work is in `Store.is_initialized()` and the readers.
+
+Measured 2026-11-18 over 54 stores under ~/projects and ~/.config (`claude_stuff/seeds-store-survey-20261118-205612.log`): 2 are in this state now (sequel-sqlformat, resdac_plus), and 0 unconverted pre-0.7 stores have a `config.yaml`. The `needs_conversion` test still runs first.
+
+Bead seeds-vpif implements it. It supersedes bead seeds-dn8a (the prefix rewrite), because `seeds init` now stops at "already initialized" in this state.
