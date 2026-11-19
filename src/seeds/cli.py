@@ -2446,7 +2446,15 @@ def doctor(ctx: Context) -> None:
     # Check the store
     click.echo("Store:")
     store = ctx.get_store()
-    check_pass(f"Seed files at {store.files_dir}")
+    if store.files_dir.is_dir():
+        check_pass(f"Seed files at {store.files_dir}")
+    else:
+        # config.yaml marks the store, and git drops an empty directory: an
+        # empty store, not a broken one. The first write creates it (§1).
+        check_pass(
+            f"Store initialized; no seed file exists yet ({store.files_dir}/ "
+            f"is created by the first write)"
+        )
 
     # Report project prefix and nudge the user when the default doesn't
     # match the project directory name.

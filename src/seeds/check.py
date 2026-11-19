@@ -125,6 +125,7 @@ from seeds.seedfile import (
     render_seed_file,
     seed_files_dir,
 )
+from seeds.store import store_initialized
 
 __all__ = [
     "Finding",
@@ -545,6 +546,10 @@ def check_violations(seeds_dir: Path, *, now: datetime | None = None) -> list[Fi
     now = now or datetime.now(UTC)
     files_dir = seed_files_dir(seeds_dir)
     if not files_dir.is_dir():
+        if store_initialized(seeds_dir):
+            # config.yaml marks the store, and git dropped the empty seeds/
+            # directory: an empty store, which violates nothing (§1).
+            return []
         return [
             Finding(
                 path=files_dir,
