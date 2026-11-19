@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-11-18
+
+A project whose `.seeds/` was committed before its first seed now works in
+every clone and worktree. git does not track an empty directory, so such a
+commit holds `.seeds/config.yaml` but no `.seeds/seeds/`. Until now every
+command there failed with "seeds not initialized", and the advised
+`seeds init` rewrote the project prefix to the directory name.
+
+### Fixed
+
+- **store:** `.seeds/config.yaml` now marks an initialized store, and a missing
+  `.seeds/seeds/` reads as an empty store. Reads report no seeds, the first
+  write creates the directory, and `seeds init` stops at "already initialized"
+  and keeps the prefix. `seeds check` reports "0 files, no violations" there,
+  and `seeds export --json` prints nothing and exits 0. An unconverted pre-0.7
+  store still names `seeds convert`.
+  ([de463c6](https://github.com/outcomesinsights/seeds/commit/de463c63937d362438987fe52251d0b2d9f2afb0))
+
 ## [0.7.2] - 2026-11-06
 
 `seeds search` now works without ripgrep, and a write that names an unknown
@@ -1055,4 +1073,5 @@ Initial public beta release.
 [0.7.0a8]: https://github.com/outcomesinsights/seeds/compare/v0.7.0a7...v0.7.0a8
 [0.7.1]: https://github.com/outcomesinsights/seeds/compare/v0.7.0...v0.7.1
 [0.7.2]: https://github.com/outcomesinsights/seeds/compare/v0.7.1...v0.7.2
-[unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.2...HEAD
+[0.7.3]: https://github.com/outcomesinsights/seeds/compare/v0.7.2...v0.7.3
+[unreleased]: https://github.com/outcomesinsights/seeds/compare/v0.7.3...HEAD
